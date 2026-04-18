@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>患者さばき</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0.5; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+
+// ── SVGアイコン(lucide互換) ──────────────────────────────────
+const Icon = ({ d, size = 16, color = 'currentColor', fill = 'none', strokeWidth = 2, viewBox = '0 0 24 24', extra }) => (
+  <svg width={size} height={size} viewBox={viewBox} fill={fill} stroke={color}
+    strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={{display:'inline-block',flexShrink:0,...extra}}>
+    {Array.isArray(d) ? d.map((p,i) => <path key={i} d={p}/>) : <path d={d}/>}
+  </svg>
+);
+const Plus         = p => <Icon {...p} d="M12 5v14M5 12h14"/>;
+const X            = p => <Icon {...p} d="M18 6 6 18M6 6l12 12"/>;
+const Check        = p => <Icon {...p} d="M20 6 9 17l-5-5"/>;
+const Zap          = p => <Icon {...p} d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>;
+const Focus        = p => <Icon {...p} d={["M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0","M3 7V5a2 2 0 0 1 2-2h2","M17 3h2a2 2 0 0 1 2 2v2","M21 17v2a2 2 0 0 1-2 2h-2","M7 21H5a2 2 0 0 1-2-2v-2"]}/>;
+const Clock        = p => <Icon {...p} d={["M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z","M12 6v6l4 2"]}/>;
+const Trash2       = p => <Icon {...p} d={["M3 6h18","M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6","M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2","M10 11v6","M14 11v6"]}/>;
+const ChevronDown  = p => <Icon {...p} d="M6 9l6 6 6-6"/>;
+const ChevronRight = p => <Icon {...p} d="M9 18l6-6-6-6"/>;
+const AlertCircle  = p => <Icon {...p} d={["M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z","M12 8v4","M12 16h.01"]}/>;
+const Play         = p => <Icon {...p} d="M5 3l14 9-14 9V3z"/>;
+const RotateCcw    = p => <Icon {...p} d={["M1 4v6h6","M3.51 15a9 9 0 1 0 .49-4.95"]}/>;
+const Target       = p => <Icon {...p} d={["M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z","M12 6a6 6 0 1 0 0 12A6 6 0 0 0 12 6z","M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"]}/>;
+const Coffee       = p => <Icon {...p} d={["M18 8h1a4 4 0 0 1 0 8h-1","M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z","M6 1v3","M10 1v3","M14 1v3"]}/>;
+const AlertTriangle= p => <Icon {...p} d={["M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z","M12 9v4","M12 17h.01"]}/>;
+const Pencil       = p => <Icon {...p} d={["M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7","M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"]}/>;
+const Sparkles     = p => <Icon {...p} d={["M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z","M5 16l.9 2.1L8 19l-2.1.9L5 22l-.9-2.1L2 19l2.1-.9L5 16z","M19 1l.6 1.4L21 3l-1.4.6L19 5l-.6-1.4L17 3l1.4-.6L19 1z"]}/>;
+
+// ── 定数 ────────────────────────────────────────────────────
+const TASK_TYPES = [
+  { id: 'order',     label: '指示',    dot: '#4A6B8A' },
+  { id: 'exam',      label: '診察',    dot: '#6B8E5A' },
+  { id: 'chart',     label: 'カルテ',  dot: '#8B7355' },
+  { id: 'result',    label: '結果',    dot: '#8B5A8B' },
+  { id: 'family',    label: 'IC/説明', dot: '#B87D7D' },
+  { id: 'consult',   label: '相談',    dot: '#B8925A' },
+  { id: 'discharge', label: '退院',    dot: '#5A8B8B' },
+  { id: 'other',     label: 'その他',  dot: '#8B8B8B' },
+];
+const ESTIMATES = [
+  { id: '2',  label: '2分'   },
+  { id: '5',  label: '5分'   },
+  { id: '15', label: '15分'  },
+  { id: '30', label: '30分+' },
+];
+const PRIORITIES = [
+  { id: 'high',   label: '高', color: '#B87D7D', bar: '#B87D7D' },
+  { id: 'normal', label: '中', color: '#8B7355', bar: '#D4C9B0' },
+  { id: 'low',    label: '低', color: '#7A8B6B', bar: '#CCD5BC' },
+];
+const DEFAULT_TEMPLATES = [
+  { id: 'tpl-admission', name: '入院時セット', items: [
+    { title: '入院部屋確保',     type: 'other',   estimate: '2' },
+    { title: '持参薬鑑別依頼',   type: 'consult', estimate: '2' },
+    { title: '持参薬処方',       type: 'order',   estimate: '5' },
+    { title: '入院時カルテ記述', type: 'chart',   estimate: '5' },
+    { title: '入院点滴入力',     type: 'order',   estimate: '2' },
+  ]},
+  { id: 'tpl-discharge', name: '退院セット', items: [
+    { title: '退院処方入力',       type: 'order',  estimate: '5'  },
+    { title: '退院時サマリー記載', type: 'chart',  estimate: '15' },
+    { title: '栄養指導オーダー',   type: 'order',  estimate: '2'  },
+    { title: '次回外来予約',       type: 'order',  estimate: '2'  },
+    { title: '退院時患者指導',     type: 'family', estimate: '15' },
+  ]},
+  { id: 'tpl-preop', name: 'オペ出し前セット', items: [
+    { title: '術前同意書確認',       type: 'chart', estimate: '2' },
+    { title: '術前検査オーダー',     type: 'order', estimate: '5' },
+    { title: 'NPO指示入力',          type: 'order', estimate: '2' },
+    { title: '術前点滴指示',         type: 'order', estimate: '2' },
+    { title: '予防的抗菌薬オーダー', type: 'order', estimate: '2' },
+  ]},
+  { id: 'tpl-emergency', name: '急変時セット', items: [
+    { title: 'ABGオーダー',    type: 'order',   estimate: '2' },
+    { title: 'ポータブル胸写', type: 'order',   estimate: '2' },
+    { title: '12誘導心電図',   type: 'order',   estimate: '2' },
+    { title: '家族への連絡',   type: 'family',  estimate: '5' },
+    { title: '上級医への報告', type: 'consult', estimate: '2' },
+  ]},
+];
+const TIME_STATES = {
+  past:     { bg: '#E8C5BC', fg: '#8B3E2F' },
+  now:      { bg: '#F5D5A8', fg: '#8B5E1A' },
+  soon:     { bg: '#F0E4C0', fg: '#7A6520' },
+  upcoming: { bg: '#E8DFC9', fg: '#6B5A3A' },
+  future:   { bg: '#EFEADB', fg: '#9A8775' },
+};
+const STORAGE_KEY   = 'patient-triage-v1';
+const GAS_CONFIG_KEY = 'patient-triage-gas-config';
+
+// ── ユーティリティ ──────────────────────────────────────────
+const uid      = () => Math.random().toString(36).slice(2, 10);
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const getPri   = p => p?.priority || 'normal';
+const priMeta  = id => PRIORITIES.find(p => p.id === id) || PRIORITIES[1];
+
+const loadLocal = key => {
+  try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch { return null; }
+};
+const saveLocal = (key, val) => {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+};
+const loadGasConfig = () => loadLocal(GAS_CONFIG_KEY) || { url: '', secret: '' };
+const saveGasConfig = cfg => saveLocal(GAS_CONFIG_KEY, cfg);
+
+function timeStatus(scheduledTime, nowMs) {
+  if (!scheduledTime) return null;
+  const [h, m] = scheduledTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  const sched = new Date(nowMs);
+  sched.setHours(h, m, 0, 0);
+  const d = (sched - nowMs) / 60000;
+  if (d < -5) return 'past';
+  if (d < 5)  return 'now';
+  if (d < 30) return 'soon';
+  if (d < 120) return 'upcoming';
+  return 'future';
+}
+
+async function gasFetch(cfg, payload) {
+  const res = await fetch(cfg.url, {
+    method: 'POST',
+    body: JSON.stringify({ secret: cfg.secret, data: payload }),
+    headers: { 'Content-Type': 'text/plain' }, // application/jsonだとプリフライトが発生してGASに弾かれる
+    redirect: 'follow',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+async function gasGet(cfg) {
+  const res = await fetch(`${cfg.url}?secret=${encodeURIComponent(cfg.secret)}`, {
+    redirect: 'follow',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── TimeBadge ───────────────────────────────────────────────
+function TimeBadge({ scheduledTime, now, onClear, editable }) {
+  if (!scheduledTime) return null;
+  const ts = timeStatus(scheduledTime, now);
+  const s  = TIME_STATES[ts] || TIME_STATES.future;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-mono"
+      style={{ backgroundColor: s.bg, color: s.fg }}>
+      <Clock size={10}/>{scheduledTime}
+      {editable && onClear && (
+        <button onClick={onClear} className="opacity-50 hover:opacity-100 ml-0.5"><X size={10}/></button>
+      )}
+    </span>
+  );
+}
+
+// ── SuggestionCard ──────────────────────────────────────────
+function SuggestionCard({ suggestion, typeMeta, estMeta, now, onDone, onDoing, onStuck, onReroll, onDismiss }) {
+  if (suggestion.empty) return (
+    <div className="mb-4 p-5 rounded-lg text-center" style={{ backgroundColor: '#EFEADB', color: '#3E2F1F' }}>
+      <Sparkles size={20} style={{ display: 'inline', marginBottom: 4, opacity: 0.6 }}/>
+      <p className="text-sm">該当するタスクがありません。少し休憩しますか?</p>
+      <button onClick={onDismiss} className="mt-2 text-xs underline opacity-60">閉じる</button>
+    </div>
+  );
+  const t   = suggestion.task;
+  const type = typeMeta(t.type);
+  const est  = estMeta(t.estimate);
+  const pri  = priMeta(t.patientPriority);
+  return (
+    <div className="mb-4 p-5 rounded-lg shadow-sm border-l-4"
+      style={{ backgroundColor: suggestion.fromStuck ? '#FBF4EE' : '#FEFBF3', borderLeftColor: suggestion.fromStuck ? '#B87D7D' : '#3E2F1F' }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs flex items-center gap-1.5" style={{ color: '#7A6A55' }}>
+          <Target size={12}/>{suggestion.fromStuck ? '詰まってたやつ、小さな一歩だけ' : '次やるのこれ'}
+        </div>
+        <button onClick={onDismiss} className="opacity-40 hover:opacity-80"><X size={14}/></button>
+      </div>
+      <div className="flex items-center gap-2 mb-1 flex-wrap">
+        <span className="font-mono text-xs opacity-60" style={{ color: '#3E2F1F' }}>{t.patientName}</span>
+        <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: pri.color+'25', color: pri.color }}>優{pri.label}</span>
+        <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: type.dot+'20', color: type.dot }}>● {type.label}</span>
+        <span className="text-xs" style={{ color: '#9A8775' }}>{est.label}</span>
+        <TimeBadge scheduledTime={t.scheduledTime} now={now}/>
+      </div>
+      <p className="text-base font-medium mb-3" style={{ color: '#3E2F1F' }}>{t.title}</p>
+      {suggestion.fromStuck && t.tinyStep && (
+        <div className="text-sm mb-3 p-2 rounded" style={{ backgroundColor: '#F5EDE5', color: '#6B4A4A' }}>
+          <span className="text-xs opacity-60">次の一歩: </span>{t.tinyStep}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onDone} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium" style={{ backgroundColor: '#6B8E5A', color: '#F5F1E8' }}><Check size={14}/>完了</button>
+        <button onClick={onDoing} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm border" style={{ borderColor: '#D4C9B0', color: '#3E2F1F' }}><Play size={14}/>やってる</button>
+        <button onClick={onStuck} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm border" style={{ borderColor: '#D4A5A5', color: '#8B5A5A' }}><AlertCircle size={14}/>詰まった</button>
+        <button onClick={onReroll} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm ml-auto opacity-60 hover:opacity-100" style={{ color: '#3E2F1F' }}><RotateCcw size={14}/>別のを</button>
+      </div>
+    </div>
+  );
+}
+
+// ── TaskRow ─────────────────────────────────────────────────
+function TaskRow({ task, typeMeta, estMeta, now, onDone, onStuck, onDoing, onTodo, onUnstick, onRemove, onClearTime, onSetTime, muted }) {
+  const { useState } = React;
+  const type    = typeMeta(task.type);
+  const est     = estMeta(task.estimate);
+  const isStuck = task.status === 'stuck';
+  const isDoing = task.status === 'doing';
+  const isDone  = task.status === 'done';
+  const [editingTime, setEditingTime] = useState(false);
+  return (
+    <li className="py-2 flex items-start gap-2">
+      <button onClick={isDone ? onTodo : onDone}
+        className="mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
+        style={{ borderColor: isDone ? '#6B8E5A' : isStuck ? '#B87D7D' : '#D4C9B0', backgroundColor: isDone ? '#6B8E5A' : 'transparent' }}>
+        {isDone && <Check size={12} color="#F5F1E8"/>}
+        {isDoing && !isDone && <span className="block w-2 h-2 rounded-full" style={{ backgroundColor: '#8B7355' }}/>}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: type.dot+'20', color: type.dot }}>{type.label}</span>
+          <span className={`text-sm ${isDone ? 'line-through' : ''}`}
+            style={{ color: muted ? '#9A8775' : isStuck ? '#8B5A5A' : '#3E2F1F', textDecorationColor: '#9A8775' }}>
+            {task.title}
+          </span>
+          {task.scheduledTime && !editingTime && (
+            <TimeBadge scheduledTime={task.scheduledTime} now={now} editable={!isDone && !!onClearTime} onClear={onClearTime}/>
+          )}
+          <span className="text-xs ml-auto shrink-0" style={{ color: '#9A8775' }}>{est.label}</span>
+        </div>
+        {editingTime && onSetTime && (
+          <div className="mt-1 flex items-center gap-1">
+            <input type="time" defaultValue={task.scheduledTime || ''}
+              onChange={e => { onSetTime(e.target.value); setEditingTime(false); }}
+              onBlur={() => setEditingTime(false)} autoFocus
+              className="text-xs px-1.5 py-0.5 rounded border outline-none"
+              style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0' }}/>
+          </div>
+        )}
+        {isStuck && (
+          <div className="mt-1 text-xs" style={{ color: '#8B5A5A' }}>
+            {task.stuckReason && <div>詰まり: {task.stuckReason}</div>}
+            {task.tinyStep    && <div>→ 一歩: {task.tinyStep}</div>}
+          </div>
+        )}
+        {!isDone && (
+          <div className="mt-1 flex gap-2 text-xs flex-wrap" style={{ color: '#9A8775' }}>
+            {!isStuck && !isDoing && <button onClick={onDoing}  className="hover:underline">着手</button>}
+            {isDoing              && <button onClick={onTodo}   className="hover:underline">中断</button>}
+            {!isStuck ? <button onClick={onStuck}  className="hover:underline">詰まった</button>
+                      : <button onClick={onUnstick} className="hover:underline">詰まり解除</button>}
+            {!task.scheduledTime && onSetTime && (
+              <button onClick={() => setEditingTime(true)} className="hover:underline">時刻設定</button>
+            )}
+            <button onClick={onRemove} className="hover:underline ml-auto opacity-60">削除</button>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+// ── PatientCard ─────────────────────────────────────────────
+function PatientCard({ patient, expanded, onToggle, onRemove, onSetPriority, onRename, templates, onApplyTemplate,
+  adding, onStartAdd, onCancelAdd, addForm, setAddForm, onAddTask,
+  onTaskDone, onTaskStuck, onTaskDoing, onTaskTodo, onTaskRemove, onUnstick, onUpdateTask,
+  typeMeta, estMeta, now }) {
+  const { useState, useEffect } = React;
+  const pri  = priMeta(getPri(patient));
+  const open = patient.tasks.filter(t => t.status !== 'done');
+  const done = patient.tasks.filter(t => t.status === 'done');
+  const [editingName, setEditingName] = useState(false);
+  const [draftName,   setDraftName]   = useState(patient.name);
+  useEffect(() => { setDraftName(patient.name); }, [patient.name]);
+
+  const startEditName = e => { e.stopPropagation(); setDraftName(patient.name); setEditingName(true); };
+  const commitName = () => {
+    const n = draftName.trim();
+    if (n && n !== patient.name) onRename(n); else setDraftName(patient.name);
+    setEditingName(false);
+  };
+
+  const sortedOpen = [...open].sort((a, b) => {
+    if (a.scheduledTime && !b.scheduledTime) return -1;
+    if (!a.scheduledTime && b.scheduledTime) return 1;
+    if (a.scheduledTime && b.scheduledTime) return a.scheduledTime.localeCompare(b.scheduledTime);
+    return (a.createdAt||0) - (b.createdAt||0);
+  });
+
+  return (
+    <div className="rounded-lg border overflow-hidden"
+      style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0', borderLeftWidth: 4, borderLeftColor: pri.bar }}>
+      <div className="flex items-center px-3 py-2.5 cursor-pointer select-none" onClick={onToggle}>
+        {expanded ? <ChevronDown size={16} color="#7A6A55"/> : <ChevronRight size={16} color="#7A6A55"/>}
+        {editingName ? (
+          <input autoFocus value={draftName} onChange={e => setDraftName(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => { if (e.key==='Enter') commitName(); if (e.key==='Escape') { setDraftName(patient.name); setEditingName(false); }}}
+            onBlur={commitName}
+            className="ml-2 px-1.5 py-0.5 rounded font-mono font-bold text-sm border outline-none"
+            style={{ backgroundColor: '#F5F1E8', borderColor: '#D4C9B0', color: '#3E2F1F', minWidth:'6rem', maxWidth:'12rem' }}/>
+        ) : (
+          <>
+            <span className="ml-2 font-mono font-bold" style={{ color: '#3E2F1F' }} onDoubleClick={startEditName} title="ダブルクリックで名前変更">{patient.name}</span>
+            <button onClick={startEditName} className="ml-1 p-1 opacity-40 hover:opacity-100" title="符丁を変更"><Pencil size={11} color="#7A6A55"/></button>
+          </>
+        )}
+        <div className="ml-2 flex gap-0.5" onClick={e => e.stopPropagation()}>
+          {PRIORITIES.map(p => (
+            <button key={p.id} onClick={() => onSetPriority(p.id)}
+              className="text-xs w-5 h-5 rounded flex items-center justify-center transition-colors"
+              style={{ backgroundColor: getPri(patient)===p.id ? p.color : 'transparent', color: getPri(patient)===p.id ? '#F5F1E8' : p.color+'AA', border: `1px solid ${p.color}50` }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <span className="ml-3 text-xs" style={{ color: '#9A8775' }}>
+          {open.length > 0 ? `未 ${open.length}` : '✓ すべて完了'}
+          {done.length > 0 && open.length > 0 && ` / 済 ${done.length}`}
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={e => { e.stopPropagation(); onRemove(); }} className="p-1 opacity-40 hover:opacity-100">
+            <Trash2 size={14} color="#B87D7D"/>
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="px-3 pb-3" style={{ borderTop: '1px solid #E8DFC9' }}>
+          {patient.tasks.length === 0 && !adding && (
+            <p className="text-xs py-3 text-center" style={{ color: '#9A8775' }}>タスクなし</p>
+          )}
+          <ul className="divide-y" style={{ '--tw-divide-opacity': 1 }}>
+            {sortedOpen.map(t => (
+              <TaskRow key={t.id} task={t} typeMeta={typeMeta} estMeta={estMeta} now={now}
+                onDone={() => onTaskDone(t.id)} onStuck={() => onTaskStuck(t.id)}
+                onDoing={() => onTaskDoing(t.id)} onTodo={() => onTaskTodo(t.id)}
+                onUnstick={() => onUnstick(t.id)} onRemove={() => onTaskRemove(t.id)}
+                onClearTime={() => onUpdateTask(t.id, { scheduledTime: null })}
+                onSetTime={time => onUpdateTask(t.id, { scheduledTime: time || null })}/>
+            ))}
+            {done.map(t => (
+              <TaskRow key={t.id} task={t} typeMeta={typeMeta} estMeta={estMeta} now={now}
+                onRemove={() => onTaskRemove(t.id)} onTodo={() => onTaskTodo(t.id)} muted/>
+            ))}
+          </ul>
+
+          {adding ? (
+            <div className="mt-2 p-3 rounded" style={{ backgroundColor: '#F5EDE5' }}>
+              <input autoFocus value={addForm.title}
+                onChange={e => setAddForm({ ...addForm, title: e.target.value })}
+                onKeyDown={e => { if (e.key==='Enter') onAddTask(); if (e.key==='Escape') onCancelAdd(); }}
+                placeholder="タスク(例: カリウム再検、MRI依頼)"
+                className="w-full px-2 py-1.5 rounded text-sm border outline-none"
+                style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0' }}/>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {TASK_TYPES.map(tt => (
+                  <button key={tt.id} onClick={() => setAddForm({ ...addForm, type: tt.id })}
+                    className="text-xs px-2 py-0.5 rounded"
+                    style={{ backgroundColor: addForm.type===tt.id ? tt.dot : '#FEFBF3', color: addForm.type===tt.id ? '#F5F1E8' : tt.dot, border: `1px solid ${tt.dot}60` }}>
+                    {tt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1 mt-2 items-center">
+                {ESTIMATES.map(e => (
+                  <button key={e.id} onClick={() => setAddForm({ ...addForm, estimate: e.id })}
+                    className="text-xs px-2 py-0.5 rounded border"
+                    style={{ backgroundColor: addForm.estimate===e.id ? '#3E2F1F' : '#FEFBF3', color: addForm.estimate===e.id ? '#F5F1E8' : '#3E2F1F', borderColor: '#D4C9B0' }}>
+                    {e.label}
+                  </button>
+                ))}
+                <div className="flex items-center gap-1 ml-1">
+                  <Clock size={12} color="#7A6A55"/>
+                  <input type="time" value={addForm.scheduledTime || ''}
+                    onChange={e => setAddForm({ ...addForm, scheduledTime: e.target.value })}
+                    className="text-xs px-1.5 py-0.5 rounded border outline-none"
+                    style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0', color: '#3E2F1F' }}/>
+                  {addForm.scheduledTime && (
+                    <button onClick={() => setAddForm({ ...addForm, scheduledTime: '' })} className="text-xs opacity-60 hover:opacity-100"><X size={12}/></button>
+                  )}
+                </div>
+                <div className="ml-auto flex gap-1">
+                  <button onClick={onCancelAdd} className="text-xs px-2 py-0.5" style={{ color: '#9A8775' }}>キャンセル</button>
+                  <button onClick={onAddTask} className="text-xs px-2 py-0.5 rounded font-medium" style={{ backgroundColor: '#3E2F1F', color: '#F5F1E8' }}>追加</button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button onClick={onStartAdd}
+              className="mt-2 w-full py-1.5 text-xs rounded border border-dashed flex items-center justify-center gap-1"
+              style={{ borderColor: '#D4C9B0', color: '#9A8775' }}>
+              <Plus size={12}/>タスク追加
+            </button>
+          )}
+
+          {templates && templates.length > 0 && !adding && (
+            <div className="mt-2 flex items-center gap-1 flex-wrap">
+              <span className="text-xs" style={{ color: '#9A8775' }}>セット:</span>
+              {templates.map(tpl => (
+                <button key={tpl.id} onClick={() => onApplyTemplate(tpl)}
+                  className="text-xs px-2 py-0.5 rounded transition-colors"
+                  style={{ backgroundColor: '#EFEADB', color: '#3E2F1F', border: '1px solid #D4C9B0' }}
+                  title={`${tpl.items.length}件のタスクを一括追加`}>
+                  + {tpl.name}<span className="opacity-50 ml-1">({tpl.items.length})</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── FocusView ────────────────────────────────────────────────
+function FocusView({ patients, typeMeta, estMeta, now, onComplete, onStuck, onDoing, onUnstick }) {
+  const allOpen = patients.flatMap(p =>
+    p.tasks.filter(t => t.status !== 'done').map(t => ({ ...t, patientId: p.id, patientName: p.name, patientPriority: getPri(p) }))
+  );
+  const score = t => {
+    if (t.status === 'doing') return 1000;
+    const ts = timeStatus(t.scheduledTime, now);
+    if (ts==='past') return 900; if (ts==='now') return 800; if (ts==='soon') return 600;
+    const pri = t.patientPriority==='high' ? 100 : t.patientPriority==='low' ? 10 : 50;
+    if (ts==='upcoming') return 300+pri;
+    return pri;
+  };
+  const current = [...allOpen].sort((a,b) => score(b)-score(a))[0];
+  if (!current) return (
+    <div className="p-8 text-center rounded-lg" style={{ backgroundColor: '#FEFBF3', color: '#9A8775' }}>
+      すべて完了!深呼吸しましょう。
+    </div>
+  );
+  const type = typeMeta(current.type);
+  const est  = estMeta(current.estimate);
+  const pri  = priMeta(current.patientPriority);
+  return (
+    <div className="p-6 rounded-lg shadow-sm" style={{ backgroundColor: '#FEFBF3' }}>
+      <p className="text-xs mb-3" style={{ color: '#9A8775' }}>今だけこれ見てればOK</p>
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="font-mono text-sm" style={{ color: '#7A6A55' }}>{current.patientName}</span>
+        <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: pri.color+'25', color: pri.color }}>優{pri.label}</span>
+        <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: type.dot+'20', color: type.dot }}>{type.label}</span>
+        <span className="text-xs" style={{ color: '#9A8775' }}>{est.label}</span>
+        <TimeBadge scheduledTime={current.scheduledTime} now={now}/>
+      </div>
+      <p className="text-xl font-medium mb-4" style={{ color: current.status==='stuck' ? '#8B5A5A' : '#3E2F1F', fontFamily: "'Noto Serif JP','Yu Mincho',serif" }}>{current.title}</p>
+      {current.status==='stuck' && current.tinyStep && (
+        <div className="mb-4 p-3 rounded" style={{ backgroundColor: '#F5EDE5', color: '#6B4A4A' }}>
+          <div className="text-xs opacity-70 mb-1">小さな一歩:</div><div>{current.tinyStep}</div>
+        </div>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => onComplete(current.patientId, current.id)} className="flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium" style={{ backgroundColor: '#6B8E5A', color: '#F5F1E8' }}><Check size={14}/>完了</button>
+        {current.status!=='doing' && current.status!=='stuck' && (
+          <button onClick={() => onDoing(current.patientId, current.id)} className="flex items-center gap-1.5 px-4 py-2 rounded text-sm border" style={{ borderColor: '#D4C9B0', color: '#3E2F1F' }}><Play size={14}/>着手</button>
+        )}
+        {current.status!=='stuck' && (
+          <button onClick={() => onStuck(current.patientId, current.id)} className="flex items-center gap-1.5 px-4 py-2 rounded text-sm border" style={{ borderColor: '#D4A5A5', color: '#8B5A5A' }}><AlertCircle size={14}/>詰まった</button>
+        )}
+        {current.status==='stuck' && (
+          <button onClick={() => onUnstick(current.patientId, current.id)} className="flex items-center gap-1.5 px-4 py-2 rounded text-sm border" style={{ borderColor: '#D4C9B0', color: '#3E2F1F' }}>詰まり解除</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── GasConfigDialog ──────────────────────────────────────────
+function GasConfigDialog({ config, onSave, onCancel }) {
+  const { useState } = React;
+  const [url,    setUrl]    = useState(config.url    || '');
+  const [secret, setSecret] = useState(config.secret || '');
+  return (
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: '#3E2F1F80' }} onClick={onCancel}>
+      <div className="rounded-lg p-5 max-w-lg w-full shadow-lg" style={{ backgroundColor: '#FEFBF3' }} onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold mb-1" style={{ color: '#3E2F1F' }}>Google Apps Script 設定</h3>
+        <p className="text-xs mb-3" style={{ color: '#7A6A55' }}>
+          GASをデプロイして発行されたURLと、コード内のSECRETと同じ値を入力してください。設定はこの端末のlocalStorageに保存されます。
+        </p>
+        <label className="block text-xs mb-1" style={{ color: '#7A6A55' }}>GASウェブアプリURL</label>
+        <input value={url} onChange={e => setUrl(e.target.value)}
+          placeholder="https://script.google.com/macros/s/XXXXX/exec"
+          className="w-full px-3 py-2 rounded border text-xs mb-3 outline-none font-mono"
+          style={{ borderColor: '#D4C9B0', backgroundColor: '#F5F1E8', color: '#3E2F1F' }}/>
+        <label className="block text-xs mb-1" style={{ color: '#7A6A55' }}>シークレットキー</label>
+        <input value={secret} onChange={e => setSecret(e.target.value)} type="password"
+          placeholder="GASコードのSECRETと同じ値"
+          className="w-full px-3 py-2 rounded border text-xs mb-3 outline-none"
+          style={{ borderColor: '#D4C9B0', backgroundColor: '#F5F1E8', color: '#3E2F1F' }}/>
+        <div className="text-xs p-2 rounded mb-4" style={{ backgroundColor: '#F0EAD8', color: '#6B5A3A' }}>
+          <strong>デプロイ設定:</strong> 実行ユーザー: 自分 / アクセスできるユーザー: <strong>全員(匿名)</strong>
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button onClick={onCancel} className="px-3 py-1.5 text-sm" style={{ color: '#7A6A55' }}>キャンセル</button>
+          <button onClick={() => onSave({ url: url.trim(), secret: secret.trim() })}
+            disabled={!url.trim() || !secret.trim()}
+            className="px-4 py-1.5 rounded text-sm font-medium"
+            style={{ backgroundColor: '#3E2F1F', color: '#F5F1E8', opacity: (!url.trim() || !secret.trim()) ? 0.4 : 1 }}>
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── StuckDialog ──────────────────────────────────────────────
+function StuckDialog({ form, setForm, onSave, onCancel }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: '#3E2F1F80' }} onClick={onCancel}>
+      <div className="rounded-lg p-5 max-w-md w-full shadow-lg" style={{ backgroundColor: '#FEFBF3' }} onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold mb-1" style={{ color: '#3E2F1F' }}>詰まりを外在化する</h3>
+        <p className="text-xs mb-4" style={{ color: '#7A6A55' }}>書き出すだけで脳の負荷が減ります。空欄でもOK。</p>
+        <label className="block text-xs mb-1" style={{ color: '#7A6A55' }}>なぜ詰まってる?(手短に)</label>
+        <input value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })}
+          placeholder="例: 家族の連絡先わからん / 上級医に聞きたい"
+          className="w-full px-3 py-2 rounded border text-sm mb-3 outline-none"
+          style={{ borderColor: '#D4C9B0', backgroundColor: '#F5F1E8' }}/>
+        <label className="block text-xs mb-1" style={{ color: '#7A6A55' }}>できる限り小さな一歩は?(2分以内)</label>
+        <input value={form.tinyStep} onChange={e => setForm({ ...form, tinyStep: e.target.value })}
+          placeholder="例: カルテで家族連絡先を探すだけ / ○○先生にメモ投げるだけ"
+          className="w-full px-3 py-2 rounded border text-sm mb-4 outline-none"
+          style={{ borderColor: '#D4C9B0', backgroundColor: '#F5F1E8' }}/>
+        <div className="flex gap-2 justify-end">
+          <button onClick={onCancel} className="px-3 py-1.5 text-sm" style={{ color: '#7A6A55' }}>キャンセル</button>
+          <button onClick={onSave} className="px-4 py-1.5 rounded text-sm font-medium" style={{ backgroundColor: '#3E2F1F', color: '#F5F1E8' }}>保存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ImportDialog ─────────────────────────────────────────────
+function ImportDialog({ text, setText, onImportText, onImportFile, onCancel }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: '#3E2F1F80' }} onClick={onCancel}>
+      <div className="rounded-lg p-5 max-w-lg w-full shadow-lg" style={{ backgroundColor: '#FEFBF3' }} onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold mb-1" style={{ color: '#3E2F1F' }}>データインポート</h3>
+        <p className="text-xs mb-3" style={{ color: '#7A6A55' }}>.jsonファイルを選択するか、テキストを貼り付けてください。</p>
+        <label className="block mb-3 px-3 py-2 rounded border border-dashed cursor-pointer text-center text-xs" style={{ borderColor: '#D4C9B0', color: '#7A6A55' }}>
+          <input type="file" accept=".json,application/json" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) onImportFile(f); }}/>
+          ファイルを選択
+        </label>
+        <label className="block text-xs mb-1" style={{ color: '#7A6A55' }}>または JSONテキストを貼り付け:</label>
+        <textarea value={text} onChange={e => setText(e.target.value)}
+          placeholder='{"patients": [...], "stats": {...}}'
+          rows={6} className="w-full px-3 py-2 rounded border text-xs font-mono mb-4 outline-none resize-none"
+          style={{ borderColor: '#D4C9B0', backgroundColor: '#F5F1E8', color: '#3E2F1F' }}/>
+        <div className="flex gap-2 justify-end">
+          <button onClick={onCancel} className="px-3 py-1.5 text-sm" style={{ color: '#7A6A55' }}>キャンセル</button>
+          <button onClick={onImportText} disabled={!text.trim()}
+            className="px-4 py-1.5 rounded text-sm font-medium"
+            style={{ backgroundColor: '#3E2F1F', color: '#F5F1E8', opacity: !text.trim() ? 0.4 : 1 }}>
+            テキストから読み込む
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── TemplatesSection ─────────────────────────────────────────
+function TemplatesSection({ templates, onAddTemplate, onUpdateTemplate, onDeleteTemplate, onAddItem, onUpdateItem, onRemoveItem }) {
+  return (
+    <div className="mt-2 p-3 rounded-lg border text-xs" style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0' }}>
+      <p className="mb-2" style={{ color: '#7A6A55' }}>よく使うタスクセットを定義しておくと、患者カードの「セット:」から一発追加できます。</p>
+      {templates.length === 0 && <p className="text-xs py-2" style={{ color: '#9A8775' }}>テンプレートはありません</p>}
+      <ul className="space-y-2">
+        {templates.map(tpl => (
+          <li key={tpl.id} className="p-2 rounded" style={{ backgroundColor: '#F5EDE5' }}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <input value={tpl.name} onChange={e => onUpdateTemplate(tpl.id, { name: e.target.value })}
+                className="flex-1 px-2 py-1 rounded text-sm font-medium border outline-none"
+                style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0', color: '#3E2F1F' }}/>
+              <button onClick={() => onDeleteTemplate(tpl.id)} className="text-xs px-2 py-0.5 opacity-60 hover:opacity-100" style={{ color: '#B87D7D' }}>削除</button>
+            </div>
+            <ul className="space-y-1">
+              {tpl.items.map((item, idx) => (
+                <li key={idx} className="flex items-center gap-1">
+                  <input value={item.title} onChange={e => onUpdateItem(tpl.id, idx, { title: e.target.value })}
+                    placeholder="タスク名" className="flex-1 min-w-0 px-2 py-0.5 rounded text-xs border outline-none"
+                    style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0', color: '#3E2F1F' }}/>
+                  <select value={item.type||'other'} onChange={e => onUpdateItem(tpl.id, idx, { type: e.target.value })}
+                    className="text-xs px-1 py-0.5 rounded border outline-none shrink-0"
+                    style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0', color: '#3E2F1F' }}>
+                    {TASK_TYPES.map(tt => <option key={tt.id} value={tt.id}>{tt.label}</option>)}
+                  </select>
+                  <select value={item.estimate||'5'} onChange={e => onUpdateItem(tpl.id, idx, { estimate: e.target.value })}
+                    className="text-xs px-1 py-0.5 rounded border outline-none shrink-0"
+                    style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0', color: '#3E2F1F' }}>
+                    {ESTIMATES.map(es => <option key={es.id} value={es.id}>{es.label}</option>)}
+                  </select>
+                  <button onClick={() => onRemoveItem(tpl.id, idx)} className="p-0.5 opacity-40 hover:opacity-100 shrink-0"><X size={12} color="#B87D7D"/></button>
+                </li>
+              ))}
+            </ul>
+            <button onClick={() => onAddItem(tpl.id)} className="mt-1.5 text-xs px-2 py-0.5 opacity-70 hover:opacity-100" style={{ color: '#7A6A55' }}>+ アイテム追加</button>
+          </li>
+        ))}
+      </ul>
+      <button onClick={onAddTemplate} className="mt-3 px-3 py-1.5 rounded text-xs font-medium border w-full flex items-center justify-center gap-1" style={{ backgroundColor: '#FEFBF3', borderColor: '#D4C9B0', color: '#3E2F1F' }}>
+        <Plus size={12}/>新規テンプレート
+      </button>
+    </div>
+  );
+}
+
+// ── メインコンポーネント ─────────────────────────────────────
+function PatientTriage() {
+  const { useState, useEffect, useMemo } = React;
+
+  const [patients,          setPatients]          = useState([]);
+  const [loaded,            setLoaded]            = useState(false);
+  const [expandedPatients,  setExpandedPatients]  = useState({});
+  const [newPatientName,    setNewPatientName]    = useState('');
+  const [newPatientPri,     setNewPatientPri]     = useState('normal');
+  const [adding,            setAdding]            = useState({});
+  const [addForm,           setAddForm]           = useState({});
+  const [suggestion,        setSuggestion]        = useState(null);
+  const [focusMode,         setFocusMode]         = useState(false);
+  const [quickOnly,         setQuickOnly]         = useState(false);
+  const [stuckDialog,       setStuckDialog]       = useState(null);
+  const [stuckForm,         setStuckForm]         = useState({ reason: '', tinyStep: '' });
+  const [stats,             setStats]             = useState({ doneToday: 0, date: todayStr() });
+  const [now,               setNow]               = useState(Date.now());
+  const [importDialog,      setImportDialog]      = useState(false);
+  const [importText,        setImportText]        = useState('');
+  const [dataToolsOpen,     setDataToolsOpen]     = useState(false);
+  const [templatesOpen,     setTemplatesOpen]     = useState(false);
+  const [templates,         setTemplates]         = useState([]);
+  const [toast,             setToast]             = useState(null);
+  const [gasConfig,         setGasConfigState]    = useState(() => loadGasConfig());
+  const [gasStatus,         setGasStatus]         = useState('idle');
+  const [gasDialog,         setGasDialog]         = useState(false);
+
+  // tick
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  // load from localStorage
+  useEffect(() => {
+    const parsed = loadLocal(STORAGE_KEY);
+    if (parsed) {
+      setPatients(parsed.patients || []);
+      if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
+      setTemplates(Array.isArray(parsed.templates) ? parsed.templates : DEFAULT_TEMPLATES);
+    } else {
+      setTemplates(DEFAULT_TEMPLATES);
+    }
+    setLoaded(true);
+  }, []);
+
+  // save to localStorage
+  useEffect(() => {
+    if (!loaded) return;
+    saveLocal(STORAGE_KEY, { patients, stats, templates });
+  }, [patients, stats, templates, loaded]);
+
+  // derived
+  const sortedPatients = useMemo(() => {
+    const order = { high: 0, normal: 1, low: 2 };
+    return [...patients].sort((a, b) => {
+      const pa = order[getPri(a)], pb = order[getPri(b)];
+      return pa !== pb ? pa - pb : (a.createdAt||0) - (b.createdAt||0);
+    });
+  }, [patients]);
+
+  const flatTasks = useMemo(() =>
+    patients.flatMap(p => p.tasks.map(t => ({ ...t, patientId: p.id, patientName: p.name, patientPriority: getPri(p) }))),
+    [patients]);
+
+  const stuckTasks    = useMemo(() => flatTasks.filter(t => t.status==='stuck'),       [flatTasks]);
+  const openTaskCount = useMemo(() => flatTasks.filter(t => t.status!=='done').length, [flatTasks]);
+  const timedAlerts   = useMemo(() => {
+    return flatTasks
+      .filter(t => t.status!=='done' && t.scheduledTime)
+      .map(t => ({ ...t, ts: timeStatus(t.scheduledTime, now) }))
+      .filter(t => t.ts==='past' || t.ts==='now' || t.ts==='soon')
+      .sort((a,b) => (a.scheduledTime||'').localeCompare(b.scheduledTime||''));
+  }, [flatTasks, now]);
+
+  // patient ops
+  const addPatient = () => {
+    const name = newPatientName.trim();
+    if (!name) return;
+    const p = { id: uid(), name, priority: newPatientPri, tasks: [], createdAt: Date.now() };
+    setPatients(prev => [...prev, p]);
+    setExpandedPatients(prev => ({ ...prev, [p.id]: true }));
+    setNewPatientName(''); setNewPatientPri('normal');
+  };
+  const removePatient     = id  => setPatients(prev => prev.filter(p => p.id!==id));
+  const setPatientPriority= (id,priority) => setPatients(prev => prev.map(p => p.id===id ? {...p,priority} : p));
+  const renamePatient     = (id,name) => { const t=name.trim(); if (t) setPatients(prev => prev.map(p => p.id===id ? {...p,name:t} : p)); };
+  const toggleExpand      = id  => setExpandedPatients(prev => ({ ...prev, [id]: !prev[id] }));
+
+  // task ops
+  const addTask = patientId => {
+    const form  = addForm[patientId] || {};
+    const title = (form.title||'').trim();
+    if (!title) return;
+    const task = { id: uid(), title, type: form.type||'other', estimate: form.estimate||'5',
+      scheduledTime: form.scheduledTime||null, status: 'todo', stuckReason: '', tinyStep: '', createdAt: Date.now() };
+    setPatients(prev => prev.map(p => p.id===patientId ? {...p, tasks: [...p.tasks, task]} : p));
+    setAddForm(prev => ({ ...prev, [patientId]: { ...form, title: '', scheduledTime: '' } }));
+  };
+  const updateTask = (patientId, taskId, updates) =>
+    setPatients(prev => prev.map(p => p.id===patientId
+      ? { ...p, tasks: p.tasks.map(t => t.id===taskId ? {...t,...updates} : t) } : p));
+  const completeTask = (patientId, taskId) => {
+    updateTask(patientId, taskId, { status: 'done', completedAt: Date.now() });
+    setStats(prev => ({ ...prev, doneToday: prev.doneToday+1, date: todayStr() }));
+    if (suggestion?.task?.id===taskId) setSuggestion(null);
+  };
+  const removeTask = (patientId, taskId) => {
+    setPatients(prev => prev.map(p => p.id===patientId ? {...p, tasks: p.tasks.filter(t => t.id!==taskId)} : p));
+    if (suggestion?.task?.id===taskId) setSuggestion(null);
+  };
+  const markStuck = (patientId, taskId) => {
+    const task = patients.find(p=>p.id===patientId)?.tasks.find(t=>t.id===taskId);
+    setStuckForm({ reason: task?.stuckReason||'', tinyStep: task?.tinyStep||'' });
+    setStuckDialog({ patientId, taskId });
+  };
+  const saveStuck = () => {
+    if (!stuckDialog) return;
+    updateTask(stuckDialog.patientId, stuckDialog.taskId, { status:'stuck', stuckReason: stuckForm.reason, tinyStep: stuckForm.tinyStep });
+    setStuckDialog(null); setStuckForm({ reason:'', tinyStep:'' });
+  };
+  const unstick = (patientId, taskId) => updateTask(patientId, taskId, { status:'todo' });
+
+  // suggestion
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2500); };
+  const suggestNext = () => {
+    let pool = flatTasks.filter(t => t.status==='todo' || t.status==='doing');
+    if (quickOnly) pool = pool.filter(t => t.estimate==='2');
+    if (pool.length===0) { setSuggestion({ empty: true }); return; }
+    const weights = pool.map(t => {
+      const estW   = {'2':1.6,'5':1.2,'15':1.0,'30':0.7}[t.estimate] || 1;
+      const stateW = t.status==='doing' ? 1.8 : 1.0;
+      const priW   = t.patientPriority==='high' ? 2.2 : t.patientPriority==='low' ? 0.55 : 1.0;
+      const ts     = timeStatus(t.scheduledTime, now);
+      const schedW = ts==='past' ? 3.5 : ts==='now' ? 3.0 : ts==='soon' ? 2.2 : ts==='upcoming' ? 1.4 : 1.0;
+      return estW * stateW * priW * schedW;
+    });
+    const total = weights.reduce((a,b)=>a+b,0);
+    let r = Math.random()*total, pick = pool[pool.length-1];
+    for (let i=0; i<pool.length; i++) { r-=weights[i]; if (r<=0) { pick=pool[i]; break; } }
+    setSuggestion({ task: pick });
+  };
+  const suggestFromStuck = () => {
+    if (!stuckTasks.length) return;
+    setSuggestion({ task: stuckTasks[Math.floor(Math.random()*stuckTasks.length)], fromStuck: true });
+  };
+
+  // templates
+  const applyTemplate = (patientId, template) => {
+    const newTasks = template.items.filter(i=>i.title&&i.title.trim()).map(i => ({
+      id: uid(), title: i.title.trim(), type: i.type||'other', estimate: i.estimate||'5',
+      scheduledTime: null, status: 'todo', stuckReason: '', tinyStep: '', createdAt: Date.now()
+    }));
+    if (!newTasks.length) { showToast('テンプレートが空です'); return; }
+    setPatients(prev => prev.map(p => p.id===patientId ? {...p, tasks:[...p.tasks,...newTasks]} : p));
+    setExpandedPatients(prev => ({ ...prev, [patientId]: true }));
+    showToast(`「${template.name}」${newTasks.length}件追加`);
+  };
+  const updateTemplate     = (id,updates)   => setTemplates(prev => prev.map(t => t.id===id ? {...t,...updates} : t));
+  const deleteTemplate     = id             => { if (window.confirm('このテンプレートを削除しますか?')) setTemplates(prev => prev.filter(t=>t.id!==id)); };
+  const addTemplate        = ()             => { const name=window.prompt('新しいセットの名前:',''); if (name?.trim()) setTemplates(prev => [...prev, { id:uid(), name:name.trim(), items:[] }]); };
+  const addTemplateItem    = templateId     => setTemplates(prev => prev.map(t => t.id===templateId ? {...t, items:[...t.items,{title:'',type:'other',estimate:'5'}]} : t));
+  const updateTemplateItem = (tid,idx,upd)  => setTemplates(prev => prev.map(t => t.id===tid ? {...t, items:t.items.map((it,i)=>i===idx?{...it,...upd}:it)} : t));
+  const removeTemplateItem = (tid,idx)      => setTemplates(prev => prev.map(t => t.id===tid ? {...t, items:t.items.filter((_,i)=>i!==idx)} : t));
+
+  // GAS
+  const setGasConfig  = cfg => { setGasConfigState(cfg); saveGasConfig(cfg); };
+  const buildPayload  = ()  => ({ patients, stats, templates, version: 1 });
+  const applyPayload  = parsed => {
+    if (!parsed || !Array.isArray(parsed.patients)) return false;
+    setPatients(parsed.patients);
+    if (parsed.stats?.date===todayStr()) setStats(parsed.stats);
+    if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
+    return true;
+  };
+  const gasPush = async () => {
+    if (!gasConfig.url || !gasConfig.secret) { showToast('GAS URLとシークレットを設定してください'); return; }
+    setGasStatus('syncing');
+    try {
+      const r = await gasFetch(gasConfig, buildPayload());
+      if (r.ok) { setGasStatus('ok'); showToast('GASに保存しました ✓'); }
+      else throw new Error(r.error||'unknown');
+    } catch(e) { setGasStatus('error'); showToast('GAS保存失敗: '+e.message); }
+  };
+  const gasPull = async () => {
+    if (!gasConfig.url || !gasConfig.secret) { showToast('GAS URLとシークレットを設定してください'); return; }
+    setGasStatus('syncing');
+    try {
+      const r = await gasGet(gasConfig);
+      if (!r.ok) throw new Error(r.error||'unknown');
+      if (!r.data) { setGasStatus('ok'); showToast('GASにデータがまだありません'); return; }
+      const count = r.data.patients?.length ?? 0;
+      const open  = (r.data.patients||[]).reduce((s,p)=>s+(p.tasks||[]).filter(t=>t.status!=='done').length,0);
+      if (!window.confirm(`GASから読み込む: 患者${count}人 / 未完タスク${open}件\n現在のデータは上書きされます。続行しますか?`)) { setGasStatus('idle'); return; }
+      applyPayload(r.data); setGasStatus('ok'); showToast('GASから読み込みました ✓');
+    } catch(e) { setGasStatus('error'); showToast('GAS読み込み失敗: '+e.message); }
+  };
+  // auto-push (debounced 3s)
+  useEffect(() => {
+    if (!loaded || !gasConfig.url || !gasConfig.secret) return;
+    const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(()=>{}), 3000);
+    return () => clearTimeout(t);
+  }, [patients, stats, templates, loaded]);
+
+  // export/import
+  const buildExportJSON = () => JSON.stringify({ patients, stats, templates, version:1, exportedAt: new Date().toISOString() }, null, 2);
+  const exportToFile = () => {
+    const blob = new Blob([buildExportJSON()], { type:'application/json' });
+    const a    = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `patient-triage-${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.json` });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+    showToast('ファイル保存しました');
+  };
+  const exportToClipboard = async () => {
+    const json = buildExportJSON();
+    try { await navigator.clipboard.writeText(json); showToast('クリップボードにコピー'); }
+    catch { setImportText(json); setImportDialog(true); }
+  };
+  const runImport = jsonString => {
+    let parsed;
+    try { parsed = JSON.parse(jsonString); } catch(e) { alert('JSONパースエラー: '+e.message); return false; }
+    if (!parsed.patients || !Array.isArray(parsed.patients)) { alert('無効なデータ形式'); return false; }
+    const count = parsed.patients.length;
+    const open  = parsed.patients.reduce((s,p)=>s+(p.tasks||[]).filter(t=>t.status!=='done').length,0);
+    if (!window.confirm(`読み込む: 患者${count}人 / 未完タスク${open}件\n現在のデータ(患者${patients.length}人)は上書きされます。続行しますか?`)) return false;
+    setPatients(parsed.patients);
+    if (parsed.stats?.date===todayStr()) setStats(parsed.stats);
+    if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
+    return true;
+  };
+  const importFromFile = file => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => { if (runImport(e.target.result)) { setImportDialog(false); setImportText(''); showToast('インポート完了'); }};
+    reader.readAsText(file);
+  };
+  const importFromText = () => { if (runImport(importText)) { setImportDialog(false); setImportText(''); showToast('インポート完了'); }};
+
+  const typeMeta = id => TASK_TYPES.find(t=>t.id===id) || TASK_TYPES[7];
+  const estMeta  = id => ESTIMATES.find(e=>e.id===id)  || ESTIMATES[1];
+
+  if (!loaded) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F5F1E8' }}>
+      <div className="text-sm" style={{ color: '#9A8775' }}>読み込み中…</div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen py-6 px-4" style={{
+      backgroundColor: '#F5F1E8',
+      backgroundImage: 'radial-gradient(circle at 1px 1px, #00000008 1px, transparent 0)',
+      backgroundSize: '24px 24px',
+      fontFamily: "'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic','Meiryo',system-ui,sans-serif",
+    }}>
+      <div className="max-w-3xl mx-auto">
+
+        {/* Header */}
+        <header className="mb-6">
+          <div className="flex items-baseline justify-between flex-wrap gap-2">
+            <h1 className="text-2xl font-bold tracking-tight" style={{ color:'#3E2F1F', fontFamily:"'Noto Serif JP','Yu Mincho',serif" }}>患者さばき</h1>
+            <div className="flex items-center gap-4 text-xs" style={{ color:'#7A6A55' }}>
+              <span>受け持ち <span className="font-bold text-base" style={{color:'#3E2F1F'}}>{patients.length}</span></span>
+              <span>未完了 <span className="font-bold text-base" style={{color:'#3E2F1F'}}>{openTaskCount}</span></span>
+              <span>今日 <span className="font-bold text-base" style={{color:'#6B8E5A'}}>{stats.doneToday}</span> 済</span>
+              {stuckTasks.length > 0 && <span>詰まり <span className="font-bold text-base" style={{color:'#B87D7D'}}>{stuckTasks.length}</span></span>}
+              {gasConfig.url && (
+                <span className="px-1.5 py-0.5 rounded text-xs" style={{
+                  backgroundColor: gasStatus==='ok' ? '#D4EAC8' : gasStatus==='error' ? '#F0C8C8' : '#E8DFC9',
+                  color: gasStatus==='ok' ? '#3A6E2A' : gasStatus==='error' ? '#8B2A2A' : '#6B5A3A',
+                }}>
+                  GAS {gasStatus==='ok' ? '✓' : gasStatus==='error' ? '✗' : gasStatus==='syncing' ? '…' : '設定済'}
+                </span>
+              )}
+            </div>
+          </div>
+          <p className="text-xs mt-1" style={{color:'#9A8775'}}>※ 患者識別は匿名の符丁で(例:305-3、A-Tさん、#12)</p>
+        </header>
+
+        {/* Time alerts */}
+        {timedAlerts.length > 0 && (
+          <div className="mb-4 p-3 rounded-lg border" style={{ backgroundColor:'#FBF0E8', borderColor:'#E8C5BC' }}>
+            <h3 className="text-xs font-bold mb-1.5 flex items-center gap-1.5" style={{color:'#8B3E2F'}}>
+              <AlertTriangle size={13}/>時限タスク({timedAlerts.length})
+            </h3>
+            <ul className="space-y-1">
+              {timedAlerts.map(t => {
+                const ts = TIME_STATES[t.ts];
+                return (
+                  <li key={t.id} className="text-xs flex items-center gap-2" style={{color:'#6B4A2F'}}>
+                    <span className="font-mono font-bold px-1.5 py-0.5 rounded shrink-0" style={{backgroundColor:ts.bg,color:ts.fg}}>{t.scheduledTime}</span>
+                    <span className="font-mono text-xs opacity-60 shrink-0">{t.patientName}</span>
+                    <span className="flex-1 truncate">{t.title}</span>
+                    <button onClick={() => completeTask(t.patientId, t.id)} className="text-xs px-1.5 py-0.5 rounded shrink-0" style={{backgroundColor:'#6B8E5A',color:'#F5F1E8'}}>済</button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {/* Action bar */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button onClick={suggestNext} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm" style={{backgroundColor:'#3E2F1F',color:'#F5F1E8'}}>
+            <Zap size={16}/>次の一手を決めて
+          </button>
+          <button onClick={() => setQuickOnly(q=>!q)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm border" style={{backgroundColor:quickOnly?'#E8DFC9':'transparent',borderColor:'#D4C9B0',color:'#3E2F1F'}}>
+            <Coffee size={14}/>2分タスクのみ
+          </button>
+          <button onClick={() => setFocusMode(f=>!f)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm border" style={{backgroundColor:focusMode?'#E8DFC9':'transparent',borderColor:'#D4C9B0',color:'#3E2F1F'}}>
+            <Focus size={14}/>集中モード
+          </button>
+          {stuckTasks.length > 0 && (
+            <button onClick={suggestFromStuck} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm border ml-auto" style={{borderColor:'#D4A5A5',color:'#8B5A5A'}}>
+              <AlertCircle size={14}/>詰まりから1つ
+            </button>
+          )}
+        </div>
+
+        {suggestion && (
+          <SuggestionCard suggestion={suggestion} typeMeta={typeMeta} estMeta={estMeta} now={now}
+            onDone={() => suggestion.task && completeTask(suggestion.task.patientId, suggestion.task.id)}
+            onDoing={() => suggestion.task && updateTask(suggestion.task.patientId, suggestion.task.id, {status:'doing'})}
+            onStuck={() => suggestion.task && markStuck(suggestion.task.patientId, suggestion.task.id)}
+            onReroll={suggestNext} onDismiss={() => setSuggestion(null)}/>
+        )}
+
+        {focusMode ? (
+          <FocusView patients={sortedPatients} typeMeta={typeMeta} estMeta={estMeta} now={now}
+            onComplete={completeTask} onStuck={markStuck}
+            onDoing={(pid,tid) => updateTask(pid,tid,{status:'doing'})} onUnstick={unstick}/>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {patients.length===0 && (
+                <div className="text-center py-12 rounded-lg border-2 border-dashed" style={{borderColor:'#D4C9B0',color:'#9A8775'}}>
+                  <p className="text-sm">まずは受け持ちを1人追加</p>
+                </div>
+              )}
+              {sortedPatients.map(p => (
+                <PatientCard key={p.id} patient={p} expanded={expandedPatients[p.id]}
+                  onToggle={() => toggleExpand(p.id)}
+                  onRemove={() => { if (confirm(`「${p.name}」を削除しますか?`)) removePatient(p.id); }}
+                  onSetPriority={pri => setPatientPriority(p.id, pri)}
+                  onRename={name => renamePatient(p.id, name)}
+                  templates={templates} onApplyTemplate={tpl => applyTemplate(p.id, tpl)}
+                  adding={adding[p.id]}
+                  onStartAdd={() => setAdding(a => ({...a,[p.id]:true}))}
+                  onCancelAdd={() => setAdding(a => ({...a,[p.id]:false}))}
+                  addForm={addForm[p.id]||{title:'',type:'other',estimate:'5',scheduledTime:''}}
+                  setAddForm={f => setAddForm(prev => ({...prev,[p.id]:f}))}
+                  onAddTask={() => addTask(p.id)}
+                  onTaskDone={tid => completeTask(p.id,tid)} onTaskStuck={tid => markStuck(p.id,tid)}
+                  onTaskDoing={tid => updateTask(p.id,tid,{status:'doing'})} onTaskTodo={tid => updateTask(p.id,tid,{status:'todo'})}
+                  onTaskRemove={tid => removeTask(p.id,tid)} onUnstick={tid => unstick(p.id,tid)}
+                  onUpdateTask={(tid,upd) => updateTask(p.id,tid,upd)}
+                  typeMeta={typeMeta} estMeta={estMeta} now={now}/>
+              ))}
+            </div>
+
+            {/* Add patient */}
+            <div className="mt-4">
+              <div className="flex gap-2 mb-1.5">
+                <input value={newPatientName} onChange={e => setNewPatientName(e.target.value)}
+                  onKeyDown={e => e.key==='Enter' && addPatient()}
+                  placeholder="符丁を入力して Enter(例: 305-3)"
+                  className="flex-1 px-3 py-2.5 rounded-lg text-sm border outline-none"
+                  style={{backgroundColor:'#FEFBF3',borderColor:'#D4C9B0',color:'#3E2F1F'}}/>
+                <button onClick={addPatient} className="px-4 py-2.5 rounded-lg text-sm font-medium border" style={{backgroundColor:'#FEFBF3',borderColor:'#D4C9B0',color:'#3E2F1F'}}>
+                  <Plus size={16}/>追加
+                </button>
+              </div>
+              <div className="flex gap-1 items-center text-xs" style={{color:'#9A8775'}}>
+                <span>優先度:</span>
+                {PRIORITIES.map(pri => (
+                  <button key={pri.id} onClick={() => setNewPatientPri(pri.id)} className="px-2 py-0.5 rounded"
+                    style={{backgroundColor:newPatientPri===pri.id?pri.color:'transparent',color:newPatientPri===pri.id?'#F5F1E8':pri.color,border:`1px solid ${pri.color}60`}}>
+                    {pri.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Stuck list */}
+        {!focusMode && stuckTasks.length > 0 && (
+          <div className="mt-6 p-4 rounded-lg border" style={{backgroundColor:'#FBF4EE',borderColor:'#E8D5D5'}}>
+            <h3 className="text-sm font-bold mb-2 flex items-center gap-1.5" style={{color:'#8B5A5A'}}>
+              <AlertCircle size={14}/>詰まってるやつ({stuckTasks.length})
+            </h3>
+            <ul className="space-y-1.5">
+              {stuckTasks.map(t => (
+                <li key={t.id} className="text-xs flex items-start gap-2" style={{color:'#6B4A4A'}}>
+                  <span className="font-mono text-xs opacity-60 shrink-0 mt-0.5">{t.patientName}</span>
+                  <div className="flex-1">
+                    <div>{t.title}</div>
+                    {t.tinyStep && <div className="opacity-75 mt-0.5">→ 次の一歩: {t.tinyStep}</div>}
+                  </div>
+                  <button onClick={() => unstick(t.patientId, t.id)} className="text-xs underline opacity-70 hover:opacity-100 shrink-0">戻す</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Data tools */}
+        <div className="mt-6 mb-2">
+          <button onClick={() => setDataToolsOpen(v=>!v)} className="text-xs flex items-center gap-1 opacity-60 hover:opacity-100" style={{color:'#7A6A55'}}>
+            {dataToolsOpen ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
+            データ(バックアップ / GAS同期)
+          </button>
+          {dataToolsOpen && (
+            <div className="mt-2 p-3 rounded-lg border text-xs space-y-3" style={{backgroundColor:'#FEFBF3',borderColor:'#D4C9B0'}}>
+              <div className="p-2 rounded" style={{backgroundColor:'#F0EAD8',borderLeft:'3px solid #B8925A'}}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-medium" style={{color:'#3E2F1F'}}>Google Apps Script 同期</span>
+                  <button onClick={() => setGasDialog(true)} className="text-xs underline" style={{color:'#7A6A55'}}>
+                    {gasConfig.url ? 'URL変更' : '設定する'}
+                  </button>
+                </div>
+                {gasConfig.url ? (
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={gasPull} disabled={gasStatus==='syncing'} className="px-3 py-1.5 rounded text-xs font-medium border" style={{backgroundColor:'#FEFBF3',borderColor:'#D4C9B0',color:'#3E2F1F'}}>↓ GASから読み込む</button>
+                    <button onClick={gasPush} disabled={gasStatus==='syncing'} className="px-3 py-1.5 rounded text-xs font-medium" style={{backgroundColor:'#3E2F1F',color:'#F5F1E8'}}>↑ GASに保存する</button>
+                    <span className="text-xs self-center opacity-60" style={{color:'#7A6A55'}}>変更時3秒後自動保存</span>
+                  </div>
+                ) : (
+                  <p style={{color:'#7A6A55'}}>設定するとPixel↔Windows間で同期できます。</p>
+                )}
+              </div>
+              <div>
+                <p className="mb-1.5 font-medium" style={{color:'#7A6A55'}}>手動バックアップ</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={exportToFile} className="px-3 py-1.5 rounded text-xs font-medium border" style={{backgroundColor:'#FEFBF3',borderColor:'#D4C9B0',color:'#3E2F1F'}}>ファイル保存(.json)</button>
+                  <button onClick={exportToClipboard} className="px-3 py-1.5 rounded text-xs font-medium border" style={{backgroundColor:'#FEFBF3',borderColor:'#D4C9B0',color:'#3E2F1F'}}>クリップボードにコピー</button>
+                  <button onClick={() => setImportDialog(true)} className="px-3 py-1.5 rounded text-xs font-medium border ml-auto" style={{backgroundColor:'#FEFBF3',borderColor:'#D4C9B0',color:'#3E2F1F'}}>インポート…</button>
+                </div>
+              </div>
+              <p className="opacity-60" style={{color:'#7A6A55'}}>※ 患者符丁以外の個人情報は入れないこと。</p>
+            </div>
+          )}
+        </div>
+
+        {/* Templates */}
+        <div className="mt-3 mb-8">
+          <button onClick={() => setTemplatesOpen(v=>!v)} className="text-xs flex items-center gap-1 opacity-60 hover:opacity-100" style={{color:'#7A6A55'}}>
+            {templatesOpen ? <ChevronDown size={12}/> : <ChevronRight size={12}/>}
+            テンプレート管理({templates.length})
+          </button>
+          {templatesOpen && (
+            <TemplatesSection templates={templates} onAddTemplate={addTemplate}
+              onUpdateTemplate={updateTemplate} onDeleteTemplate={deleteTemplate}
+              onAddItem={addTemplateItem} onUpdateItem={updateTemplateItem} onRemoveItem={removeTemplateItem}/>
+          )}
+        </div>
+
+      </div>
+
+      {/* Dialogs */}
+      {gasDialog && <GasConfigDialog config={gasConfig} onSave={cfg=>{setGasConfig(cfg);setGasDialog(false);showToast('GAS設定を保存しました');}} onCancel={()=>setGasDialog(false)}/>}
+      {stuckDialog && <StuckDialog form={stuckForm} setForm={setStuckForm} onSave={saveStuck} onCancel={()=>setStuckDialog(null)}/>}
+      {importDialog && <ImportDialog text={importText} setText={setImportText} onImportText={importFromText} onImportFile={importFromFile} onCancel={()=>{setImportDialog(false);setImportText('');}}/>}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg text-sm z-50" style={{backgroundColor:'#3E2F1F',color:'#F5F1E8'}}>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<PatientTriage/>);
+</script>
+</body>
+</html>
