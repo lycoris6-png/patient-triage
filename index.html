@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>患者さばき</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>/* cyrillic */
+/* vietnamese */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* vietnamese */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* vietnamese */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* latin-ext */
+/* latin */
+/* Chibi coach popups */
+    .chibi-coach {
+      position: fixed;
+      right: max(14px, env(safe-area-inset-right));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      z-index: 9000;
+      display: grid;
+      grid-template-columns: 92px minmax(160px, 250px);
+      align-items: end;
+      gap: 10px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(18px) scale(.96);
+      transition: opacity .22s ease, transform .22s cubic-bezier(.2,.9,.2,1);
+    }
+    .chibi-coach.show {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    .chibi-coach img {
+      width: 92px;
+      height: 92px;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 16px rgba(52, 38, 99, .22));
+      animation: chibiFloat 1.9s ease-in-out infinite;
+    }
+    .chibi-coach-bubble {
+      position: relative;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 14px 14px 14px 5px;
+      background: rgba(255, 255, 255, .94);
+      border: 1.5px solid rgba(120, 96, 180, .18);
+      box-shadow: 0 10px 28px rgba(60, 42, 120, .18);
+      color: var(--text, #31264A);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.55;
+      letter-spacing: 0;
+      backdrop-filter: blur(10px);
+    }
+    .chibi-coach-bubble::before {
+      content: "";
+      position: absolute;
+      left: -8px;
+      bottom: 14px;
+      width: 14px;
+      height: 14px;
+      background: inherit;
+      border-left: 1.5px solid rgba(120, 96, 180, .18);
+      border-bottom: 1.5px solid rgba(120, 96, 180, .18);
+      transform: rotate(45deg);
+    }
+    @keyframes chibiFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    @media (max-width: 560px) {
+      .chibi-coach {
+        right: 10px;
+        bottom: 10px;
+        grid-template-columns: 74px minmax(0, 1fr);
+        max-width: calc(100vw - 20px);
+      }
+      .chibi-coach img {
+        width: 74px;
+        height: 74px;
+      }
+      .chibi-coach-bubble {
+        max-width: calc(100vw - 116px);
+        padding: 9px 10px;
+        font-size: 11px;
+      }
+    }
+
+</style>
+<script src="patient_triage_vendor/dbc28e58-b689-4d38-85ca-d5774aa34960.js"></script>
+<script src="patient_triage_vendor/402aa1bf-e6bd-4abd-9e2d-1d1b154e991e.js"></script>
+<style>
+:root {
+  --bg:        #EEE8FF;
+  --surface:   #FFFFFF;
+  --surface-2: #F7F4FF;
+  --surface-3: #EDE6FF;
+  --border:    #DDD6F5;
+  --border-2:  #C4B8EE;
+  --text:      #180F3E;
+  --text-2:    #4E4280;
+  --text-3:    #9B90BC;
+  --accent:    #6C3EF8;
+  --accent-h:  #5530D4;
+  --done:      #16A34A;
+  --stuck-fg:  #DC2626;
+  --high:      #EF4444;
+  --shadow-xs: 0 1px 3px rgba(108,62,248,.10);
+  --shadow-sm: 0 2px 10px rgba(108,62,248,.10), 0 1px 3px rgba(108,62,248,.06);
+  --shadow:    0 4px 20px rgba(108,62,248,.14), 0 2px 6px rgba(108,62,248,.08);
+  --shadow-lg: 0 8px 36px rgba(108,62,248,.20), 0 3px 10px rgba(108,62,248,.10);
+  --r:   14px;
+  --r-s: 10px;
+  --r-xs: 7px;
+  --font-sans: 'Zen Kaku Gothic New','Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,sans-serif;
+  --font-serif:'Noto Serif JP','Yu Mincho',serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(108,62,248,.07) 1px, transparent 0);
+  background-size: 24px 24px;
+  min-height: 100vh;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── アニメーション ── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(12px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes toastIn {
+  from { opacity:0; transform:translateX(-50%) translateY(16px) scale(.94); }
+  to   { opacity:1; transform:translateX(-50%) translateY(0)    scale(1); }
+}
+@keyframes pulse-glow {
+  0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); }
+  60%     { box-shadow: 0 0 0 6px rgba(239,68,68,.0); }
+}
+@keyframes checkPop {
+  0%   { transform:scale(0) rotate(-20deg); }
+  55%  { transform:scale(1.3) rotate(5deg); }
+  100% { transform:scale(1) rotate(0deg); }
+}
+@keyframes slideDown {
+  from { opacity:0; transform:translateY(-8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes shimmer {
+  from { background-position: -200% center; }
+  to   { background-position: 200% center; }
+}
+
+/* ── カード ── */
+.card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .2s ease, transform .2s ease;
+  animation: fadeUp .24s cubic-bezier(.34,1.26,.64,1) both;
+}
+.card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+
+/* ── ボタン ── */
+.btn-dark {
+  display:inline-flex; align-items:center; gap:7px;
+  background: var(--accent);
+  color: #fff;
+  border:none; border-radius: 99px;
+  padding: 10px 20px; font-size:13px; font-weight:700;
+  font-family: var(--font-sans);
+  letter-spacing:.03em; cursor:pointer;
+  box-shadow: 0 4px 14px rgba(108,62,248,.35);
+  transition: background .15s, box-shadow .15s, transform .12s;
+}
+.btn-dark:hover  { background: var(--accent-h); box-shadow:0 6px 18px rgba(108,62,248,.45); transform:translateY(-2px); }
+.btn-dark:active { transform:translateY(0); box-shadow:0 2px 8px rgba(108,62,248,.25); }
+
+.btn-ghost {
+  display:inline-flex; align-items:center; gap:6px;
+  background: var(--surface);
+  border: 1.5px solid var(--border-2);
+  border-radius: 99px;
+  padding: 9px 16px; font-size:13px;
+  color: var(--text-2); cursor:pointer;
+  font-family: var(--font-sans); font-weight:600;
+  transition: background .15s, border-color .15s, transform .12s, color .15s;
+  box-shadow: var(--shadow-xs);
+}
+.btn-ghost:hover  { background:var(--surface-3); border-color:var(--accent); color:var(--accent); transform:translateY(-1px); }
+.btn-ghost:active { transform:translateY(0); }
+
+.btn-ghost-active {
+  background: var(--surface-3) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.btn-green {
+  display:inline-flex; align-items:center; gap:6px;
+  background:#16A34A; color:#fff;
+  border:none; border-radius: 99px;
+  padding:9px 18px; font-size:13px; font-weight:700;
+  font-family:var(--font-sans); cursor:pointer;
+  box-shadow:0 4px 12px rgba(22,163,74,.30);
+  transition: background .15s, box-shadow .15s, transform .12s;
+}
+.btn-green:hover  { background:#15803D; box-shadow:0 6px 16px rgba(22,163,74,.40); transform:translateY(-2px); }
+.btn-green:active { transform:translateY(0); }
+
+.btn-rose {
+  display:inline-flex; align-items:center; gap:6px;
+  background:transparent;
+  border:1.5px solid #FCA5A5; border-radius:99px;
+  padding:8px 16px; font-size:13px; font-weight:600;
+  color:#DC2626; cursor:pointer; font-family:var(--font-sans);
+  transition: background .15s, transform .12s;
+}
+.btn-rose:hover  { background:#FEF2F2; transform:translateY(-1px); }
+.btn-rose:active { transform:translateY(0); }
+
+.btn-sm {
+  display:inline-flex; align-items:center; gap:4px;
+  background:transparent; border:none;
+  font-size:11px; color:var(--text-3); cursor:pointer;
+  font-family:var(--font-sans);
+  padding:3px 7px; border-radius:6px;
+  font-weight:500;
+  transition:color .12s, background .12s;
+}
+.btn-sm:hover { color:var(--text-2); background:var(--surface-3); }
+
+/* ── インプット ── */
+.inp {
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:var(--r-s);
+  padding:10px 14px; font-size:13px;
+  color:var(--text); width:100%;
+  font-family:var(--font-sans);
+  outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+.inp:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(108,62,248,.15); }
+.inp::placeholder { color:var(--text-3); }
+
+/* ── チェックボックス ── */
+.check-circle {
+  width:22px; height:22px; border-radius:50%;
+  border:2.5px solid var(--border-2);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; cursor:pointer;
+  transition:border-color .15s, background .15s, transform .12s;
+  background:transparent;
+}
+.check-circle:hover { border-color:var(--accent); transform:scale(1.1); }
+.check-circle.done  {
+  background:var(--done); border-color:var(--done);
+  animation:checkPop .28s cubic-bezier(.34,1.56,.64,1) both;
+}
+.check-circle.stuck { border-color:var(--stuck-fg); }
+
+/* ── タグ/バッジ ── */
+.tag {
+  display:inline-flex; align-items:center;
+  font-size:11px; padding:3px 9px; border-radius:99px;
+  font-weight:600; line-height:1.6; white-space:nowrap;
+  letter-spacing:.02em;
+}
+.time-tag {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; padding:3px 9px; border-radius:99px;
+  font-weight:700; font-family:monospace; white-space:nowrap;
+}
+.time-tag.past { animation:pulse-glow 1.8s ease infinite; }
+
+/* ── 優先度バー ── */
+.pri-high   { border-left:4px solid #EF4444; }
+.pri-normal { border-left:4px solid #D4930A; }
+.pri-low    { border-left:4px solid #22C55E; }
+
+/* ── セクション区切り ── */
+.task-list > li { border-bottom:1px solid #F0ECFF; }
+.task-list > li:last-child { border-bottom:none; }
+
+/* ── 提案カード ── */
+.suggestion-card {
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  animation:slideDown .22s cubic-bezier(.34,1.26,.64,1) both;
+}
+
+/* ── トースト ── */
+.toast {
+  position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+  background:var(--text); color:#fff;
+  padding:11px 24px; border-radius:99px; font-size:13px; font-weight:600;
+  letter-spacing:.02em; white-space:nowrap;
+  box-shadow:0 6px 28px rgba(24,15,62,.35);
+  animation:toastIn .3s cubic-bezier(.34,1.56,.64,1) both;
+  z-index:100;
+}
+
+/* ── ダイアログ ── */
+.dialog-bg {
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  padding:16px; z-index:50;
+  background:rgba(24,15,62,.55);
+  backdrop-filter:blur(6px);
+}
+.dialog {
+  background:var(--surface); border-radius:20px;
+  box-shadow:var(--shadow-lg);
+  padding:28px; width:100%; max-width:480px;
+  animation:fadeUp .22s cubic-bezier(.34,1.26,.64,1) both;
+  border:1.5px solid var(--border);
+}
+
+/* ── GASステータスバッジ ── */
+.gas-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; font-weight:700;
+  padding:4px 12px; border-radius:99px;
+}
+
+/* ── スクロールバー ── */
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border-2); border-radius:2px; }
+
+/* ── フォーカスモード特別スタイル ── */
+.focus-card {
+  background:var(--surface);
+  border-radius:var(--r);
+  box-shadow:var(--shadow-lg);
+  padding:32px; border:1.5px solid var(--border);
+  animation:fadeUp .25s cubic-bezier(.34,1.26,.64,1) both;
+}
+
+input[type="time"]::-webkit-calendar-picker-indicator { opacity:.5; }
+
+/* ── セットチップ ── */
+.set-chip {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; padding:4px 12px; border-radius:99px;
+  background:var(--surface-2); color:var(--accent);
+  border:1.5px solid var(--border-2); cursor:pointer;
+  font-family:var(--font-sans); font-weight:600;
+  transition:background .15s, border-color .15s, transform .12s, box-shadow .12s;
+}
+.set-chip:hover { background:var(--surface-3); border-color:var(--accent); transform:translateY(-1px); box-shadow:0 3px 10px rgba(108,62,248,.15); }
+.set-chip:active { transform:translateY(0); }
+
+/* ── ヘッダー ── */
+.app-header {
+  background: linear-gradient(135deg, #180F3E 0%, #3D2080 60%, #5E3AC4 100%);
+  border-radius: 20px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(24,15,62,.30);
+  color: #fff;
+}
+
+/* ── stat pill ── */
+.stat-pill {
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.20);
+  border-radius: 99px;
+  padding: 6px 14px;
+  display:flex; align-items:baseline; gap:5px;
+  backdrop-filter: blur(4px);
+}
+
+/* ── alert bar ── */
+.alert-bar {
+  background: linear-gradient(135deg, #FFF1F2 0%, #FFF7ED 100%);
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--r);
+  box-shadow: 0 3px 12px rgba(239,68,68,.12);
+}
+
+/* ── stuck bar ── */
+.stuck-bar {
+  background: linear-gradient(135deg, #FFF1F2 0%, #FEF2F2 100%);
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--r);
+  box-shadow: 0 3px 12px rgba(220,38,38,.10);
+}
+</style>
+
+</head>
+<body>
+<div id="root"></div>
+<script src="patient-triage_v3.app.js"></script>
+
+
+
+<script>
+(function(){
+  const CHIBI_BASE = 'chibi_split_pngs/';
+  const cast = {
+    mentor: {
+      name: '白衣さん',
+      alt: '白い服の大人のおちついた女性',
+      img: {
+        neutral: 'blue_white_girl_01_neutral.png',
+        thumb: 'blue_white_girl_02_thumbsup.png',
+        cheer: 'blue_white_girl_03_cheer.png',
+        thinking: 'blue_white_girl_04_thinking.png',
+        hurry: 'blue_white_girl_05_hurrying.png',
+        clipboard: 'blue_white_girl_06_clipboard.png',
+        done: 'blue_white_girl_07_completed.png',
+        sleep: 'blue_white_girl_08_sleeping.png'
+      },
+      lines: {
+        start: ['今日もひとつずつ整えていきましょう。', '大丈夫、見えるところからで十分です。'],
+        suggest: ['次の一手、軽く決めてしまいましょう。', '迷ったら短いものから。流れが戻ります。'],
+        add: ['受け持ち追加、把握しました。', '記録できました。落ち着いて進めましょう。'],
+        done: ['完了です。よく整理できました。', '一件片づきました。呼吸もひとつ。'],
+        stuck: ['詰まりは発見できた時点で半分前進です。', '小さな次の一歩に分けましょう。'],
+        idle: ['目の前の一件だけ見れば大丈夫です。', '確認、処置、記録。順番にいきましょう。']
+      }
+    },
+    spark: {
+      name: '赤髪の子',
+      alt: '赤い髪のやんちゃで冒険しがちな女の子',
+      img: {
+        neutral: 'red_antler_girl_01_neutral.png',
+        thumb: 'red_antler_girl_02_thumbsup.png',
+        cheer: 'red_antler_girl_03_cheer.png',
+        thinking: 'red_antler_girl_04_thinking.png',
+        hurry: 'red_antler_girl_05_hurrying.png',
+        clipboard: 'red_antler_girl_06_clipboard.png',
+        done: 'red_antler_girl_07_completed.png',
+        sleep: 'red_antler_girl_08_sleeping.png'
+      },
+      lines: {
+        start: ['よし、今日の冒険開始だね。', '勢いあるうちに一個いこ！'],
+        suggest: ['これだ！まず手をつけちゃお！', '次のターゲット発見！'],
+        add: ['タスク追加！見落としなしでいこ！', '追加完了！地図に印つけた感じ！'],
+        done: ['やった！ひとつ突破！', 'クリア！この調子この調子！'],
+        stuck: ['詰まったら迂回路さがそ！', '小さく割れば突破口あるって！'],
+        idle: ['止まっててもOK、次の一歩だけ探そ。', 'いま動けるところから突撃だ！']
+      }
+    },
+    butler: {
+      name: '羽の男の子',
+      alt: 'コウモリの羽と栗色の髪の礼儀正しい男の子',
+      img: {
+        neutral: 'bat_wing_girl_01_neutral.png',
+        thumb: 'bat_wing_girl_02_thumbsup.png',
+        cheer: 'bat_wing_girl_03_cheer.png',
+        thinking: 'bat_wing_girl_04_thinking.png',
+        hurry: 'bat_wing_girl_05_hurrying.png',
+        clipboard: 'bat_wing_girl_06_clipboard.png',
+        done: 'bat_wing_girl_07_completed.png',
+        sleep: 'bat_wing_girl_08_sleeping.png'
+      },
+      lines: {
+        start: ['本日もお手伝いいたします。', '一覧は私が見守っております。'],
+        suggest: ['こちらから着手なさるのがよさそうです。', '次の候補をお持ちしました。'],
+        add: ['承りました。受け持ちに追加しました。', '記録いたしました。ご安心ください。'],
+        done: ['お見事です。完了として控えました。', 'ひとつ片づきました。すばらしいです。'],
+        stuck: ['お困りの箇所、確かに承りました。', 'まずは小さな確認からまいりましょう。'],
+        idle: ['必要でしたら、いつでも次をお示しします。', '焦らず、順に整えてまいりましょう。']
+      }
+    },
+    yushka: {
+      name: 'ユシュカ',
+      alt: '赤い髪と角のユシュカ',
+      img: {
+        neutral: 'yushka_01_neutral.png',
+        thumb: 'yushka_02_thumbsup.png',
+        cheer: 'yushka_03_cheer.png',
+        thinking: 'yushka_04_thinking.png',
+        hurry: 'yushka_05_hurrying.png',
+        clipboard: 'yushka_06_laptop.png',
+        done: 'yushka_07_paper.png',
+        sleep: 'yushka_08_sleeping.png',
+        smug: 'yushka_09_smug.png'
+      },
+      lines: {
+        start: ['来たな。今日も俺が見ててやる、まず一件片づけよう。', '段取りは俺に任せろ。派手に行く前に、手元だけ見ろ。'],
+        suggest: ['次はここだろう。迷う時間は短くていい。', 'なんでだよ…ってなる前に、候補をひとつ決めるぞ。'],
+        add: ['よし、拾えたな。記録に残せば勝ちだ。', 'いい判断だな。面倒なところほど先に押さえる。'],
+        done: ['やるじゃないか。ひとつ終わらせた、それは強い。', '完了だな。胸を張れ、次もいける。'],
+        stuck: ['詰まったか。いい、そこで止まれるのも腕だ。', '焦るな。小さく分けろ、俺が横で見てる。'],
+        idle: ['少し息を整えろ。戻る場所は逃げない。', '次に触る一件だけ決めよう。それで十分だ。']
+      }
+    }
+  };
+
+  const flows = {
+    start: [['mentor','neutral'], ['butler','neutral'], ['spark','cheer'], ['yushka','neutral']],
+    suggest: [['spark','thinking'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking']],
+    add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer']],
+    done: [['spark','done'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug']],
+    stuck: [['mentor','thinking'], ['butler','thinking'], ['spark','hurry'], ['yushka','hurry'], ['yushka','thinking']],
+    idle: [['mentor','neutral'], ['butler','neutral'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep']]
+  };
+
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  let el, img, textEl, hideTimer, lastShown = 0;
+
+  function ensureCoach(){
+    if (el) return;
+    el = document.createElement('div');
+    el.className = 'chibi-coach';
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML = '<img decoding="async" loading="eager" alt=""><div class="chibi-coach-bubble"><span class="chibi-coach-text"></span></div>';
+    document.body.appendChild(el);
+    img = el.querySelector('img');
+    textEl = el.querySelector('.chibi-coach-text');
+  }
+
+  function show(kind, force){
+    const now = Date.now();
+    if (!force && now - lastShown < 1800) return;
+    lastShown = now;
+    ensureCoach();
+    const [who, pose] = pick(flows[kind] || flows.idle);
+    const actor = cast[who];
+    img.src = CHIBI_BASE + actor.img[pose || 'neutral'];
+    img.alt = actor.alt;
+    textEl.textContent = pick(actor.lines[kind] || actor.lines.idle);
+    clearTimeout(hideTimer);
+    el.classList.add('show');
+    hideTimer = setTimeout(() => el.classList.remove('show'), kind === 'start' ? 4200 : 3300);
+  }
+
+  function classifyButton(button){
+    const text = (button.textContent || '').replace(/\s+/g, '');
+    const klass = button.className || '';
+    if (klass.includes('btn-green')) return 'done';
+    if (klass.includes('btn-rose')) return 'stuck';
+    if (text.includes('保留')) return 'idle';
+    if (text.includes('詰') || text.includes('困') || text.includes('stuck')) return 'stuck';
+    if (text.includes('次') || text.includes('候補') || text.includes('決め')) return 'suggest';
+    if (text.includes('追加') || text.includes('Add') || text.includes('+')) return 'add';
+    if (text.includes('終了') || text.includes('退院') || text.includes('完了') || text.includes('済') || text.includes('Done')) return 'done';
+    return null;
+  }
+
+  window.addEventListener('chibi-coach', event => {
+    show(event.detail?.kind || 'idle', true);
+  });
+
+  window.addEventListener('load', () => {
+    setTimeout(() => show('start', true), 1300);
+    setInterval(() => {
+      if (document.hidden) return;
+      show('idle', false);
+    }, 90000);
+  });
+
+  document.addEventListener('click', event => {
+    const button = event.target.closest && event.target.closest('button');
+    if (!button) return;
+    const kind = classifyButton(button);
+    if (kind) setTimeout(() => show(kind, false), 160);
+  }, true);
+})();
+</script>
+
+</body></html>
