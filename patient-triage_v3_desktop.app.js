@@ -472,7 +472,20 @@ function applyTheme(theme) {
   window.__headerGrad = theme.headerGrad;
 }
 const uid = () => Math.random().toString(36).slice(2, 10);
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => {
+  const d = new Date();
+  if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString('sv-SE');
+};
+const MILESTONE_LINES = {
+  5: '今日5件終了。いい流れです。',
+  10: '今日10件終了。かなり片づいてきました。',
+  15: '今日15件終了。ここまで積めたのは大きいです。',
+  20: '今日20件終了。今日は相当動いています。',
+  25: '今日25件終了。少し息を入れつつ、この調子です。',
+  30: '今日30件終了。ここまで来たら十分すごいです。'
+};
+const milestoneForDone = count => count <= 30 && count % 5 === 0 ? count : null;
 const getPri = p => p?.priority || 'normal';
 const priMeta = id => PRIORITIES.find(p => p.id === id) || PRIORITIES.find(p => p.id === 'normal') || PRIORITIES[1];
 const loadLocal = key => {
@@ -2592,11 +2605,28 @@ function PatientTriage() {
       status: 'done',
       completedAt: Date.now()
     });
-    setStats(prev => ({
-      ...prev,
-      doneToday: prev.doneToday + 1,
-      date: todayStr()
-    }));
+    setStats(prev => {
+      const workDate = todayStr();
+      const baseCount = prev.date === workDate ? prev.doneToday : 0;
+      const nextCount = baseCount + 1;
+      const milestone = milestoneForDone(nextCount);
+      if (milestone && prev.lastMilestone !== milestone) {
+        setTimeout(() => {
+          showToast(MILESTONE_LINES[milestone]);
+          window.dispatchEvent(new CustomEvent('chibi-coach', {
+            detail: {
+              kind: 'done'
+            }
+          }));
+        }, 260);
+      }
+      return {
+        ...prev,
+        doneToday: nextCount,
+        date: workDate,
+        lastMilestone: milestone || prev.lastMilestone || 0
+      };
+    });
     if (suggestion?.task?.id === taskId) setSuggestion(null);
   };
   const removeTask = (patientId, taskId) => {
@@ -2695,11 +2725,28 @@ function PatientTriage() {
       status: 'done',
       completedAt: Date.now()
     });
-    setStats(prev => ({
-      ...prev,
-      doneToday: prev.doneToday + 1,
-      date: todayStr()
-    }));
+    setStats(prev => {
+      const workDate = todayStr();
+      const baseCount = prev.date === workDate ? prev.doneToday : 0;
+      const nextCount = baseCount + 1;
+      const milestone = milestoneForDone(nextCount);
+      if (milestone && prev.lastMilestone !== milestone) {
+        setTimeout(() => {
+          showToast(MILESTONE_LINES[milestone]);
+          window.dispatchEvent(new CustomEvent('chibi-coach', {
+            detail: {
+              kind: 'done'
+            }
+          }));
+        }, 260);
+      }
+      return {
+        ...prev,
+        doneToday: nextCount,
+        date: workDate,
+        lastMilestone: milestone || prev.lastMilestone || 0
+      };
+    });
   };
   const suggestNext = () => {
     let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');

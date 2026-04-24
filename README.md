@@ -24,6 +24,8 @@ Do not delete or rename these unless the matching HTML references are updated.
 - Patient priority/classification: `ER`, high, normal, low.
 - ER patients sort above ward patients.
 - Patient `終了` removes a patient from the active list and triggers a toast/chibi reaction.
+- Daily completion stats use a workday boundary of 08:00. Counts from midnight to 07:59 belong to the previous workday.
+- Chibi milestone reactions fire once per workday at 5, 10, 15, 20, 25, and 30 completed tasks.
 - Chibi coach popups include Yushka and existing characters.
 - Data is stored in browser `localStorage` under `patient-triage-v1`.
 - Optional GAS sync settings are also stored locally.
