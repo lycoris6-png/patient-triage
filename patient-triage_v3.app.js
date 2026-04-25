@@ -2541,7 +2541,7 @@ function PatientTriage() {
     return flatTasks.filter(t => t.status !== 'done' && t.scheduledTime).map(t => ({
       ...t,
       ts: timeStatus(t.scheduledTime, now)
-    })).filter(t => t.ts === 'past' || t.ts === 'now' || t.ts === 'soon').sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+    })).filter(t => t.ts).sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
   }, [flatTasks, now]);
   const addPatient = () => {
     const name = newPatientName.trim();
