@@ -957,6 +957,7 @@ function PatientCard({
   onRemove,
   onSetPriority,
   onRename,
+  onMemoChange,
   templates,
   onApplyTemplate,
   adding,
@@ -1162,7 +1163,22 @@ function PatientCard({
       padding: '0 16px 16px',
       borderTop: '1.5px solid var(--border)'
     }
-  }, patient.tasks.length === 0 && !adding && React.createElement("p", {
+  }, React.createElement("textarea", {
+    value: patient.memo || '',
+    onChange: e => onMemoChange(e.target.value),
+    onClick: e => e.stopPropagation(),
+    placeholder: "\u5C0F\u3055\u304F\u30E1\u30E2 (\u4F8B: \u5BB6\u65CF\u9023\u7D61\u6E08\u307F / \u7D50\u679C\u5F85\u3061)",
+    rows: 2,
+    className: "inp",
+    style: {
+      marginTop: 12,
+      marginBottom: 10,
+      fontSize: 12,
+      lineHeight: 1.45,
+      resize: 'vertical',
+      minHeight: 48
+    }
+  }), patient.tasks.length === 0 && !adding && React.createElement("p", {
     style: {
       textAlign: 'center',
       padding: '20px 0',
@@ -2421,6 +2437,7 @@ function PatientTriage() {
   const [suggestion, setSuggestion] = useState(null);
   const [focusMode, setFocusMode] = useState(false);
   const [quickOnly, setQuickOnly] = useState(false);
+  const [erOnly, setErOnly] = useState(false);
   const [stuckDialog, setStuckDialog] = useState(null);
   const [stuckForm, setStuckForm] = useState({
     reason: '',
@@ -2527,6 +2544,7 @@ function PatientTriage() {
       id: uid(),
       name,
       priority: newPatientPri,
+      memo: '',
       tasks: [],
       createdAt: Date.now()
     };
@@ -2561,6 +2579,10 @@ function PatientTriage() {
       name: t
     } : p));
   };
+  const updatePatientMemo = (id, memo) => setPatients(prev => prev.map(p => p.id === id ? {
+    ...p,
+    memo
+  } : p));
   const toggleExpand = id => setExpandedPatients(prev => ({
     ...prev,
     [id]: !prev[id]
@@ -2750,12 +2772,15 @@ function PatientTriage() {
   };
   const suggestNext = () => {
     let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');
+    if (erOnly) {
+      pool = pool.filter(t => t.patientPriority === 'er');
+    }
     if (quickOnly) {
       const quick = pool.filter(t => t.estimate === '2');
       pool = quick.length > 0 ? quick : pool;
     }
     if (!pool.length) {
-      let generalPool = generalTasks.filter(t => t.status === 'todo' || t.status === 'doing');
+      let generalPool = erOnly ? [] : generalTasks.filter(t => t.status === 'todo' || t.status === 'doing');
       if (quickOnly) {
         const quick = generalPool.filter(t => t.estimate === '2');
         generalPool = quick.length > 0 ? quick : generalPool;
@@ -3264,6 +3289,11 @@ function PatientTriage() {
   }, React.createElement(Coffee, {
     size: 14
   }), "2\u5206\u3060\u3051"), React.createElement("button", {
+    className: `btn-ghost${erOnly ? ' btn-ghost-active' : ''}`,
+    onClick: () => setErOnly(v => !v)
+  }, React.createElement(AlertTriangle, {
+    size: 14
+  }), "ER\u306E\u307F"), React.createElement("button", {
     className: `btn-ghost${focusMode ? ' btn-ghost-active' : ''}`,
     onClick: () => setFocusMode(f => !f)
   }, React.createElement(Focus, {
@@ -3330,6 +3360,7 @@ function PatientTriage() {
     },
     onSetPriority: pri => setPatientPriority(p.id, pri),
     onRename: name => renamePatient(p.id, name),
+    onMemoChange: memo => updatePatientMemo(p.id, memo),
     templates: templates,
     onApplyTemplate: tpl => applyTemplate(p.id, tpl),
     adding: adding[p.id],
