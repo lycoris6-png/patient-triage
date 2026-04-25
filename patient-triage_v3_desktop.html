@@ -397,9 +397,40 @@ input[type="time"]::-webkit-calendar-picker-indicator { opacity:.5; }
   z-index: 0;
 }
 
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    url('chibi_split_pngs/yushka_09_smug.png'),
+    url('chibi_split_pngs/red_antler_girl_03_cheer.png'),
+    url('chibi_split_pngs/bat_wing_girl_01_neutral.png'),
+    url('chibi_split_pngs/blue_white_girl_06_clipboard.png');
+  background-repeat: no-repeat;
+  background-size: 72px auto, 62px auto, 58px auto, 60px auto;
+  background-position:
+    right 34px bottom 5px,
+    right 118px bottom 7px,
+    right 188px bottom 8px,
+    right 252px bottom 7px;
+  opacity: .96;
+  pointer-events: none;
+  z-index: 1;
+  filter: drop-shadow(0 8px 9px rgba(24,15,62,.34));
+}
+
 .app-header > * {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+}
+
+@media (max-width: 640px) {
+  .app-header::before {
+    background-image: url('chibi_split_pngs/yushka_09_smug.png');
+    background-size: 58px auto;
+    background-position: right 14px bottom 32px;
+    opacity: .78;
+  }
 }
 
 body.header-bg-morning .app-header::after {
@@ -574,6 +605,10 @@ body.rpg-mode .app-header::after {
     linear-gradient(90deg, rgba(5,11,29,.98) 0%, rgba(5,11,29,.88) 38%, rgba(5,11,29,.58) 66%, rgba(5,11,29,.28) 100%),
     url('patient_triage_vendor/header-nurse-station.png');
   opacity: .72;
+}
+
+body.rpg-mode .app-header::before {
+  filter: drop-shadow(0 4px 0 rgba(0,0,0,.55));
 }
 
 body.rpg-mode.header-bg-morning .app-header::after {
