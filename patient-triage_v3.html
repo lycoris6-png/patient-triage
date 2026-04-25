@@ -406,6 +406,123 @@ input[type="time"]::-webkit-calendar-picker-indicator { opacity:.5; }
   border-radius: var(--r);
   box-shadow: 0 3px 12px rgba(220,38,38,.10);
 }
+
+@font-face {
+  font-family: 'BestTenDOT';
+  src: url('patient_triage_vendor/BestTen-DOT.otf') format('opentype');
+  font-display: swap;
+}
+
+/* Retro RPG display mode */
+body.rpg-mode {
+  --font-sans: 'BestTenDOT', 'MS Gothic', 'Yu Gothic', monospace;
+  --font-serif: 'BestTenDOT', 'MS Gothic', 'Yu Gothic', monospace;
+  --bg: #111827;
+  --surface: #07142f;
+  --surface-2: #0b1b3f;
+  --surface-3: #13285a;
+  --border: #f8fafc;
+  --border-2: #fde68a;
+  --text: #ffffff;
+  --text-2: #e5e7eb;
+  --text-3: #a7b4d6;
+  --accent: #facc15;
+  --accent-h: #fde047;
+  --done: #86efac;
+  --stuck-fg: #fca5a5;
+  --shadow-sm: 0 0 0 2px #020617, 0 8px 0 rgba(0,0,0,.34);
+  --shadow: 0 0 0 2px #020617, 0 10px 0 rgba(0,0,0,.38);
+  --shadow-lg: 0 0 0 3px #020617, 0 14px 0 rgba(0,0,0,.42);
+  background-color: #111827 !important;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.035) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.035) 75%) !important;
+  background-size: 28px 28px !important;
+  background-position: 0 0, 0 14px, 14px -14px, -14px 0 !important;
+}
+
+body.rpg-mode .app-header {
+  background: #050b1d !important;
+  border: 4px double #f8fafc !important;
+  border-radius: 4px !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+body.rpg-mode .card,
+body.rpg-mode .focus-card,
+body.rpg-mode .suggestion-card,
+body.rpg-mode .alert-bar,
+body.rpg-mode .stuck-bar,
+body.rpg-mode .desktop-add-patient {
+  background: #07142f !important;
+  border: 3px double #f8fafc !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+body.rpg-mode .card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow) !important;
+}
+
+body.rpg-mode .btn-dark,
+body.rpg-mode .btn-green,
+body.rpg-mode .btn-ghost,
+body.rpg-mode .btn-rose,
+body.rpg-mode .btn-sm {
+  border: 2px solid #f8fafc !important;
+  border-radius: 4px !important;
+  background: #07142f !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+body.rpg-mode .btn-dark::before,
+body.rpg-mode .btn-green::before,
+body.rpg-mode .btn-ghost-active::before {
+  content: "▶";
+  color: #facc15;
+  font-size: 10px;
+}
+
+body.rpg-mode .btn-ghost-active {
+  border-color: #fde68a !important;
+  background: #13285a !important;
+  color: #fef3c7 !important;
+}
+
+body.rpg-mode .inp,
+body.rpg-mode textarea,
+body.rpg-mode input,
+body.rpg-mode select {
+  background: #020617 !important;
+  border: 2px solid #e5e7eb !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+body.rpg-mode .tag,
+body.rpg-mode .time-tag,
+body.rpg-mode .stat-pill,
+body.rpg-mode .gas-badge {
+  border-radius: 4px !important;
+  border: 1.5px solid rgba(248,250,252,.75) !important;
+  box-shadow: none !important;
+}
+
+body.rpg-mode .toast,
+body.rpg-mode .chibi-coach-bubble {
+  background: #07142f !important;
+  border: 3px double #f8fafc !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+  box-shadow: var(--shadow) !important;
+}
+
 </style>
 
 </head>

@@ -465,6 +465,7 @@ const THEMES = [{
   dotColor: 'rgba(26,110,216,.07)'
 }];
 const THEME_STORAGE_KEY = 'patient-triage-theme';
+const RPG_MODE_STORAGE_KEY = 'patient-triage-rpg-mode';
 function applyTheme(theme) {
   const root = document.documentElement;
   Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
@@ -2466,6 +2467,7 @@ function PatientTriage() {
   const [gasStatus, setGasStatus] = useState('idle');
   const [gasDialog, setGasDialog] = useState(false);
   const [themeId, setThemeId] = useState(() => loadLocal(THEME_STORAGE_KEY) || 'lavender');
+  const [rpgMode, setRpgMode] = useState(() => loadLocal(RPG_MODE_STORAGE_KEY) === true);
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const isInitialLoad = React.useRef(true);
   useEffect(() => {
@@ -2477,6 +2479,10 @@ function PatientTriage() {
     applyTheme(t);
     saveLocal(THEME_STORAGE_KEY, themeId);
   }, [themeId]);
+  useEffect(() => {
+    document.body.classList.toggle('rpg-mode', rpgMode);
+    saveLocal(RPG_MODE_STORAGE_KEY, rpgMode);
+  }, [rpgMode]);
   useEffect(() => {
     const handler = e => {
       if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
@@ -3201,7 +3207,23 @@ function PatientTriage() {
       transition: 'transform .15s, outline .15s',
       boxShadow: themeId === t.id ? '0 2px 8px rgba(0,0,0,.35)' : '0 1px 3px rgba(0,0,0,.25)'
     }
-  })))), timedAlerts.length > 0 && React.createElement("div", {
+  })), React.createElement("button", {
+    onClick: () => setRpgMode(v => !v),
+    title: "\u30EC\u30C8\u30ECRPG\u98A8UI",
+    style: {
+      border: rpgMode ? '2px solid #FDE68A' : '1.5px solid rgba(255,255,255,.35)',
+      borderRadius: 6,
+      background: rpgMode ? '#07142F' : 'rgba(255,255,255,.12)',
+      color: '#fff',
+      padding: '3px 8px',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 800,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0,
+      boxShadow: rpgMode ? '0 0 0 2px rgba(253,230,138,.25)' : 'none'
+    }
+  }, "RPG\u98A8"))), timedAlerts.length > 0 && React.createElement("div", {
     className: "alert-bar",
     style: {
       marginBottom: 16,
