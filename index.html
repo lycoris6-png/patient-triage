@@ -379,6 +379,51 @@ input[type="time"]::-webkit-calendar-picker-indicator { opacity:.5; }
   margin-bottom: 20px;
   box-shadow: 0 8px 32px rgba(24,15,62,.30);
   color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(90deg, rgba(24,15,62,.96) 0%, rgba(45,27,104,.84) 36%, rgba(45,27,104,.42) 64%, rgba(24,15,62,.18) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+  background-size: cover;
+  background-position: center right;
+  opacity: .82;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+body.header-bg-morning .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(49,39,92,.86) 0%, rgba(72,55,128,.58) 34%, rgba(255,214,186,.18) 70%, rgba(255,244,220,.08) 100%),
+    url('patient_triage_vendor/header-nurse-station-morning.png');
+}
+
+body.header-bg-day .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(35,27,82,.88) 0%, rgba(69,56,139,.62) 34%, rgba(104,92,170,.22) 68%, rgba(255,255,255,.08) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+}
+
+body.header-bg-evening .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(58,25,78,.90) 0%, rgba(107,48,92,.66) 36%, rgba(218,112,96,.24) 68%, rgba(255,180,112,.10) 100%),
+    url('patient_triage_vendor/header-nurse-station-evening.png');
+}
+
+body.header-bg-night .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(8,13,35,.98) 0%, rgba(15,23,55,.88) 38%, rgba(15,23,55,.52) 66%, rgba(8,13,35,.24) 100%),
+    url('patient_triage_vendor/header-nurse-station-night.png');
 }
 
 /* ── stat pill ── */
@@ -448,6 +493,37 @@ body.rpg-mode .app-header {
   border: 4px double #f8fafc !important;
   border-radius: 4px !important;
   box-shadow: var(--shadow-lg) !important;
+}
+
+body.rpg-mode .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.98) 0%, rgba(5,11,29,.88) 38%, rgba(5,11,29,.58) 66%, rgba(5,11,29,.28) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+  opacity: .72;
+}
+
+body.rpg-mode.header-bg-morning .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.96) 0%, rgba(9,18,45,.78) 38%, rgba(72,55,128,.42) 66%, rgba(255,214,186,.12) 100%),
+    url('patient_triage_vendor/header-nurse-station-morning.png');
+}
+
+body.rpg-mode.header-bg-day .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.97) 0%, rgba(9,18,45,.82) 38%, rgba(42,50,102,.48) 66%, rgba(104,92,170,.16) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+}
+
+body.rpg-mode.header-bg-evening .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.98) 0%, rgba(26,15,45,.84) 38%, rgba(92,45,76,.50) 66%, rgba(255,144,96,.14) 100%),
+    url('patient_triage_vendor/header-nurse-station-evening.png');
+}
+
+body.rpg-mode.header-bg-night .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(2,6,23,.99) 0%, rgba(2,6,23,.91) 38%, rgba(2,6,23,.62) 66%, rgba(2,6,23,.32) 100%),
+    url('patient_triage_vendor/header-nurse-station-night.png');
 }
 
 body.rpg-mode .card,
@@ -580,6 +656,7 @@ body.rpg-mode .chibi-coach-bubble {
         suggest: ['次の一手、軽く決めてしまいましょう。', '迷ったら短いものから。流れが戻ります。'],
         add: ['受け持ち追加、把握しました。', '記録できました。落ち着いて進めましょう。'],
         done: ['完了です。よく整理できました。', '一件片づきました。呼吸もひとつ。'],
+        endday: ['本日分、きれいに片づきました。ゆっくり休んでください。', '今日の整理はここまで。十分に積み上がっています。'],
         stuck: ['詰まりは発見できた時点で半分前進です。', '小さな次の一歩に分けましょう。'],
         idle: ['目の前の一件だけ見れば大丈夫です。', '確認、処置、記録。順番にいきましょう。']
       }
@@ -602,6 +679,7 @@ body.rpg-mode .chibi-coach-bubble {
         suggest: ['これだ！まず手をつけちゃお！', '次のターゲット発見！'],
         add: ['タスク追加！見落としなしでいこ！', '追加完了！地図に印つけた感じ！'],
         done: ['やった！ひとつ突破！', 'クリア！この調子この調子！'],
+        endday: ['今日も走り切ったね！おつかれさま！', '完了分すっきり！今日はここまでで勝ち！'],
         stuck: ['詰まったら迂回路さがそ！', '小さく割れば突破口あるって！'],
         idle: ['止まっててもOK、次の一歩だけ探そ。', 'いま動けるところから突撃だ！']
       }
@@ -624,6 +702,7 @@ body.rpg-mode .chibi-coach-bubble {
         suggest: ['ここから手をつけるのがよさそうです。', '次の候補、ひとつ選んでおきました。'],
         add: ['受け持ちに追加しました。ちゃんと見ています。', '記録しました。これで忘れにくくなりますね。'],
         done: ['いいですね。完了として残しておきます。', 'ひとつ片づきました。すばらしいです。'],
+        endday: ['本日もお手伝いできてよかったです。あとは休みましょう。', '一覧は整いました。今日はここで閉じて大丈夫です。'],
         stuck: ['困っているところ、ちゃんと見えました。', 'まずは小さな確認からいきましょう。'],
         idle: ['必要なら、ぼくが次を一緒に探します。', '焦らず、順に整えていきましょう。']
       }
@@ -647,6 +726,7 @@ body.rpg-mode .chibi-coach-bubble {
         suggest: ['次はここだろう。迷う時間は短くていい。', 'なんでだよ…ってなる前に、候補をひとつ決めるぞ。'],
         add: ['よし、拾えたな。記録に残せば勝ちだ。', 'いい判断だな。面倒なところほど先に押さえる。'],
         done: ['やるじゃないか。ひとつ終わらせた、それは強い。', '完了だな。胸を張れ、次もいける。'],
+        endday: ['よし、今日はもう十分だな。あとは休め。', '片づけた分は消した。胸を張って帰れ、よくやった。'],
         stuck: ['詰まったか。いい、そこで止まれるのも腕だ。', '焦るな。小さく分けろ、俺が横で見てる。'],
         idle: ['少し息を整えろ。戻る場所は逃げない。', '次に触る一件だけ決めよう。それで十分だ。']
       }
@@ -658,6 +738,7 @@ body.rpg-mode .chibi-coach-bubble {
     suggest: [['spark','thinking'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking']],
     add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer']],
     done: [['spark','done'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug']],
+    endday: [['mentor','sleep'], ['butler','done'], ['spark','cheer'], ['yushka','smug'], ['yushka','done']],
     stuck: [['mentor','thinking'], ['butler','thinking'], ['spark','hurry'], ['yushka','hurry'], ['yushka','thinking']],
     idle: [['mentor','neutral'], ['butler','neutral'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep']]
   };

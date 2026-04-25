@@ -466,6 +466,24 @@ const THEMES = [{
 }];
 const THEME_STORAGE_KEY = 'patient-triage-theme';
 const RPG_MODE_STORAGE_KEY = 'patient-triage-rpg-mode';
+const TIMED_ALERT_MODE_STORAGE_KEY = 'patient-triage-timed-alert-mode';
+const HEADER_BACKDROP_STORAGE_KEY = 'patient-triage-header-backdrop';
+const HEADER_BACKDROP_MODES = ['auto', 'morning', 'day', 'evening', 'night'];
+const HEADER_BACKDROP_LABELS = {
+  auto: '\u81EA\u52D5',
+  morning: '\u671D',
+  day: '\u663C',
+  evening: '\u5915',
+  night: '\u591C'
+};
+function getHeaderBackdrop(mode, nowMs) {
+  if (mode && mode !== 'auto') return HEADER_BACKDROP_MODES.includes(mode) ? mode : 'day';
+  const hour = new Date(nowMs).getHours();
+  if (hour >= 8 && hour < 11) return 'morning';
+  if (hour >= 11 && hour < 17) return 'day';
+  if (hour >= 17 && hour < 22) return 'evening';
+  return 'night';
+}
 function applyTheme(theme) {
   const root = document.documentElement;
   Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
@@ -2463,12 +2481,19 @@ function PatientTriage() {
     dueDate: ''
   });
   const [toast, setToast] = useState(null);
+  const [endDayCelebrate, setEndDayCelebrate] = useState(null);
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
   const [gasStatus, setGasStatus] = useState('idle');
   const [gasDialog, setGasDialog] = useState(false);
   const [themeId, setThemeId] = useState(() => loadLocal(THEME_STORAGE_KEY) || 'lavender');
   const [rpgMode, setRpgMode] = useState(() => loadLocal(RPG_MODE_STORAGE_KEY) === true);
+  const [timedAlertMode, setTimedAlertMode] = useState(() => loadLocal(TIMED_ALERT_MODE_STORAGE_KEY) === 'near' ? 'near' : 'all');
+  const [headerBackdropMode, setHeaderBackdropMode] = useState(() => {
+    const saved = loadLocal(HEADER_BACKDROP_STORAGE_KEY);
+    return HEADER_BACKDROP_MODES.includes(saved) ? saved : 'auto';
+  });
   const [tweaksOpen, setTweaksOpen] = useState(false);
+  const effectiveHeaderBackdrop = useMemo(() => getHeaderBackdrop(headerBackdropMode, now), [headerBackdropMode, now]);
   const isInitialLoad = React.useRef(true);
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60000);
@@ -2483,6 +2508,14 @@ function PatientTriage() {
     document.body.classList.toggle('rpg-mode', rpgMode);
     saveLocal(RPG_MODE_STORAGE_KEY, rpgMode);
   }, [rpgMode]);
+  useEffect(() => {
+    saveLocal(TIMED_ALERT_MODE_STORAGE_KEY, timedAlertMode);
+  }, [timedAlertMode]);
+  useEffect(() => {
+    HEADER_BACKDROP_MODES.filter(m => m !== 'auto').forEach(m => document.body.classList.remove(`header-bg-${m}`));
+    document.body.classList.add(`header-bg-${effectiveHeaderBackdrop}`);
+    saveLocal(HEADER_BACKDROP_STORAGE_KEY, headerBackdropMode);
+  }, [headerBackdropMode, effectiveHeaderBackdrop]);
   useEffect(() => {
     const handler = e => {
       if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
@@ -2536,13 +2569,16 @@ function PatientTriage() {
   }))), [patients]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
   const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done').length, [flatTasks]);
+  const donePatientTaskCount = useMemo(() => flatTasks.filter(t => t.status === 'done').length, [flatTasks]);
   const openGeneralCount = useMemo(() => generalTasks.filter(t => t.status !== 'done').length, [generalTasks]);
+  const doneGeneralTaskCount = useMemo(() => generalTasks.filter(t => t.status === 'done').length, [generalTasks]);
+  const doneTaskCount = donePatientTaskCount + doneGeneralTaskCount;
   const timedAlerts = useMemo(() => {
     return flatTasks.filter(t => t.status !== 'done' && t.scheduledTime).map(t => ({
       ...t,
       ts: timeStatus(t.scheduledTime, now)
-    })).filter(t => t.ts).sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
-  }, [flatTasks, now]);
+    })).filter(t => t.ts && (timedAlertMode === 'all' || t.ts === 'past' || t.ts === 'now' || t.ts === 'soon')).sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+  }, [flatTasks, now, timedAlertMode]);
   const addPatient = () => {
     const name = newPatientName.trim();
     if (!name) return;
@@ -2700,6 +2736,35 @@ function PatientTriage() {
   const showToast = msg => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
+  };
+  const endDay = () => {
+    const total = doneTaskCount;
+    if (!total) {
+      showToast('完了済みタスクはまだありません。ここまでの整理だけでも十分です。');
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: 'idle'
+        }
+      }));
+      return;
+    }
+    setPatients(prev => prev.map(p => ({
+      ...p,
+      tasks: p.tasks.filter(t => t.status !== 'done')
+    })));
+    setGeneralTasks(prev => prev.filter(t => t.status !== 'done'));
+    if (suggestion?.task?.status === 'done') setSuggestion(null);
+    showToast(`今日の完了タスク ${total}件を片づけました。おつかれさまでした!`);
+    setEndDayCelebrate({
+      count: total,
+      id: Date.now()
+    });
+    window.dispatchEvent(new CustomEvent('chibi-coach', {
+      detail: {
+        kind: 'endday'
+      }
+    }));
+    setTimeout(() => setEndDayCelebrate(null), 3800);
   };
   const addGeneralTask = () => {
     const title = (generalForm.title || '').trim();
@@ -3181,7 +3246,8 @@ function PatientTriage() {
       display: 'flex',
       gap: 6,
       marginTop: 14,
-      alignItems: 'center'
+      alignItems: 'center',
+      flexWrap: 'wrap'
     }
   }, React.createElement("span", {
     style: {
@@ -3223,7 +3289,56 @@ function PatientTriage() {
       letterSpacing: 0,
       boxShadow: rpgMode ? '0 0 0 2px rgba(253,230,138,.25)' : 'none'
     }
-  }, "RPG\u98A8"))), timedAlerts.length > 0 && React.createElement("div", {
+  }, "RPG\u98A8"), React.createElement("button", {
+    onClick: () => setTimedAlertMode(v => v === 'all' ? 'near' : 'all'),
+    title: timedAlertMode === 'all' ? "\u6642\u9650\u30BF\u30B9\u30AF\u3092\u5168\u3066\u8868\u793A" : "\u6642\u9650\u30BF\u30B9\u30AF\u3092\u76F4\u8FD1\u306E\u307F\u8868\u793A",
+    style: {
+      border: timedAlertMode === 'all' ? '2px solid #BFDBFE' : '1.5px solid rgba(255,255,255,.35)',
+      borderRadius: 6,
+      background: timedAlertMode === 'all' ? 'rgba(59,130,246,.26)' : 'rgba(255,255,255,.12)',
+      color: '#fff',
+      padding: '3px 8px',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 800,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0,
+      whiteSpace: 'nowrap'
+    }
+  }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), React.createElement("button", {
+    onClick: () => setHeaderBackdropMode(v => HEADER_BACKDROP_MODES[(HEADER_BACKDROP_MODES.indexOf(v) + 1) % HEADER_BACKDROP_MODES.length] || 'auto'),
+    title: "\u30D8\u30C3\u30C0\u30FC\u80CC\u666F\u3092\u5207\u308A\u66FF\u3048",
+    style: {
+      border: headerBackdropMode === 'auto' ? '1.5px solid rgba(255,255,255,.35)' : '2px solid #BBF7D0',
+      borderRadius: 6,
+      background: headerBackdropMode === 'auto' ? 'rgba(255,255,255,.12)' : 'rgba(34,197,94,.24)',
+      color: '#fff',
+      padding: '3px 8px',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 800,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0,
+      whiteSpace: 'nowrap'
+    }
+  }, "\u80CC\u666F:", headerBackdropMode === 'auto' ? `\u81EA\u52D5(${HEADER_BACKDROP_LABELS[effectiveHeaderBackdrop]})` : HEADER_BACKDROP_LABELS[headerBackdropMode]), React.createElement("button", {
+    onClick: endDay,
+    title: "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u5168\u3066\u7247\u3065\u3051\u308B",
+    style: {
+      border: '2px solid rgba(255,255,255,.72)',
+      borderRadius: 8,
+      background: doneTaskCount ? 'rgba(22,163,74,.32)' : 'rgba(255,255,255,.10)',
+      color: '#fff',
+      padding: '4px 10px',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 900,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0,
+      whiteSpace: 'nowrap',
+      boxShadow: doneTaskCount ? '0 3px 10px rgba(22,163,74,.22)' : 'none'
+    }
+  }, "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044!", doneTaskCount ? ` (${doneTaskCount})` : ''))), timedAlerts.length > 0 && React.createElement("div", {
     className: "alert-bar",
     style: {
       marginBottom: 16,
@@ -3811,7 +3926,79 @@ function PatientTriage() {
       marginLeft: 'auto',
       fontSize: 10
     }
-  }, "\u2713"))))), toast && React.createElement("div", {
+  }, "\u2713"))))), endDayCelebrate && React.createElement("div", {
+    key: endDayCelebrate.id,
+    style: {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 170,
+      pointerEvents: 'none',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+      background: 'radial-gradient(circle at center, rgba(108,62,248,.18), transparent 58%)',
+      animation: 'fadeUp .18s ease both'
+    }
+  }, React.createElement("div", {
+    style: {
+      width: 'min(420px, 92vw)',
+      background: 'var(--surface)',
+      border: '2px solid var(--accent)',
+      borderRadius: rpgMode ? 4 : 18,
+      boxShadow: 'var(--shadow-lg)',
+      padding: '24px 26px',
+      textAlign: 'center',
+      color: 'var(--text)',
+      position: 'relative',
+      overflow: 'hidden'
+    }
+  }, React.createElement("div", {
+    style: {
+      position: 'absolute',
+      inset: 0,
+      opacity: .16,
+      background: 'repeating-linear-gradient(135deg, var(--accent) 0 8px, transparent 8px 18px)'
+    }
+  }), React.createElement("div", {
+    style: {
+      position: 'relative',
+      fontSize: 12,
+      color: 'var(--accent)',
+      fontWeight: 900,
+      letterSpacing: '.08em',
+      marginBottom: 8
+    }
+  }, "\u672C\u65E5\u7D42\u4E86"), React.createElement("div", {
+    style: {
+      position: 'relative',
+      fontFamily: 'var(--font-serif)',
+      fontSize: 28,
+      fontWeight: 900,
+      marginBottom: 8
+    }
+  }, "\u304A\u3064\u304B\u308C\u3055\u307E\u3067\u3057\u305F!"), React.createElement("div", {
+    style: {
+      position: 'relative',
+      fontSize: 14,
+      color: 'var(--text-2)',
+      lineHeight: 1.7,
+      fontWeight: 700
+    }
+  }, "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF ", React.createElement("strong", {
+    style: {
+      color: 'var(--done)',
+      fontSize: 22
+    }
+  }, endDayCelebrate.count), " \u4EF6\u3092\u7247\u3065\u3051\u307E\u3057\u305F"), React.createElement("div", {
+    style: {
+      position: 'relative',
+      marginTop: 12,
+      color: 'var(--text-3)',
+      fontSize: 12,
+      fontWeight: 700
+    }
+  }, "\u4ECA\u65E5\u306E\u4F5C\u696D\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
   }, toast));
 }
