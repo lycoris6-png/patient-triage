@@ -2481,6 +2481,7 @@ function PatientTriage() {
     dueDate: ''
   });
   const [toast, setToast] = useState(null);
+  const [endDayConfirm, setEndDayConfirm] = useState(false);
   const [endDayCelebrate, setEndDayCelebrate] = useState(null);
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
   const [gasStatus, setGasStatus] = useState('idle');
@@ -2736,6 +2737,13 @@ function PatientTriage() {
   const showToast = msg => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
+  };
+  const requestEndDay = () => {
+    if (!doneTaskCount) {
+      endDay();
+      return;
+    }
+    setEndDayConfirm(true);
   };
   const endDay = () => {
     const total = doneTaskCount;
@@ -3322,7 +3330,7 @@ function PatientTriage() {
       whiteSpace: 'nowrap'
     }
   }, "\u80CC\u666F:", headerBackdropMode === 'auto' ? `\u81EA\u52D5(${HEADER_BACKDROP_LABELS[effectiveHeaderBackdrop]})` : HEADER_BACKDROP_LABELS[headerBackdropMode]), React.createElement("button", {
-    onClick: endDay,
+    onClick: requestEndDay,
     title: "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u5168\u3066\u7247\u3065\u3051\u308B",
     style: {
       border: '2px solid rgba(255,255,255,.72)',
@@ -3919,7 +3927,55 @@ function PatientTriage() {
       marginLeft: 'auto',
       fontSize: 10
     }
-  }, "\u2713"))))), endDayCelebrate && React.createElement("div", {
+  }, "\u2713"))))), endDayConfirm && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => setEndDayConfirm(false)
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 380
+    }
+  }, React.createElement("h3", {
+    style: {
+      fontFamily: 'var(--font-serif)',
+      fontSize: 18,
+      fontWeight: 800,
+      color: 'var(--text)',
+      margin: '0 0 8px'
+    }
+  }, "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044\u306B\u3059\u308B?"), React.createElement("p", {
+    style: {
+      margin: '0 0 18px',
+      color: 'var(--text-2)',
+      fontSize: 13,
+      lineHeight: 1.7,
+      fontWeight: 600
+    }
+  }, "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF ", doneTaskCount, " \u4EF6\u3092\u4E00\u62EC\u3067\u7247\u3065\u3051\u307E\u3059\u3002\u672A\u5B8C\u4E86\u30BF\u30B9\u30AF\u306F\u6B8B\u308A\u307E\u3059\u3002"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 8
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setEndDayConfirm(false),
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "\u3044\u3044\u3048"), React.createElement("button", {
+    className: "btn-green",
+    onClick: () => {
+      setEndDayConfirm(false);
+      endDay();
+    },
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "\u306F\u3044")))), endDayCelebrate && React.createElement("div", {
     key: endDayCelebrate.id,
     style: {
       position: 'fixed',
