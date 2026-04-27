@@ -1150,7 +1150,9 @@ function PatientCard({
     style: {
       display: 'flex',
       alignItems: 'center',
-      gap: 5
+      gap: 5,
+      flex: '1 1 auto',
+      minWidth: 0
     }
   }, React.createElement("span", {
     style: {
@@ -1158,7 +1160,10 @@ function PatientCard({
       fontWeight: 800,
       fontSize: 15,
       color: 'var(--text)',
-      letterSpacing: '.02em'
+      letterSpacing: '.02em',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
     },
     onDoubleClick: startEdit,
     title: "\u30C0\u30D6\u30EB\u30AF\u30EA\u30C3\u30AF\u3067\u540D\u524D\u5909\u66F4"
@@ -1179,46 +1184,7 @@ function PatientCard({
   }, React.createElement(Pencil, {
     size: 11,
     color: "var(--text-2)"
-  }))), React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 3
-    },
-    onClick: e => e.stopPropagation()
-  }, PRIORITIES.map(p => React.createElement("button", {
-    key: p.id,
-    onClick: () => onSetPriority(p.id),
-    title: `優先度: ${p.label}`,
-    style: {
-      width: 22,
-      height: 22,
-      borderRadius: 8,
-      border: 'none',
-      cursor: 'pointer',
-      fontSize: 10,
-      fontWeight: 800,
-      background: getPri(patient) === p.id ? p.color : 'var(--surface-2)',
-      color: getPri(patient) === p.id ? '#fff' : p.color,
-      transition: 'all .15s',
-      boxShadow: getPri(patient) === p.id ? `0 3px 8px ${p.color}55` : 'none',
-      transform: getPri(patient) === p.id ? 'scale(1.1)' : 'scale(1)'
-    }
-  }, p.label))), React.createElement("select", {
-    value: ward,
-    onChange: e => onSetWard(e.target.value),
-    title: "\u75C5\u68DF",
-    className: "inp",
-    style: {
-      width: 'auto',
-      padding: '3px 6px',
-      fontSize: 11,
-      fontWeight: 800,
-      borderRadius: 8
-    }
-  }, WARDS.map(w => React.createElement("option", {
-    key: w.id || 'none',
-    value: w.id
-  }, w.label))), React.createElement("span", {
+  }))), React.createElement("span", {
     style: {
       fontSize: 11,
       fontWeight: 700,
@@ -1267,7 +1233,77 @@ function PatientCard({
       padding: '0 16px 16px',
       borderTop: '1.5px solid var(--border)'
     }
-  }, React.createElement("textarea", {
+  }, React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 8,
+      marginTop: 12,
+      marginBottom: 10,
+      padding: '10px 12px',
+      borderRadius: 12,
+      background: 'var(--surface-2)',
+      border: '1.5px solid var(--border)'
+    },
+    onClick: e => e.stopPropagation()
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 700,
+      minWidth: 42
+    }
+  }, "\u512A\u5148\u5EA6"), PRIORITIES.map(p => React.createElement("button", {
+    key: p.id,
+    onClick: () => onSetPriority(p.id),
+    title: `\u512A\u5148\u5EA6: ${p.label}`,
+    className: "tag",
+    style: {
+      background: getPri(patient) === p.id ? p.color : 'var(--surface)',
+      color: getPri(patient) === p.id ? '#fff' : p.color,
+      border: `1.5px solid ${p.color}50`,
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 800,
+      padding: '4px 10px'
+    }
+  }, p.label))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 700,
+      minWidth: 42
+    }
+  }, "\u75C5\u68DF"), React.createElement("select", {
+    value: ward,
+    onChange: e => onSetWard(e.target.value),
+    title: "\u75C5\u68DF",
+    className: "inp",
+    style: {
+      width: 'auto',
+      minWidth: 104,
+      padding: '5px 8px',
+      fontSize: 12,
+      fontWeight: 800,
+      borderRadius: 9
+    }
+  }, WARDS.map(w => React.createElement("option", {
+    key: w.id || 'none',
+    value: w.id
+  }, w.label))))), React.createElement("textarea", {
     value: patient.memo || '',
     onChange: e => onMemoChange(e.target.value),
     onClick: e => e.stopPropagation(),
@@ -1275,7 +1311,6 @@ function PatientCard({
     rows: 2,
     className: "inp",
     style: {
-      marginTop: 12,
       marginBottom: 10,
       fontSize: 12,
       lineHeight: 1.45,
