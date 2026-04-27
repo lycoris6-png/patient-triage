@@ -217,6 +217,29 @@ const PRIORITIES = [{
   bar: '#22C55E',
   cls: 'pri-low'
 }];
+const WARDS = [{
+  id: '',
+  label: '\uFF08\u306A\u3057\uFF09'
+}, {
+  id: '3E',
+  label: '3E'
+}, {
+  id: '4E',
+  label: '4E'
+}, {
+  id: '4S',
+  label: '4S'
+}, {
+  id: '5E',
+  label: '5E'
+}, {
+  id: '5S',
+  label: '5S'
+}];
+const WARD_ORDER = WARDS.reduce((acc, ward, index) => {
+  acc[ward.id] = index;
+  return acc;
+}, {});
 const DEFAULT_TEMPLATES = [{
   id: 'tpl-admission',
   name: '入院時セット',
@@ -507,6 +530,8 @@ const MILESTONE_LINES = {
 const milestoneForDone = count => count <= 30 && count % 5 === 0 ? count : null;
 const getPri = p => p?.priority || 'normal';
 const priMeta = id => PRIORITIES.find(p => p.id === id) || PRIORITIES.find(p => p.id === 'normal') || PRIORITIES[1];
+const getWard = p => WARDS.some(w => w.id === (p?.ward || '')) ? p?.ward || '' : '';
+const wardLabel = id => (WARDS.find(w => w.id === (id || '')) || WARDS[0]).label;
 const loadLocal = key => {
   try {
     const r = localStorage.getItem(key);
@@ -813,6 +838,7 @@ function TaskRow({
   onRemove,
   onClearTime,
   onSetTime,
+  onUpdate,
   muted
 }) {
   const {
@@ -824,7 +850,19 @@ function TaskRow({
   const isDoing = task.status === 'doing';
   const isDone = task.status === 'done';
   const [editingTime, setEditingTime] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(task.title);
   const [hovered, setHovered] = useState(false);
+  React.useEffect(() => {
+    setDraftTitle(task.title);
+  }, [task.title]);
+  const commitTitle = () => {
+    const title = draftTitle.trim();
+    if (title && title !== task.title && onUpdate) onUpdate({
+      title
+    });else setDraftTitle(task.title);
+    setEditingTitle(false);
+  };
   return React.createElement("li", {
     style: {
       padding: '10px 6px',
@@ -875,7 +913,27 @@ function TaskRow({
       color: type.dot,
       fontSize: 10
     }
-  }, type.label), React.createElement("span", {
+  }, type.label), editingTitle ? React.createElement("input", {
+    autoFocus: true,
+    value: draftTitle,
+    onChange: e => setDraftTitle(e.target.value),
+    onKeyDown: e => {
+      if (e.key === 'Enter') commitTitle();
+      if (e.key === 'Escape') {
+        setDraftTitle(task.title);
+        setEditingTitle(false);
+      }
+    },
+    onBlur: commitTitle,
+    className: "inp",
+    style: {
+      flex: '1 1 12rem',
+      minWidth: '9rem',
+      padding: '4px 8px',
+      fontSize: 13,
+      fontWeight: 600
+    }
+  }) : React.createElement("span", {
     style: {
       fontSize: 13,
       fontWeight: isDone ? 400 : 600,
@@ -883,8 +941,18 @@ function TaskRow({
       color: muted ? 'var(--text-3)' : isStuck ? 'var(--stuck-fg)' : 'var(--text)',
       textDecorationColor: 'var(--text-3)',
       lineHeight: 1.4
+    },
+    onDoubleClick: () => setEditingTitle(true),
+    title: '\u30C0\u30D6\u30EB\u30AF\u30EA\u30C3\u30AF\u3067\u30BF\u30B9\u30AF\u540D\u7DE8\u96C6'
+  }, task.title), onUpdate && !editingTitle && React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setEditingTitle(true),
+    style: {
+      padding: '2px 6px',
+      opacity: .58,
+      fontSize: 10
     }
-  }, task.title), task.scheduledTime && !editingTime && React.createElement(TimeBadge, {
+  }, "\u7DE8\u96C6"), task.scheduledTime && !editingTime && React.createElement(TimeBadge, {
     scheduledTime: task.scheduledTime,
     now: now,
     editable: !isDone && !!onClearTime,
@@ -975,6 +1043,7 @@ function PatientCard({
   onToggle,
   onRemove,
   onSetPriority,
+  onSetWard,
   onRename,
   onMemoChange,
   templates,
@@ -1002,6 +1071,7 @@ function PatientCard({
     useEffect
   } = React;
   const pri = priMeta(getPri(patient));
+  const ward = getWard(patient);
   const open = patient.tasks.filter(t => t.status !== 'done');
   const done = patient.tasks.filter(t => t.status === 'done');
   const [editingName, setEditingName] = useState(false);
@@ -1133,7 +1203,22 @@ function PatientCard({
       boxShadow: getPri(patient) === p.id ? `0 3px 8px ${p.color}55` : 'none',
       transform: getPri(patient) === p.id ? 'scale(1.1)' : 'scale(1)'
     }
-  }, p.label))), React.createElement("span", {
+  }, p.label))), React.createElement("select", {
+    value: ward,
+    onChange: e => onSetWard(e.target.value),
+    title: "\u75C5\u68DF",
+    className: "inp",
+    style: {
+      width: 'auto',
+      padding: '3px 6px',
+      fontSize: 11,
+      fontWeight: 800,
+      borderRadius: 8
+    }
+  }, WARDS.map(w => React.createElement("option", {
+    key: w.id || 'none',
+    value: w.id
+  }, w.label))), React.createElement("span", {
     style: {
       fontSize: 11,
       fontWeight: 700,
@@ -1223,6 +1308,7 @@ function PatientCard({
     onTodo: () => onTaskTodo(t.id),
     onUnstick: () => onUnstick(t.id),
     onRemove: () => onTaskRemove(t.id),
+    onUpdate: updates => onUpdateTask(t.id, updates),
     onClearTime: () => onUpdateTask(t.id, {
       scheduledTime: null
     }),
@@ -1237,6 +1323,7 @@ function PatientCard({
     now: now,
     onRemove: () => onTaskRemove(t.id),
     onTodo: () => onTaskTodo(t.id),
+    onUpdate: updates => onUpdateTask(t.id, updates),
     muted: true
   }))), done.length > 0 && !adding && React.createElement("div", {
     style: {
@@ -1602,6 +1689,20 @@ function GeneralTaskSection({
   estMeta,
   now
 }) {
+  const [editingTaskId, setEditingTaskId] = React.useState(null);
+  const [draftTaskTitle, setDraftTaskTitle] = React.useState('');
+  const startTitleEdit = task => {
+    setEditingTaskId(task.id);
+    setDraftTaskTitle(task.title);
+  };
+  const commitTitleEdit = task => {
+    const title = draftTaskTitle.trim();
+    if (title && title !== task.title) onUpdate(task.id, {
+      title
+    });
+    setEditingTaskId(null);
+    setDraftTaskTitle('');
+  };
   const openTasks = tasks.filter(t => t.status !== 'done');
   const doneTasks = tasks.filter(t => t.status === 'done');
   const sortedOpen = [...openTasks].sort((a, b) => {
@@ -1689,7 +1790,27 @@ function GeneralTaskSection({
         color: type.dot,
         fontSize: 10
       }
-    }, type.label), React.createElement("span", {
+    }, type.label), editingTaskId === task.id ? React.createElement("input", {
+      autoFocus: true,
+      value: draftTaskTitle,
+      onChange: e => setDraftTaskTitle(e.target.value),
+      onKeyDown: e => {
+        if (e.key === 'Enter') commitTitleEdit(task);
+        if (e.key === 'Escape') {
+          setEditingTaskId(null);
+          setDraftTaskTitle('');
+        }
+      },
+      onBlur: () => commitTitleEdit(task),
+      className: "inp",
+      style: {
+        flex: '1 1 12rem',
+        minWidth: '9rem',
+        padding: '4px 8px',
+        fontSize: 13,
+        fontWeight: 600
+      }
+    }) : React.createElement("span", {
       style: {
         fontSize: 13,
         fontWeight: isDone ? 400 : 650,
@@ -1697,8 +1818,18 @@ function GeneralTaskSection({
         color: isDone || isHold ? 'var(--text-3)' : 'var(--text)',
         textDecoration: isDone ? 'line-through' : 'none',
         textDecorationColor: 'var(--text-3)'
+      },
+      onDoubleClick: () => startTitleEdit(task),
+      title: '\u30C0\u30D6\u30EB\u30AF\u30EA\u30C3\u30AF\u3067\u30BF\u30B9\u30AF\u540D\u7DE8\u96C6'
+    }, task.title), editingTaskId !== task.id && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => startTitleEdit(task),
+      style: {
+        padding: '2px 6px',
+        opacity: .58,
+        fontSize: 10
       }
-    }, task.title), due && React.createElement("span", {
+    }, "\u7DE8\u96C6"), due && React.createElement("span", {
       className: "time-tag",
       style: {
         background: due.bg,
@@ -2451,6 +2582,8 @@ function PatientTriage() {
   const [expandedPatients, setExpandedPatients] = useState({});
   const [newPatientName, setNewPatientName] = useState('');
   const [newPatientPri, setNewPatientPri] = useState('normal');
+  const [newPatientWard, setNewPatientWard] = useState('');
+  const [patientSortMode, setPatientSortMode] = useState('priority');
   const [adding, setAdding] = useState({});
   const [addForm, setAddForm] = useState({});
   const [suggestion, setSuggestion] = useState(null);
@@ -2559,9 +2692,16 @@ function PatientTriage() {
     return [...patients].sort((a, b) => {
       const pa = order[getPri(a)],
         pb = order[getPri(b)];
+      if (patientSortMode === 'ward') {
+        const wa = WARD_ORDER[getWard(a)] ?? 0;
+        const wb = WARD_ORDER[getWard(b)] ?? 0;
+        if (wa !== wb) return wa - wb;
+        if (pa !== pb) return pa - pb;
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      }
       return pa !== pb ? pa - pb : (a.createdAt || 0) - (b.createdAt || 0);
     });
-  }, [patients]);
+  }, [patients, patientSortMode]);
   const flatTasks = useMemo(() => patients.flatMap(p => p.tasks.map(t => ({
     ...t,
     patientId: p.id,
@@ -2587,6 +2727,7 @@ function PatientTriage() {
       id: uid(),
       name,
       priority: newPatientPri,
+      ward: newPatientWard,
       memo: '',
       tasks: [],
       createdAt: Date.now()
@@ -2598,6 +2739,7 @@ function PatientTriage() {
     }));
     setNewPatientName('');
     setNewPatientPri('normal');
+    setNewPatientWard('');
   };
   const removePatient = id => {
     const patient = patients.find(p => p.id === id);
@@ -2614,6 +2756,10 @@ function PatientTriage() {
   const setPatientPriority = (id, priority) => setPatients(prev => prev.map(p => p.id === id ? {
     ...p,
     priority
+  } : p));
+  const setPatientWard = (id, ward) => setPatients(prev => prev.map(p => p.id === id ? {
+    ...p,
+    ward
   } : p));
   const renamePatient = (id, name) => {
     const t = name.trim();
@@ -3443,7 +3589,10 @@ function PatientTriage() {
     onClick: () => setFocusMode(f => !f)
   }, React.createElement(Focus, {
     size: 14
-  }), "\u96C6\u4E2D\u30E2\u30FC\u30C9"), stuckTasks.length > 0 && React.createElement("button", {
+  }), "\u96C6\u4E2D\u30E2\u30FC\u30C9"), React.createElement("button", {
+    className: `btn-ghost${patientSortMode === 'ward' ? ' btn-ghost-active' : ''}`,
+    onClick: () => setPatientSortMode(m => m === 'priority' ? 'ward' : 'priority')
+  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806" : "\u512A\u5148\u5EA6\u9806"), stuckTasks.length > 0 && React.createElement("button", {
     className: "btn-rose",
     onClick: suggestFromStuck,
     style: {
@@ -3508,6 +3657,7 @@ function PatientTriage() {
       if (confirm(`「${p.name}」を終了にしますか？`)) removePatient(p.id);
     },
     onSetPriority: pri => setPatientPriority(p.id, pri),
+    onSetWard: ward => setPatientWard(p.id, ward),
     onRename: name => renamePatient(p.id, name),
     onMemoChange: memo => updatePatientMemo(p.id, memo),
     templates: templates,
@@ -3598,7 +3748,27 @@ function PatientTriage() {
       transition: 'all .15s',
       boxShadow: newPatientPri === pri.id ? `0 3px 10px ${pri.color}40` : 'none'
     }
-  }, pri.label))))), React.createElement("aside", {
+  }, pri.label))), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 600,
+      marginLeft: 6
+    }
+  }, "\u75C5\u68DF:"), WARDS.map(ward => React.createElement("button", {
+    key: ward.id || 'none',
+    onClick: () => setNewPatientWard(ward.id),
+    className: "tag",
+    style: {
+      background: newPatientWard === ward.id ? 'var(--accent)' : 'var(--surface)',
+      color: newPatientWard === ward.id ? '#fff' : 'var(--text-2)',
+      border: '1.5px solid var(--border)',
+      cursor: 'pointer',
+      fontSize: 11,
+      padding: '4px 10px',
+      transition: 'all .15s'
+    }
+  }, ward.label)))), React.createElement("aside", {
     className: "desktop-side-column"
   }, React.createElement(GeneralTaskSection, {
     tasks: generalTasks,
