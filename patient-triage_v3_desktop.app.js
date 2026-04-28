@@ -532,6 +532,15 @@ const getPri = p => p?.priority || 'normal';
 const priMeta = id => PRIORITIES.find(p => p.id === id) || PRIORITIES.find(p => p.id === 'normal') || PRIORITIES[1];
 const getWard = p => WARDS.some(w => w.id === (p?.ward || '')) ? p?.ward || '' : '';
 const wardLabel = id => (WARDS.find(w => w.id === (id || '')) || WARDS[0]).label;
+const estimateMinutes = task => Number.parseInt(task?.estimate, 10) || 0;
+const formatDuration = minutes => {
+  if (minutes <= 0) return '0\u5206';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (!h) return `${m}\u5206`;
+  return m ? `${h}\u6642\u9593${m}\u5206` : `${h}\u6642\u9593`;
+};
+const formatClock = date => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 const loadLocal = key => {
   try {
     const r = localStorage.getItem(key);
@@ -2745,6 +2754,8 @@ function PatientTriage() {
   }))), [patients]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
   const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done').length, [flatTasks]);
+  const remainingPatientTasks = useMemo(() => flatTasks.filter(t => t.status !== 'done'), [flatTasks]);
+  const remainingGeneralTasks = useMemo(() => generalTasks.filter(t => t.status !== 'done'), [generalTasks]);
   const donePatientTaskCount = useMemo(() => flatTasks.filter(t => t.status === 'done').length, [flatTasks]);
   const openGeneralCount = useMemo(() => generalTasks.filter(t => t.status !== 'done').length, [generalTasks]);
   const doneGeneralTaskCount = useMemo(() => generalTasks.filter(t => t.status === 'done').length, [generalTasks]);
@@ -3097,6 +3108,35 @@ function PatientTriage() {
       fromStuck: true
     });
   };
+  const showFinishEstimate = () => {
+    const remaining = [...remainingPatientTasks, ...remainingGeneralTasks];
+    const count = remaining.length;
+    if (!count) {
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: 'estimate',
+          estimate: {
+            count: 0,
+            duration: '0\u5206',
+            finishTime: ''
+          }
+        }
+      }));
+      return;
+    }
+    const totalMinutes = remaining.reduce((sum, task) => sum + estimateMinutes(task), 0);
+    const finishAt = new Date(Date.now() + totalMinutes * 60000);
+    window.dispatchEvent(new CustomEvent('chibi-coach', {
+      detail: {
+        kind: 'estimate',
+        estimate: {
+          count,
+          duration: formatDuration(totalMinutes),
+          finishTime: formatClock(finishAt)
+        }
+      }
+    }));
+  };
   const applyTemplate = (patientId, template) => {
     const newTasks = template.items.filter(i => i.title?.trim()).map(i => ({
       id: uid(),
@@ -3329,6 +3369,25 @@ function PatientTriage() {
     }
   };
   const gasC = gasStatusColor[gasStatus] || gasStatusColor.idle;
+  const filterButtonStyle = active => active ? {
+    background: 'var(--accent)',
+    borderColor: 'var(--accent)',
+    color: '#fff',
+    boxShadow: '0 8px 18px rgba(108,62,248,.28)'
+  } : {};
+  const filterBadgeStyle = active => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 26,
+    padding: '2px 6px',
+    borderRadius: 99,
+    fontSize: 10,
+    fontWeight: 900,
+    lineHeight: 1,
+    background: active ? '#fff' : 'var(--surface-2)',
+    color: active ? 'var(--accent)' : 'var(--text-3)'
+  });
   if (!loaded) return React.createElement("div", {
     style: {
       minHeight: '100vh',
@@ -3611,15 +3670,38 @@ function PatientTriage() {
     size: 15
   }), "\u6B21\u306E\u4E00\u624B\u3092\u6C7A\u3081\u3066"), React.createElement("button", {
     className: `btn-ghost${quickOnly ? ' btn-ghost-active' : ''}`,
-    onClick: () => setQuickOnly(q => !q)
+    onClick: () => setQuickOnly(q => !q),
+    "aria-pressed": quickOnly,
+    title: quickOnly ? "\u6B21\u306E\u4E00\u624B\u30922\u5206\u30BF\u30B9\u30AF\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u6B21\u306E\u4E00\u624B\u30922\u5206\u30BF\u30B9\u30AF\u306B\u7D5E\u308A\u8FBC\u3080",
+    style: filterButtonStyle(quickOnly)
   }, React.createElement(Coffee, {
     size: 14
-  }), "2\u5206\u3060\u3051"), React.createElement("button", {
+  }), "2\u5206\u3060\u3051", React.createElement("span", {
+    style: filterBadgeStyle(quickOnly)
+  }, quickOnly ? 'ON' : 'OFF')), React.createElement("button", {
     className: `btn-ghost${erOnly ? ' btn-ghost-active' : ''}`,
-    onClick: () => setErOnly(v => !v)
+    onClick: () => setErOnly(v => !v),
+    "aria-pressed": erOnly,
+    title: erOnly ? "\u6B21\u306E\u4E00\u624B\u3092ER\u60A3\u8005\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u6B21\u306E\u4E00\u624B\u3092ER\u60A3\u8005\u306B\u7D5E\u308A\u8FBC\u3080",
+    style: filterButtonStyle(erOnly)
   }, React.createElement(AlertTriangle, {
     size: 14
-  }), "ER\u306E\u307F"), React.createElement("button", {
+  }), "ER\u306E\u307F", React.createElement("span", {
+    style: filterBadgeStyle(erOnly)
+  }, erOnly ? 'ON' : 'OFF')), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: showFinishEstimate,
+    "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",
+    title: "\u6B8B\u30BF\u30B9\u30AF\u306E\u898B\u7A4D\u3082\u308A\u5408\u8A08\u3068\u6682\u5B9A\u7D42\u4E86\u6642\u523B",
+    style: {
+      width: 42,
+      height: 42,
+      padding: 0,
+      justifyContent: 'center'
+    }
+  }, React.createElement(Clock, {
+    size: 16
+  })), React.createElement("button", {
     className: `btn-ghost${focusMode ? ' btn-ghost-active' : ''}`,
     onClick: () => setFocusMode(f => !f)
   }, React.createElement(Focus, {
