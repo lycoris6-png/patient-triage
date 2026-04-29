@@ -249,6 +249,46 @@ body {
   transition:color .12s, background .12s;
 }
 .btn-sm:hover { color:var(--text-2); background:var(--surface-3); }
+/* ── コマンドドック ── */
+.command-dock {
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px;
+  margin-bottom:14px; padding:6px;
+  background:rgba(255,255,255,.78);
+  border:1px solid rgba(221,214,254,.9);
+  border-radius:15px;
+  box-shadow:0 8px 22px rgba(76,54,139,.07);
+  backdrop-filter:blur(10px);
+}
+.action-cluster {
+  display:flex; align-items:center; gap:4px;
+  min-height:38px; padding:4px;
+  background:rgba(248,246,255,.76);
+  border:1px solid rgba(231,226,247,.86);
+  border-radius:12px;
+}
+.action-cluster-primary { flex:1 1 210px; }
+.action-cluster-tools { margin-left:auto; }
+.command-dock .btn-dark,
+.command-dock .btn-ghost,
+.command-dock .btn-rose {
+  min-height:30px; padding:6px 10px; font-size:12px;
+  box-shadow:none;
+}
+.command-dock .btn-dark { padding-inline:13px; }
+.command-dock .btn-ghost { border-width:1px; }
+.command-dock .btn-ghost-active {
+  background:var(--accent) !important;
+  border-color:var(--accent) !important;
+  color:#fff !important;
+  box-shadow:0 5px 14px rgba(108,62,248,.22) !important;
+}
+.command-dock .dock-icon { min-width:34px; justify-content:center; padding-inline:9px; font-weight:900; }
+.command-dock .dock-alert { margin-left:auto; }
+@media (max-width:560px) {
+  .command-dock { padding:6px; gap:6px; }
+  .action-cluster { max-width:100%; overflow-x:auto; }
+  .action-cluster-tools { margin-left:0; }
+}
 
 /* ── インプット ── */
 .inp {
@@ -578,6 +618,10 @@ body.rpg-mode .card:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow) !important;
 }
+body.rpg-mode .card.pri-high   { border-left: 7px solid #EF4444 !important; }
+body.rpg-mode .card.pri-normal { border-left: 7px solid #D4930A !important; }
+body.rpg-mode .card.pri-low    { border-left: 7px solid #22C55E !important; }
+
 
 body.rpg-mode .btn-dark,
 body.rpg-mode .btn-green,

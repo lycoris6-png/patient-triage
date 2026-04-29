@@ -541,6 +541,72 @@ const formatDuration = minutes => {
   return m ? `${h}\u6642\u9593${m}\u5206` : `${h}\u6642\u9593`;
 };
 const formatClock = date => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+const STUCK_STEP_GOALS = [2, 3, 5, 8];
+const stuckStepGoal = task => {
+  const n = Number.parseInt(task?.stuckStepGoal, 10);
+  return STUCK_STEP_GOALS.includes(n) ? n : 3;
+};
+const stuckStepDone = task => Math.min(stuckStepGoal(task), Math.max(0, Number.parseInt(task?.stuckStepDone, 10) || 0));
+function StuckProgress({
+  task,
+  compact = false
+}) {
+  const goal = stuckStepGoal(task);
+  const done = stuckStepDone(task);
+  const ready = done >= goal;
+  const recent = Array.isArray(task?.stuckStepLog) ? task.stuckStepLog.slice(-3).reverse() : [];
+  return React.createElement("div", null, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginTop: compact ? 4 : 8
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'inline-flex',
+      gap: compact ? 2 : 3,
+      alignItems: 'center'
+    },
+    "aria-label": `詰まり進捗 ${done}/${goal}`
+  }, Array.from({
+    length: goal
+  }, (_, i) => React.createElement("span", {
+    key: i,
+    style: {
+      width: compact ? 10 : 13,
+      height: compact ? 7 : 9,
+      borderRadius: 2,
+      background: i < done ? 'var(--stuck-fg)' : 'rgba(220,38,38,.16)',
+      border: i < done ? '1px solid var(--stuck-fg)' : '1px solid rgba(220,38,38,.26)'
+    }
+  }))), React.createElement("span", {
+    style: {
+      fontSize: compact ? 10 : 11,
+      fontWeight: 800,
+      color: ready ? 'var(--done)' : 'var(--stuck-fg)',
+      lineHeight: 1
+    }
+  }, done, "/", goal, ready ? ' 解除候補' : '')), recent.length > 0 && React.createElement("div", {
+    style: {
+      marginTop: compact ? 4 : 7,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2,
+      color: '#9A3412',
+      fontSize: compact ? 10 : 11,
+      opacity: .82
+    }
+  }, recent.map((log, i) => React.createElement("div", {
+    key: `${log.at || ''}-${i}`,
+    style: {
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: compact ? 'nowrap' : 'normal'
+    }
+  }, "✓ ", log.text || '2分進めた'))));
+}
 const loadLocal = key => {
   try {
     const r = localStorage.getItem(key);
@@ -657,6 +723,7 @@ function SuggestionCard({
   onDone,
   onDoing,
   onStuck,
+  onCompleteTask,
   onReroll,
   onDismiss
 }) {
@@ -801,7 +868,9 @@ function SuggestionCard({
       opacity: .7,
       fontWeight: 700
     }
-  }, "\u6B21\u306E\u4E00\u6B69: "), t.tinyStep), React.createElement("div", {
+  }, "\u6B21\u306E\u4E00\u6B69: "), t.tinyStep), suggestion.fromStuck && React.createElement(StuckProgress, {
+    task: t
+  }), React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
@@ -810,6 +879,11 @@ function SuggestionCard({
   }, React.createElement("button", {
     className: "btn-green",
     onClick: onDone
+  }, React.createElement(Check, {
+    size: 14
+  }), suggestion.fromStuck ? "\u4E00\u6B69\u5B8C\u4E86" : "\u5B8C\u4E86"), suggestion.fromStuck && React.createElement("button", {
+    className: "btn-green",
+    onClick: onCompleteTask
   }, React.createElement(Check, {
     size: 14
   }), "\u5B8C\u4E86"), React.createElement("button", {
@@ -822,7 +896,7 @@ function SuggestionCard({
     onClick: onStuck
   }, React.createElement(AlertCircle, {
     size: 13
-  }), suggestion.fromGeneral ? '保留' : '詰まった'), React.createElement("button", {
+  }), suggestion.fromStuck ? '一歩編集' : suggestion.fromGeneral ? '保留' : '詰まった'), React.createElement("button", {
     className: "btn-sm",
     onClick: onReroll,
     style: {
@@ -1012,7 +1086,10 @@ function TaskRow({
       marginTop: 2,
       opacity: .85
     }
-  }, "\u2192 \u4E00\u6B69: ", task.tinyStep)), !isDone && React.createElement("div", {
+  }, "\u2192 \u4E00\u6B69: ", task.tinyStep), React.createElement(StuckProgress, {
+    task: task,
+    compact: true
+  })), !isDone && React.createElement("div", {
     style: {
       display: 'flex',
       gap: 10,
@@ -1028,13 +1105,19 @@ function TaskRow({
   }, "\u4E2D\u65AD"), !isStuck ? React.createElement("button", {
     className: "btn-sm",
     onClick: onStuck
-  }, "\u8A70\u307E\u3063\u305F") : React.createElement("button", {
+  }, "\u8A70\u307E\u3063\u305F") : React.createElement(React.Fragment, null, React.createElement("button", {
+    className: "btn-sm",
+    onClick: onStuck,
+    style: {
+      color: 'var(--stuck-fg)'
+    }
+  }, "\u4E00\u6B69\u7DE8\u96C6"), React.createElement("button", {
     className: "btn-sm",
     onClick: onUnstick,
     style: {
       color: 'var(--stuck-fg)'
     }
-  }, "\u8A70\u307E\u308A\u89E3\u9664"), !task.scheduledTime && onSetTime && React.createElement("button", {
+  }, "\u8A70\u307E\u308A\u89E3\u9664")), !task.scheduledTime && onSetTime && React.createElement("button", {
     className: "btn-sm",
     onClick: () => setEditingTime(true)
   }, "\u6642\u523B\u8A2D\u5B9A"), React.createElement("button", {
@@ -2337,9 +2420,36 @@ function StuckDialog({
     placeholder: "\u4F8B: \u30AB\u30EB\u30C6\u3067\u5BB6\u65CF\u9023\u7D61\u5148\u3092\u63A2\u3059\u3060\u3051",
     className: "inp",
     style: {
-      marginBottom: 18
+      marginBottom: 14
     }
-  }), React.createElement("div", {
+  }), React.createElement("label", {
+    style: {
+      fontSize: 12,
+      color: 'var(--text-2)',
+      fontWeight: 700,
+      display: 'block',
+      marginBottom: 7
+    }
+  }, "\u898B\u901A\u3057"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginBottom: 18,
+      flexWrap: 'wrap'
+    }
+  }, STUCK_STEP_GOALS.map(goal => React.createElement("button", {
+    key: goal,
+    type: "button",
+    className: `btn-ghost${Number(form.stepGoal || 3) === goal ? ' btn-ghost-active' : ''}`,
+    onClick: () => setForm({
+      ...form,
+      stepGoal: goal
+    }),
+    style: {
+      padding: '6px 13px',
+      fontSize: 12
+    }
+  }, goal))), React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
@@ -2637,7 +2747,8 @@ function PatientTriage() {
   const [stuckDialog, setStuckDialog] = useState(null);
   const [stuckForm, setStuckForm] = useState({
     reason: '',
-    tinyStep: ''
+    tinyStep: '',
+    stepGoal: 3
   });
   const [stats, setStats] = useState({
     doneToday: 0,
@@ -2897,7 +3008,8 @@ function PatientTriage() {
     const task = patients.find(p => p.id === patientId)?.tasks.find(t => t.id === taskId);
     setStuckForm({
       reason: task?.stuckReason || '',
-      tinyStep: task?.tinyStep || ''
+      tinyStep: task?.tinyStep || '',
+      stepGoal: stuckStepGoal(task)
     });
     setStuckDialog({
       patientId,
@@ -2906,20 +3018,56 @@ function PatientTriage() {
   };
   const saveStuck = () => {
     if (!stuckDialog) return;
-    updateTask(stuckDialog.patientId, stuckDialog.taskId, {
+    const currentStuckTask = patients.find(p => p.id === stuckDialog.patientId)?.tasks.find(t => t.id === stuckDialog.taskId);
+    const stuckPatch = {
       status: 'stuck',
       stuckReason: stuckForm.reason,
-      tinyStep: stuckForm.tinyStep
-    });
+      tinyStep: stuckForm.tinyStep,
+      stuckStepGoal: Number(stuckForm.stepGoal) || 3,
+      stuckStepDone: stuckStepDone(currentStuckTask)
+    };
+    updateTask(stuckDialog.patientId, stuckDialog.taskId, stuckPatch);
+    setSuggestion(prev => prev?.task?.id === stuckDialog.taskId ? {
+      ...prev,
+      task: {
+        ...prev.task,
+        ...stuckPatch
+      }
+    } : prev);
     setStuckDialog(null);
     setStuckForm({
       reason: '',
-      tinyStep: ''
+      tinyStep: '',
+      stepGoal: 3
     });
   };
   const unstick = (patientId, taskId) => updateTask(patientId, taskId, {
     status: 'todo'
   });
+  const advanceStuckStep = (patientId, taskId) => {
+    const task = patients.find(p => p.id === patientId)?.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const goal = stuckStepGoal(task);
+    const next = Math.min(goal, stuckStepDone(task) + 1);
+    const entry = {
+      text: task.tinyStep || task.title || '2分進めた',
+      at: Date.now()
+    };
+    const nextLog = [...(Array.isArray(task.stuckStepLog) ? task.stuckStepLog : []), entry].slice(-8);
+    updateTask(patientId, taskId, {
+      stuckStepDone: next,
+      stuckStepLog: nextLog
+    });
+    setSuggestion(prev => prev?.task?.id === taskId ? {
+      ...prev,
+      task: {
+        ...prev.task,
+        stuckStepDone: next,
+        stuckStepLog: nextLog
+      }
+    } : prev);
+    showToast(next >= goal ? `2分の一歩 ${next}/${goal}。解除できそうです` : `2分の一歩 ${next}/${goal}`);
+  };
   const clearDoneTasks = patientId => {
     setPatients(prev => prev.map(p => p.id === patientId ? {
       ...p,
@@ -3657,64 +3805,52 @@ function PatientTriage() {
       }
     }, "\u6E08"));
   }))), React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 18
-    }
+    className: "command-dock",
+    "aria-label": "タスク操作"
+  }, React.createElement("div", {
+    className: "action-cluster action-cluster-primary"
   }, React.createElement("button", {
     className: "btn-dark",
     onClick: suggestNext
   }, React.createElement(Zap, {
-    size: 15
-  }), "\u6B21\u306E\u4E00\u624B\u3092\u6C7A\u3081\u3066"), React.createElement("button", {
-    className: `btn-ghost${quickOnly ? ' btn-ghost-active' : ''}`,
+    size: 14
+  }), "\u6B21\u306E\u4E00\u624B"), React.createElement("button", {
+    className: `btn-ghost dock-icon${quickOnly ? ' btn-ghost-active' : ''}`,
     onClick: () => setQuickOnly(q => !q),
+    "aria-label": "2分だけ",
     "aria-pressed": quickOnly,
     title: quickOnly ? "\u6B21\u306E\u4E00\u624B\u30922\u5206\u30BF\u30B9\u30AF\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u6B21\u306E\u4E00\u624B\u30922\u5206\u30BF\u30B9\u30AF\u306B\u7D5E\u308A\u8FBC\u3080",
     style: filterButtonStyle(quickOnly)
-  }, React.createElement(Coffee, {
-    size: 14
-  }), "2\u5206\u3060\u3051", React.createElement("span", {
-    style: filterBadgeStyle(quickOnly)
-  }, quickOnly ? 'ON' : 'OFF')), React.createElement("button", {
-    className: `btn-ghost${erOnly ? ' btn-ghost-active' : ''}`,
+  }, "☕️"), React.createElement("button", {
+    className: `btn-ghost dock-icon${erOnly ? ' btn-ghost-active' : ''}`,
     onClick: () => setErOnly(v => !v),
+    "aria-label": "ERのみ",
     "aria-pressed": erOnly,
     title: erOnly ? "\u6B21\u306E\u4E00\u624B\u3092ER\u60A3\u8005\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u6B21\u306E\u4E00\u624B\u3092ER\u60A3\u8005\u306B\u7D5E\u308A\u8FBC\u3080",
     style: filterButtonStyle(erOnly)
-  }, React.createElement(AlertTriangle, {
-    size: 14
-  }), "ER\u306E\u307F", React.createElement("span", {
-    style: filterBadgeStyle(erOnly)
-  }, erOnly ? 'ON' : 'OFF')), React.createElement("button", {
-    className: "btn-ghost",
-    onClick: showFinishEstimate,
-    "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",
-    title: "\u6B8B\u30BF\u30B9\u30AF\u306E\u898B\u7A4D\u3082\u308A\u5408\u8A08\u3068\u6682\u5B9A\u7D42\u4E86\u6642\u523B",
-    style: {
-      width: 42,
-      height: 42,
-      padding: 0,
-      justifyContent: 'center'
-    }
-  }, React.createElement(Clock, {
-    size: 16
-  })), React.createElement("button", {
+  }, "ER")), React.createElement("div", {
+    className: "action-cluster"
+  }, React.createElement("button", {
     className: `btn-ghost${focusMode ? ' btn-ghost-active' : ''}`,
-    onClick: () => setFocusMode(f => !f)
+    onClick: () => setFocusMode(f => !f),
+    "aria-pressed": focusMode
   }, React.createElement(Focus, {
     size: 14
-  }), "\u96C6\u4E2D\u30E2\u30FC\u30C9"), React.createElement("button", {
+  }), "\u96C6\u4E2D\u30E2\u30FC\u30C9")), React.createElement("div", {
+    className: "action-cluster action-cluster-tools"
+  }, React.createElement("button", {
     className: `btn-ghost${patientSortMode === 'ward' ? ' btn-ghost-active' : ''}`,
-    onClick: () => setPatientSortMode(m => m === 'priority' ? 'ward' : 'priority')
-  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806" : "\u512A\u5148\u5EA6\u9806"), stuckTasks.length > 0 && React.createElement("button", {
-    className: "btn-rose",
-    onClick: suggestFromStuck,
-    style: {
-      marginLeft: 'auto'
-    }
+    onClick: () => setPatientSortMode(m => m === 'priority' ? 'ward' : 'priority'),
+    "aria-label": "\u60A3\u8005\u306E\u4E26\u3079\u66FF\u3048",
+    title: patientSortMode === 'ward' ? "\u75C5\u68DF\u9806\u3067\u8868\u793A\u4E2D" : "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D"
+  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806" : "\u512A\u5148\u5EA6\u9806"), React.createElement("button", {
+    className: "btn-ghost dock-icon",
+    onClick: showFinishEstimate,
+    "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",
+    title: "\u6B8B\u30BF\u30B9\u30AF\u306E\u898B\u7A4D\u3082\u308A\u5408\u8A08\u3068\u6682\u5B9A\u7D42\u4E86\u6642\u523B"
+  }, "⏰️")), stuckTasks.length > 0 && React.createElement("button", {
+    className: "btn-rose dock-alert",
+    onClick: suggestFromStuck
   }, React.createElement(AlertCircle, {
     size: 13
   }), "\u8A70\u307E\u308A\u304B\u30891\u3064")), suggestion && React.createElement(SuggestionCard, {
@@ -3722,7 +3858,7 @@ function PatientTriage() {
     typeMeta: typeMeta,
     estMeta: estMeta,
     now: now,
-    onDone: () => suggestion.task && (suggestion.fromGeneral ? completeGeneralTask(suggestion.task.id) : completeTask(suggestion.task.patientId, suggestion.task.id)),
+    onDone: () => suggestion.task && (suggestion.fromStuck ? advanceStuckStep(suggestion.task.patientId, suggestion.task.id) : suggestion.fromGeneral ? completeGeneralTask(suggestion.task.id) : completeTask(suggestion.task.patientId, suggestion.task.id)),
     onDoing: () => suggestion.task && (suggestion.fromGeneral ? updateGeneralTask(suggestion.task.id, {
       status: 'doing'
     }) : updateTask(suggestion.task.patientId, suggestion.task.id, {
@@ -3731,6 +3867,7 @@ function PatientTriage() {
     onStuck: () => suggestion.task && (suggestion.fromGeneral ? updateGeneralTask(suggestion.task.id, {
       status: 'hold'
     }) : markStuck(suggestion.task.patientId, suggestion.task.id)),
+    onCompleteTask: () => suggestion.task && (suggestion.fromGeneral ? completeGeneralTask(suggestion.task.id) : completeTask(suggestion.task.patientId, suggestion.task.id)),
     onReroll: suggestNext,
     onDismiss: () => setSuggestion(null)
   }), focusMode ? React.createElement(FocusView, {
@@ -3955,14 +4092,30 @@ function PatientTriage() {
       marginTop: 3,
       fontSize: 11
     }
-  }, "\u2192 \u6B21\u306E\u4E00\u6B69: ", t.tinyStep)), React.createElement("button", {
+  }, "\u2192 \u6B21\u306E\u4E00\u6B69: ", t.tinyStep), React.createElement(StuckProgress, {
+    task: t,
+    compact: true
+  })), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexShrink: 0,
+      flexWrap: 'wrap',
+      justifyContent: 'flex-end'
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => markStuck(t.patientId, t.id),
+    style: {
+      color: 'var(--stuck-fg)'
+    }
+  }, "\u4E00\u6B69\u7DE8\u96C6"), React.createElement("button", {
     className: "btn-sm",
     onClick: () => unstick(t.patientId, t.id),
     style: {
-      flexShrink: 0,
       color: 'var(--text-2)'
     }
-  }, "\u623B\u3059"))))), React.createElement("div", {
+  }, "\u623B\u3059")))))), React.createElement("div", {
     style: {
       marginTop: 28
     }
