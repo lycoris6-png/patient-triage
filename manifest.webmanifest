@@ -3,6 +3,7 @@
   "short_name": "ぺいとり！",
   "description": "患者さんとタスクを整理するためのモバイル向けトリアージ補助アプリ",
   "lang": "ja",
+  "id": "/patient-triage/",
   "start_url": "./index.html?mobile=1&source=pwa",
   "scope": "./",
   "display": "standalone",

@@ -4,6 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#6C3EF8">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="ぺいとり！">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ぺいとり！">
 <link rel="manifest" href="manifest.webmanifest">
@@ -105,6 +106,24 @@
         font-size: 11px;
       }
     }
+    .pwa-install-button {
+      position: fixed;
+      left: max(12px, env(safe-area-inset-left));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      z-index: 9100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 1.5px solid rgba(255,255,255,.82);
+      border-radius: 999px;
+      padding: 9px 14px;
+      background: #1d4ed8;
+      color: #fff;
+      box-shadow: 0 8px 22px rgba(29,78,216,.28);
+      font: 800 12px/1.2 system-ui, sans-serif;
+      letter-spacing: 0;
+    }
+    .pwa-install-button.show { display: inline-flex; }
 
 </style>
 <script src="patient_triage_vendor/dbc28e58-b689-4d38-85ca-d5774aa34960.js"></script>
@@ -930,6 +949,40 @@ body.rpg-mode .chibi-coach-bubble {
 </script>
 
 <script>
+(() => {
+  let installPrompt = null;
+  const isStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  window.addEventListener('beforeinstallprompt', event => {
+    if (isStandalone()) return;
+    event.preventDefault();
+    installPrompt = event;
+    let button = document.querySelector('.pwa-install-button');
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pwa-install-button';
+      button.textContent = 'アプリをインストール';
+      document.body.appendChild(button);
+      button.addEventListener('click', async () => {
+        if (!installPrompt) return;
+        button.classList.remove('show');
+        installPrompt.prompt();
+        await installPrompt.userChoice.catch(() => null);
+        installPrompt = null;
+      });
+    }
+    button.classList.add('show');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    document.querySelector('.pwa-install-button')?.remove();
+  });
+})();
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js').catch(() => {});
