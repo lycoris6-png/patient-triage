@@ -360,6 +360,14 @@ body {
   animation:toastIn .3s cubic-bezier(.34,1.56,.64,1) both;
   z-index:100;
 }
+@media (max-width:560px) {
+  .toast {
+    bottom: 126px;
+    max-width: calc(100vw - 28px);
+    white-space: normal;
+    text-align: center;
+  }
+}
 
 /* ── ダイアログ ── */
 .dialog-bg {

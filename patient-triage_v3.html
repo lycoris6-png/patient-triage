@@ -2,6 +2,12 @@
 <html lang="ja"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#6C3EF8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="患者さばき">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="pwa-icons/icon-192.png">
 <title>患者さばき</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <style>/* cyrillic */
@@ -359,6 +365,14 @@ body {
   box-shadow:0 6px 28px rgba(24,15,62,.35);
   animation:toastIn .3s cubic-bezier(.34,1.56,.64,1) both;
   z-index:100;
+}
+@media (max-width:560px) {
+  .toast {
+    bottom: 126px;
+    max-width: calc(100vw - 28px);
+    white-space: normal;
+    text-align: center;
+  }
 }
 
 /* ── ダイアログ ── */
@@ -913,6 +927,14 @@ body.rpg-mode .chibi-coach-bubble {
     if (kind) setTimeout(() => show(kind, false), 160);
   }, true);
 })();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  });
+}
 </script>
 
 </body></html>
