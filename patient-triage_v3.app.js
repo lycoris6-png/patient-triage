@@ -2782,6 +2782,7 @@ function PatientTriage() {
     return HEADER_BACKDROP_MODES.includes(saved) ? saved : 'auto';
   });
   const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [undoEntry, setUndoEntry] = useState(null);
   const effectiveHeaderBackdrop = useMemo(() => getHeaderBackdrop(headerBackdropMode, now), [headerBackdropMode, now]);
   const isInitialLoad = React.useRef(true);
   useEffect(() => {
@@ -2877,6 +2878,33 @@ function PatientTriage() {
       ts: timeStatus(t.scheduledTime, now)
     })).filter(t => t.ts && (timedAlertMode === 'all' || t.ts === 'past' || t.ts === 'now' || t.ts === 'soon')).sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
   }, [flatTasks, now, timedAlertMode]);
+  const cloneForUndo = value => JSON.parse(JSON.stringify(value));
+  const rememberUndo = label => setUndoEntry({
+    label,
+    patients: cloneForUndo(patients),
+    stats: cloneForUndo(stats),
+    templates: cloneForUndo(templates),
+    generalTasks: cloneForUndo(generalTasks),
+    expandedPatients: cloneForUndo(expandedPatients),
+    suggestion: cloneForUndo(suggestion),
+    at: Date.now()
+  });
+  const undoLast = () => {
+    if (!undoEntry) return;
+    setPatients(undoEntry.patients || []);
+    setStats(undoEntry.stats || {
+      doneToday: 0,
+      date: todayStr()
+    });
+    setTemplates(Array.isArray(undoEntry.templates) ? undoEntry.templates : DEFAULT_TEMPLATES);
+    setGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
+    setExpandedPatients(undoEntry.expandedPatients || {});
+    setSuggestion(undoEntry.suggestion || null);
+    setEndDayCelebrate(null);
+    setEndDayConfirm(false);
+    setUndoEntry(null);
+    showToast(`${undoEntry.label || '直前の操作'}を元に戻しました`);
+  };
   const addPatient = () => {
     const name = newPatientName.trim();
     if (!name) return;
@@ -2889,6 +2917,7 @@ function PatientTriage() {
       tasks: [],
       createdAt: Date.now()
     };
+    rememberUndo('患者追加');
     setPatients(prev => [...prev, p]);
     setExpandedPatients(prev => ({
       ...prev,
@@ -2900,6 +2929,7 @@ function PatientTriage() {
   };
   const removePatient = id => {
     const patient = patients.find(p => p.id === id);
+    if (patient) rememberUndo(`${patient.name}の終了`);
     setPatients(prev => prev.filter(p => p.id !== id));
     if (patient) {
       showToast(`${patient.name} 終了おつかれさまでした`);
@@ -2948,6 +2978,7 @@ function PatientTriage() {
       tinyStep: '',
       createdAt: Date.now()
     };
+    rememberUndo('タスク追加');
     setPatients(prev => prev.map(p => p.id === patientId ? {
       ...p,
       tasks: [...p.tasks, task]
@@ -2961,14 +2992,18 @@ function PatientTriage() {
       }
     }));
   };
-  const updateTask = (patientId, taskId, updates) => setPatients(prev => prev.map(p => p.id === patientId ? {
-    ...p,
-    tasks: p.tasks.map(t => t.id === taskId ? {
-      ...t,
-      ...updates
-    } : t)
-  } : p));
+  const updateTask = (patientId, taskId, updates) => {
+    if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('タスク状態変更');
+    setPatients(prev => prev.map(p => p.id === patientId ? {
+      ...p,
+      tasks: p.tasks.map(t => t.id === taskId ? {
+        ...t,
+        ...updates
+      } : t)
+    } : p));
+  };
   const completeTask = (patientId, taskId) => {
+    rememberUndo('タスク完了');
     updateTask(patientId, taskId, {
       status: 'done',
       completedAt: Date.now()
@@ -2998,6 +3033,7 @@ function PatientTriage() {
     if (suggestion?.task?.id === taskId) setSuggestion(null);
   };
   const removeTask = (patientId, taskId) => {
+    rememberUndo('タスク削除');
     setPatients(prev => prev.map(p => p.id === patientId ? {
       ...p,
       tasks: p.tasks.filter(t => t.id !== taskId)
@@ -3069,6 +3105,7 @@ function PatientTriage() {
     showToast(next >= goal ? `2分の一歩 ${next}/${goal}。解除できそうです` : `2分の一歩 ${next}/${goal}`);
   };
   const clearDoneTasks = patientId => {
+    rememberUndo('完了済みタスク消去');
     setPatients(prev => prev.map(p => p.id === patientId ? {
       ...p,
       tasks: p.tasks.filter(t => t.status !== 'done')
@@ -3096,6 +3133,7 @@ function PatientTriage() {
       }));
       return;
     }
+    rememberUndo('今日はおしまい');
     setPatients(prev => prev.map(p => ({
       ...p,
       tasks: p.tasks.filter(t => t.status !== 'done')
@@ -3127,6 +3165,7 @@ function PatientTriage() {
       createdAt: Date.now(),
       general: true
     };
+    rememberUndo('すきまタスク追加');
     setGeneralTasks(prev => [...prev, task]);
     setGeneralForm(prev => ({
       ...prev,
@@ -3146,10 +3185,12 @@ function PatientTriage() {
       createdAt: Date.now(),
       general: true
     };
+    rememberUndo('すきまタスク追加');
     setGeneralTasks(prev => [...prev, task]);
     setGeneralOpen(true);
   };
   const updateGeneralTask = (taskId, updates) => {
+    if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('すきまタスク状態変更');
     setGeneralTasks(prev => prev.map(t => t.id === taskId ? {
       ...t,
       ...updates
@@ -3157,11 +3198,16 @@ function PatientTriage() {
     if (suggestion?.task?.general && suggestion.task.id === taskId && updates.status === 'done') setSuggestion(null);
   };
   const removeGeneralTask = taskId => {
+    rememberUndo('すきまタスク削除');
     setGeneralTasks(prev => prev.filter(t => t.id !== taskId));
     if (suggestion?.task?.general && suggestion.task.id === taskId) setSuggestion(null);
   };
-  const clearDoneGeneralTasks = () => setGeneralTasks(prev => prev.filter(t => t.status !== 'done'));
+  const clearDoneGeneralTasks = () => {
+    rememberUndo('すきま完了済み消去');
+    setGeneralTasks(prev => prev.filter(t => t.status !== 'done'));
+  };
   const completeGeneralTask = taskId => {
+    rememberUndo('すきまタスク完了');
     updateGeneralTask(taskId, {
       status: 'done',
       completedAt: Date.now()
@@ -3401,6 +3447,7 @@ function PatientTriage() {
         setGasStatus('idle');
         return;
       }
+      rememberUndo('GAS読込');
       applyPayload(r.data);
       setGasStatus('ok');
       showToast('GASから読み込みました ✓');
@@ -3556,7 +3603,24 @@ function PatientTriage() {
       maxWidth: 720,
       margin: '0 auto'
     }
-  }, React.createElement("header", {
+  }, undoEntry && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: undoLast,
+    title: `${undoEntry.label || '直前の操作'}を元に戻す`,
+    style: {
+      position: 'fixed',
+      right: 14,
+      top: 14,
+      zIndex: 120,
+      padding: '8px 12px',
+      fontSize: 12,
+      fontWeight: 800,
+      background: 'var(--surface)',
+      boxShadow: 'var(--shadow)'
+    }
+  }, React.createElement(RotateCcw, {
+    size: 13
+  }), "\u5143\u306B\u623B\u3059"), React.createElement("header", {
     className: "app-header",
     style: {
       marginBottom: 20,
