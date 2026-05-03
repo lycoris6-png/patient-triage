@@ -1,6 +1,6 @@
 {
-  "name": "患者さばき",
-  "short_name": "患者さばき",
+  "name": "ぺいとり！",
+  "short_name": "ぺいとり！",
   "description": "患者さんとタスクを整理するためのモバイル向けトリアージ補助アプリ",
   "lang": "ja",
   "start_url": "./index.html?mobile=1&source=pwa",
@@ -28,6 +28,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "pwa-icons/icon-source.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
