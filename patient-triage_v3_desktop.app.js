@@ -2737,6 +2737,7 @@ function PatientTriage() {
   const [newPatientName, setNewPatientName] = useState('');
   const [newPatientPri, setNewPatientPri] = useState('normal');
   const [newPatientWard, setNewPatientWard] = useState('');
+  const [addPatientDialog, setAddPatientDialog] = useState(false);
   const [patientSortMode, setPatientSortMode] = useState('priority');
   const [adding, setAdding] = useState({});
   const [addForm, setAddForm] = useState({});
@@ -2940,6 +2941,7 @@ function PatientTriage() {
     setNewPatientName('');
     setNewPatientPri('normal');
     setNewPatientWard('');
+    setAddPatientDialog(false);
   };
   const removePatient = id => {
     const patient = patients.find(p => p.id === id);
@@ -3917,6 +3919,11 @@ function PatientTriage() {
   }), "\u96C6\u4E2D\u30E2\u30FC\u30C9")), React.createElement("div", {
     className: "action-cluster action-cluster-tools"
   }, React.createElement("button", {
+    className: "btn-dark",
+    onClick: () => setAddPatientDialog(true)
+  }, React.createElement(Plus, {
+    size: 14
+  }), "\u53D7\u3051\u6301\u3061\u8FFD\u52A0"), React.createElement("button", {
     className: `btn-ghost${patientSortMode === 'ward' ? ' btn-ghost-active' : ''}`,
     onClick: () => setPatientSortMode(m => m === 'priority' ? 'ward' : 'priority'),
     "aria-label": "\u60A3\u8005\u306E\u4E26\u3079\u66FF\u3048",
@@ -4032,7 +4039,8 @@ function PatientTriage() {
   }))), React.createElement("div", {
     className: "desktop-add-patient",
     style: {
-      marginTop: 14
+      marginTop: 14,
+      display: 'none'
     }
   }, React.createElement("div", {
     style: {
@@ -4407,7 +4415,110 @@ function PatientTriage() {
       showToast('GAS設定を保存しました');
     },
     onCancel: () => setGasDialog(false)
-  }), stuckDialog && React.createElement(StuckDialog, {
+  }), addPatientDialog && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => setAddPatientDialog(false)
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 440
+    }
+  }, React.createElement("h3", {
+    style: {
+      fontFamily: 'var(--font-serif)',
+      fontSize: 18,
+      fontWeight: 800,
+      color: 'var(--text)',
+      margin: '0 0 14px'
+    }
+  }, "\u53D7\u3051\u6301\u3061\u8FFD\u52A0"), React.createElement("input", {
+    value: newPatientName,
+    onChange: e => setNewPatientName(e.target.value),
+    onKeyDown: e => e.key === 'Enter' && addPatient(),
+    autoFocus: true,
+    placeholder: "\u7B26\u4E01 (\u4F8B: 305-3\u3001A-T\u3055\u3093\u3001#12)",
+    className: "inp",
+    style: {
+      marginBottom: 14
+    }
+  }), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      marginBottom: 6
+    }
+  }, "\u512A\u5148\u5EA6"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 14
+    }
+  }, PRIORITIES.map(pri => React.createElement("button", {
+    key: pri.id,
+    onClick: () => setNewPatientPri(pri.id),
+    className: "tag",
+    style: {
+      background: newPatientPri === pri.id ? pri.color : 'var(--surface)',
+      color: newPatientPri === pri.id ? '#fff' : pri.color,
+      border: `1.5px solid ${pri.color}50`,
+      cursor: 'pointer',
+      fontSize: 12,
+      padding: '5px 12px'
+    }
+  }, pri.label))), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      marginBottom: 6
+    }
+  }, "\u75C5\u68DF"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 18
+    }
+  }, WARDS.map(ward => React.createElement("button", {
+    key: ward.id || 'none',
+    onClick: () => setNewPatientWard(ward.id),
+    className: "tag",
+    style: {
+      background: newPatientWard === ward.id ? 'var(--accent)' : 'var(--surface)',
+      color: newPatientWard === ward.id ? '#fff' : 'var(--text-2)',
+      border: '1.5px solid var(--border)',
+      cursor: 'pointer',
+      fontSize: 12,
+      padding: '5px 11px'
+    }
+  }, ward.label))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 8
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setAddPatientDialog(false),
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "\u30AD\u30E3\u30F3\u30BB\u30EB"), React.createElement("button", {
+    className: "btn-dark",
+    onClick: addPatient,
+    disabled: !newPatientName.trim(),
+    style: {
+      fontSize: 13,
+      padding: '8px 16px',
+      opacity: newPatientName.trim() ? 1 : .45
+    }
+  }, React.createElement(Plus, {
+    size: 14
+  }), "\u8FFD\u52A0")))), stuckDialog && React.createElement(StuckDialog, {
     form: stuckForm,
     setForm: setStuckForm,
     onSave: saveStuck,
