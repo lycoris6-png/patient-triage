@@ -2774,6 +2774,7 @@ function PatientTriage() {
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
   const [gasStatus, setGasStatus] = useState('idle');
   const [gasDialog, setGasDialog] = useState(false);
+  const [startupGasDialog, setStartupGasDialog] = useState(false);
   const [themeId, setThemeId] = useState(() => loadLocal(THEME_STORAGE_KEY) || 'lavender');
   const [rpgMode, setRpgMode] = useState(() => loadLocal(RPG_MODE_STORAGE_KEY) === true);
   const [timedAlertMode, setTimedAlertMode] = useState(() => loadLocal(TIMED_ALERT_MODE_STORAGE_KEY) === 'near' ? 'near' : 'all');
@@ -2784,6 +2785,7 @@ function PatientTriage() {
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const effectiveHeaderBackdrop = useMemo(() => getHeaderBackdrop(headerBackdropMode, now), [headerBackdropMode, now]);
   const isInitialLoad = React.useRef(true);
+  const startupGasDialogShown = React.useRef(false);
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(id);
@@ -2837,6 +2839,18 @@ function PatientTriage() {
       generalTasks
     });
   }, [patients, stats, templates, generalTasks, loaded]);
+  useEffect(() => {
+    if (!loaded || startupGasDialogShown.current) return;
+    startupGasDialogShown.current = true;
+    const t = setTimeout(() => {
+      if (gasConfig.url && gasConfig.secret) {
+        setStartupGasDialog(true);
+      } else {
+        setGasDialog(true);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [loaded]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -4284,7 +4298,44 @@ function PatientTriage() {
     onAddItem: addTemplateItem,
     onUpdateItem: updateTemplateItem,
     onRemoveItem: removeTemplateItem
-  })), gasDialog && React.createElement(GasConfigDialog, {
+  })), startupGasDialog && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => setStartupGasDialog(false)
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation()
+  }, React.createElement("h3", {
+    style: {
+      fontFamily: 'var(--font-serif)',
+      fontSize: 17,
+      fontWeight: 700,
+      color: 'var(--text)',
+      margin: '0 0 6px'
+    }
+  }, "GAS\u304B\u3089\u6700\u65B0\u30C7\u30FC\u30BF\u3092\u8AAD\u307F\u8FBC\u307F\u307E\u3059\u304B\uFF1F"), React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: 'var(--text-3)',
+      margin: '0 0 18px',
+      lineHeight: 1.7
+    }
+  }, "\u30B9\u30DE\u30DB\u5074\u3067\u66F4\u65B0\u3057\u305F\u5185\u5BB9\u3092PC\u3067\u78BA\u8A8D\u3059\u308B\u306A\u3089\u3001\u5148\u306B\u8AAD\u307F\u8FBC\u3080\u3068\u5B89\u5FC3\u3067\u3059\u3002\u73FE\u5728\u306EPC\u5074\u30C7\u30FC\u30BF\u306F\u8AAD\u307F\u8FBC\u307F\u6642\u306B\u4E0A\u66F8\u304D\u78BA\u8A8D\u304C\u51FA\u307E\u3059\u3002"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => setStartupGasDialog(false)
+  }, "\u3042\u3068\u3067"), React.createElement("button", {
+    className: "btn-dark",
+    onClick: () => {
+      setStartupGasDialog(false);
+      gasPull();
+    }
+  }, "\u2193 GAS\u304B\u3089\u8AAD\u307F\u8FBC\u3080")))), gasDialog && React.createElement(GasConfigDialog, {
     config: gasConfig,
     onSave: cfg => {
       setGasConfig(cfg);
