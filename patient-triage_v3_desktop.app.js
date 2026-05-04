@@ -3660,7 +3660,7 @@ function PatientTriage() {
       letterSpacing: '.03em',
       textShadow: '0 2px 10px rgba(0,0,0,.25)'
     }
-  }, "\u60A3\u8005\u3055\u3070\u304D"), React.createElement("p", {
+  }, "\u307A\u3044\u3068\u308A\uFF01"), React.createElement("p", {
     style: {
       fontSize: 11,
       color: 'rgba(255,255,255,.50)',
