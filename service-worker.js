@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patient-triage-pwa-v6';
+const CACHE_NAME = 'patient-triage-pwa-v7';
 const APP_SHELL = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const APP_SHELL = [
   './prototype_unified_triage.html',
   './prototype_unified_triage.app.js',
   './manifest.webmanifest',
+  './manifest-unified.webmanifest',
   './pwa-icons/icon-192.png',
   './pwa-icons/icon-512.png',
   './pwa-icons/icon-maskable-512.png',

@@ -1,0 +1,40 @@
+{
+  "name": "ぺいとり！ / でいとり！",
+  "short_name": "ぺいとり！",
+  "description": "患者さんの処置タスクと日常タスクを切り替えて整理するトリアージアプリ",
+  "lang": "ja",
+  "id": "/patient-triage/unified",
+  "start_url": "./prototype_unified_triage.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EEE8FF",
+  "theme_color": "#6C3EF8",
+  "categories": ["productivity", "medical"],
+  "icons": [
+    {
+      "src": "pwa-icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa-icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa-icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "pwa-icons/icon-source.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
