@@ -2,9 +2,11 @@
 <html lang="ja"><head>
 <script>
 (function(){
-  if (location.search.includes('mobile=1')) return;
-  if (window.matchMedia && window.matchMedia('(min-width: 900px)').matches) {
-    location.replace('patient-triage_v3_desktop.html');
+  const params = new URLSearchParams(location.search);
+  const isPwaLaunch = params.get('source') === 'pwa';
+  const isDesktopWidth = window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
+  if (isDesktopWidth && (!params.has('mobile') || isPwaLaunch)) {
+    location.replace('patient-triage_v3_desktop.html?source=index-redirect');
   }
 })();
 </script>
