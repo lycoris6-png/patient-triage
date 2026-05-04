@@ -3782,14 +3782,18 @@ function PatientTriage() {
     stats,
     templates,
     generalTasks,
-    version: 2
+    dailyPatients,
+    dailyGeneralTasks,
+    version: 3
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
-    setActivePatients(parsed.patients);
+    setPatients(parsed.patients);
     if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
-    if (Array.isArray(parsed.generalTasks)) setActiveGeneralTasks(parsed.generalTasks);
+    if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
+    if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
+    if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
     return true;
   };
   const gasPush = async () => {
@@ -3846,13 +3850,15 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, generalTasks, loaded]);
+  }, [patients, stats, templates, generalTasks, dailyPatients, dailyGeneralTasks, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
     templates,
     generalTasks,
-    version: 2,
+    dailyPatients,
+    dailyGeneralTasks,
+    version: 3,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -3894,10 +3900,12 @@ function PatientTriage() {
     const count = parsed.patients.length;
     const open = parsed.patients.reduce((s, p) => s + (p.tasks || []).filter(t => t.status !== 'done').length, 0);
     if (!window.confirm(`読み込む: 患者${count}人 / 未完タスク${open}件\n現在のデータ(患者${patients.length}人)は上書きされます。続行しますか?`)) return false;
-    setActivePatients(parsed.patients);
+    setPatients(parsed.patients);
     if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
-    if (Array.isArray(parsed.generalTasks)) setActiveGeneralTasks(parsed.generalTasks);
+    if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
+    if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
+    if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
     return true;
   };
   const importFromFile = file => {
