@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#6C3EF8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="ぺいとり！">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ぺいとり！">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="pwa-icons/icon-192.png">
+<title>ぺいとり！ / でいとり！ 試作</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>/* cyrillic */
+/* vietnamese */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* vietnamese */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* vietnamese */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* latin-ext */
+/* latin */
+/* cyrillic */
+/* latin-ext */
+/* latin */
+/* Chibi coach popups */
+    .chibi-coach {
+      position: fixed;
+      right: max(14px, env(safe-area-inset-right));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      z-index: 9000;
+      display: grid;
+      grid-template-columns: 92px minmax(160px, 250px);
+      align-items: end;
+      gap: 10px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(18px) scale(.96);
+      transition: opacity .22s ease, transform .22s cubic-bezier(.2,.9,.2,1);
+    }
+    .chibi-coach.show {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    .chibi-coach img {
+      width: 92px;
+      height: 92px;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 16px rgba(52, 38, 99, .22));
+      animation: chibiFloat 1.9s ease-in-out infinite;
+    }
+    .chibi-coach-bubble {
+      position: relative;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 14px 14px 14px 5px;
+      background: rgba(255, 255, 255, .94);
+      border: 1.5px solid rgba(120, 96, 180, .18);
+      box-shadow: 0 10px 28px rgba(60, 42, 120, .18);
+      color: var(--text, #31264A);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.55;
+      letter-spacing: 0;
+      backdrop-filter: blur(10px);
+    }
+    .chibi-coach-bubble::before {
+      content: "";
+      position: absolute;
+      left: -8px;
+      bottom: 14px;
+      width: 14px;
+      height: 14px;
+      background: inherit;
+      border-left: 1.5px solid rgba(120, 96, 180, .18);
+      border-bottom: 1.5px solid rgba(120, 96, 180, .18);
+      transform: rotate(45deg);
+    }
+    @keyframes chibiFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    @media (max-width: 560px) {
+      .chibi-coach {
+        right: 10px;
+        bottom: 10px;
+        grid-template-columns: 74px minmax(0, 1fr);
+        max-width: calc(100vw - 20px);
+      }
+      .chibi-coach img {
+        width: 74px;
+        height: 74px;
+      }
+      .chibi-coach-bubble {
+        max-width: calc(100vw - 116px);
+        padding: 9px 10px;
+        font-size: 11px;
+      }
+    }
+    .pwa-install-button {
+      position: fixed;
+      left: max(12px, env(safe-area-inset-left));
+      bottom: max(14px, env(safe-area-inset-bottom));
+      z-index: 9100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border: 1.5px solid rgba(255,255,255,.82);
+      border-radius: 999px;
+      padding: 9px 14px;
+      background: #1d4ed8;
+      color: #fff;
+      box-shadow: 0 8px 22px rgba(29,78,216,.28);
+      font: 800 12px/1.2 system-ui, sans-serif;
+      letter-spacing: 0;
+    }
+    .pwa-install-button.show { display: inline-flex; }
+
+</style>
+<script src="patient_triage_vendor/dbc28e58-b689-4d38-85ca-d5774aa34960.js"></script>
+<script src="patient_triage_vendor/402aa1bf-e6bd-4abd-9e2d-1d1b154e991e.js"></script>
+<style>
+:root {
+  --bg:        #EEE8FF;
+  --surface:   #FFFFFF;
+  --surface-2: #F7F4FF;
+  --surface-3: #EDE6FF;
+  --border:    #DDD6F5;
+  --border-2:  #C4B8EE;
+  --text:      #180F3E;
+  --text-2:    #4E4280;
+  --text-3:    #9B90BC;
+  --accent:    #6C3EF8;
+  --accent-h:  #5530D4;
+  --done:      #16A34A;
+  --stuck-fg:  #DC2626;
+  --high:      #EF4444;
+  --shadow-xs: 0 1px 3px rgba(108,62,248,.10);
+  --shadow-sm: 0 2px 10px rgba(108,62,248,.10), 0 1px 3px rgba(108,62,248,.06);
+  --shadow:    0 4px 20px rgba(108,62,248,.14), 0 2px 6px rgba(108,62,248,.08);
+  --shadow-lg: 0 8px 36px rgba(108,62,248,.20), 0 3px 10px rgba(108,62,248,.10);
+  --r:   14px;
+  --r-s: 10px;
+  --r-xs: 7px;
+  --font-sans: 'Zen Kaku Gothic New','Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,sans-serif;
+  --font-serif:'Noto Serif JP','Yu Mincho',serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(108,62,248,.07) 1px, transparent 0);
+  background-size: 24px 24px;
+  min-height: 100vh;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── アニメーション ── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(12px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes toastIn {
+  from { opacity:0; transform:translateX(-50%) translateY(16px) scale(.94); }
+  to   { opacity:1; transform:translateX(-50%) translateY(0)    scale(1); }
+}
+@keyframes pulse-glow {
+  0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5); }
+  60%     { box-shadow: 0 0 0 6px rgba(239,68,68,.0); }
+}
+@keyframes checkPop {
+  0%   { transform:scale(0) rotate(-20deg); }
+  55%  { transform:scale(1.3) rotate(5deg); }
+  100% { transform:scale(1) rotate(0deg); }
+}
+@keyframes slideDown {
+  from { opacity:0; transform:translateY(-8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes shimmer {
+  from { background-position: -200% center; }
+  to   { background-position: 200% center; }
+}
+
+/* ── カード ── */
+.card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .2s ease, transform .2s ease;
+  animation: fadeUp .24s cubic-bezier(.34,1.26,.64,1) both;
+}
+.card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+
+/* ── ボタン ── */
+.btn-dark {
+  display:inline-flex; align-items:center; gap:7px;
+  background: var(--accent);
+  color: #fff;
+  border:none; border-radius: 99px;
+  padding: 10px 20px; font-size:13px; font-weight:700;
+  font-family: var(--font-sans);
+  letter-spacing:.03em; cursor:pointer;
+  box-shadow: 0 4px 14px rgba(108,62,248,.35);
+  transition: background .15s, box-shadow .15s, transform .12s;
+}
+.btn-dark:hover  { background: var(--accent-h); box-shadow:0 6px 18px rgba(108,62,248,.45); transform:translateY(-2px); }
+.btn-dark:active { transform:translateY(0); box-shadow:0 2px 8px rgba(108,62,248,.25); }
+
+.btn-ghost {
+  display:inline-flex; align-items:center; gap:6px;
+  background: var(--surface);
+  border: 1.5px solid var(--border-2);
+  border-radius: 99px;
+  padding: 9px 16px; font-size:13px;
+  color: var(--text-2); cursor:pointer;
+  font-family: var(--font-sans); font-weight:600;
+  transition: background .15s, border-color .15s, transform .12s, color .15s;
+  box-shadow: var(--shadow-xs);
+}
+.btn-ghost:hover  { background:var(--surface-3); border-color:var(--accent); color:var(--accent); transform:translateY(-1px); }
+.btn-ghost:active { transform:translateY(0); }
+
+.btn-ghost-active {
+  background: var(--surface-3) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.btn-green {
+  display:inline-flex; align-items:center; gap:6px;
+  background:#16A34A; color:#fff;
+  border:none; border-radius: 99px;
+  padding:9px 18px; font-size:13px; font-weight:700;
+  font-family:var(--font-sans); cursor:pointer;
+  box-shadow:0 4px 12px rgba(22,163,74,.30);
+  transition: background .15s, box-shadow .15s, transform .12s;
+}
+.btn-green:hover  { background:#15803D; box-shadow:0 6px 16px rgba(22,163,74,.40); transform:translateY(-2px); }
+.btn-green:active { transform:translateY(0); }
+
+.btn-rose {
+  display:inline-flex; align-items:center; gap:6px;
+  background:transparent;
+  border:1.5px solid #FCA5A5; border-radius:99px;
+  padding:8px 16px; font-size:13px; font-weight:600;
+  color:#DC2626; cursor:pointer; font-family:var(--font-sans);
+  transition: background .15s, transform .12s;
+}
+.btn-rose:hover  { background:#FEF2F2; transform:translateY(-1px); }
+.btn-rose:active { transform:translateY(0); }
+
+.btn-sm {
+  display:inline-flex; align-items:center; gap:4px;
+  background:transparent; border:none;
+  font-size:11px; color:var(--text-3); cursor:pointer;
+  font-family:var(--font-sans);
+  padding:3px 7px; border-radius:6px;
+  font-weight:500;
+  transition:color .12s, background .12s;
+}
+.btn-sm:hover { color:var(--text-2); background:var(--surface-3); }
+/* ── コマンドドック ── */
+.command-dock {
+  display:flex; align-items:center; flex-wrap:wrap; gap:6px;
+  margin-bottom:14px; padding:6px;
+  background:rgba(255,255,255,.78);
+  border:1px solid rgba(221,214,254,.9);
+  border-radius:15px;
+  box-shadow:0 8px 22px rgba(76,54,139,.07);
+  backdrop-filter:blur(10px);
+}
+.action-cluster {
+  display:flex; align-items:center; gap:4px;
+  min-height:38px; padding:4px;
+  background:rgba(248,246,255,.76);
+  border:1px solid rgba(231,226,247,.86);
+  border-radius:12px;
+}
+.action-cluster-primary { flex:1 1 210px; }
+.action-cluster-tools { margin-left:auto; }
+.command-dock .btn-dark,
+.command-dock .btn-ghost,
+.command-dock .btn-rose {
+  min-height:30px; padding:6px 10px; font-size:12px;
+  box-shadow:none;
+}
+.command-dock .btn-dark { padding-inline:13px; }
+.command-dock .btn-ghost { border-width:1px; }
+.command-dock .btn-ghost-active {
+  background:var(--accent) !important;
+  border-color:var(--accent) !important;
+  color:#fff !important;
+  box-shadow:0 5px 14px rgba(108,62,248,.22) !important;
+}
+.command-dock .dock-icon { min-width:34px; justify-content:center; padding-inline:9px; font-weight:900; }
+.command-dock .dock-alert { margin-left:auto; }
+@media (max-width:560px) {
+  .command-dock { padding:6px; gap:6px; }
+  .action-cluster { max-width:100%; overflow-x:auto; }
+  .action-cluster-tools { margin-left:0; }
+}
+
+/* ── インプット ── */
+.inp {
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:var(--r-s);
+  padding:10px 14px; font-size:13px;
+  color:var(--text); width:100%;
+  font-family:var(--font-sans);
+  outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+.inp:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(108,62,248,.15); }
+.inp::placeholder { color:var(--text-3); }
+
+/* ── チェックボックス ── */
+.check-circle {
+  width:22px; height:22px; border-radius:50%;
+  border:2.5px solid var(--border-2);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; cursor:pointer;
+  transition:border-color .15s, background .15s, transform .12s;
+  background:transparent;
+}
+.check-circle:hover { border-color:var(--accent); transform:scale(1.1); }
+.check-circle.done  {
+  background:var(--done); border-color:var(--done);
+  animation:checkPop .28s cubic-bezier(.34,1.56,.64,1) both;
+}
+.check-circle.stuck { border-color:var(--stuck-fg); }
+
+/* ── タグ/バッジ ── */
+.tag {
+  display:inline-flex; align-items:center;
+  font-size:11px; padding:3px 9px; border-radius:99px;
+  font-weight:600; line-height:1.6; white-space:nowrap;
+  letter-spacing:.02em;
+}
+.time-tag {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; padding:3px 9px; border-radius:99px;
+  font-weight:700; font-family:monospace; white-space:nowrap;
+}
+.time-tag.past { animation:pulse-glow 1.8s ease infinite; }
+
+/* ── 優先度バー ── */
+.pri-high   { border-left:4px solid #EF4444; }
+.pri-normal { border-left:4px solid #D4930A; }
+.pri-low    { border-left:4px solid #22C55E; }
+
+/* ── セクション区切り ── */
+.task-list > li { border-bottom:1px solid #F0ECFF; }
+.task-list > li:last-child { border-bottom:none; }
+
+/* ── 提案カード ── */
+.suggestion-card {
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  animation:slideDown .22s cubic-bezier(.34,1.26,.64,1) both;
+}
+
+/* ── トースト ── */
+.toast {
+  position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+  background:var(--text); color:#fff;
+  padding:11px 24px; border-radius:99px; font-size:13px; font-weight:600;
+  letter-spacing:.02em; white-space:nowrap;
+  box-shadow:0 6px 28px rgba(24,15,62,.35);
+  animation:toastIn .3s cubic-bezier(.34,1.56,.64,1) both;
+  z-index:100;
+}
+@media (max-width:560px) {
+  .toast {
+    bottom: 126px;
+    max-width: calc(100vw - 28px);
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+/* ── ダイアログ ── */
+.dialog-bg {
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  padding:16px; z-index:50;
+  background:rgba(24,15,62,.55);
+  backdrop-filter:blur(6px);
+}
+.dialog {
+  background:var(--surface); border-radius:20px;
+  box-shadow:var(--shadow-lg);
+  padding:28px; width:100%; max-width:480px;
+  animation:fadeUp .22s cubic-bezier(.34,1.26,.64,1) both;
+  border:1.5px solid var(--border);
+}
+
+/* ── GASステータスバッジ ── */
+.gas-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; font-weight:700;
+  padding:4px 12px; border-radius:99px;
+}
+
+/* ── スクロールバー ── */
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border-2); border-radius:2px; }
+
+/* ── フォーカスモード特別スタイル ── */
+.focus-card {
+  background:var(--surface);
+  border-radius:var(--r);
+  box-shadow:var(--shadow-lg);
+  padding:32px; border:1.5px solid var(--border);
+  animation:fadeUp .25s cubic-bezier(.34,1.26,.64,1) both;
+}
+
+input[type="time"]::-webkit-calendar-picker-indicator { opacity:.5; }
+
+/* ── セットチップ ── */
+.set-chip {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11px; padding:4px 12px; border-radius:99px;
+  background:var(--surface-2); color:var(--accent);
+  border:1.5px solid var(--border-2); cursor:pointer;
+  font-family:var(--font-sans); font-weight:600;
+  transition:background .15s, border-color .15s, transform .12s, box-shadow .12s;
+}
+.set-chip:hover { background:var(--surface-3); border-color:var(--accent); transform:translateY(-1px); box-shadow:0 3px 10px rgba(108,62,248,.15); }
+.set-chip:active { transform:translateY(0); }
+
+/* ── ヘッダー ── */
+.app-header {
+  background: linear-gradient(135deg, #180F3E 0%, #3D2080 60%, #5E3AC4 100%);
+  border-radius: 20px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(24,15,62,.30);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(90deg, rgba(24,15,62,.96) 0%, rgba(45,27,104,.84) 36%, rgba(45,27,104,.42) 64%, rgba(24,15,62,.18) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+  background-size: cover;
+  background-position: center right;
+  opacity: .82;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    url('chibi_split_pngs/yushka_09_smug.png'),
+    url('chibi_split_pngs/red_antler_girl_03_cheer.png'),
+    url('chibi_split_pngs/bat_wing_girl_01_neutral.png'),
+    url('chibi_split_pngs/blue_white_girl_06_clipboard.png');
+  background-repeat: no-repeat;
+  background-size: 72px auto, 62px auto, 58px auto, 60px auto;
+  background-position:
+    right 34px bottom 5px,
+    right 118px bottom 7px,
+    right 188px bottom 8px,
+    right 252px bottom 7px;
+  opacity: .96;
+  pointer-events: none;
+  z-index: 1;
+  filter: drop-shadow(0 8px 9px rgba(24,15,62,.34));
+}
+
+.app-header > * {
+  position: relative;
+  z-index: 2;
+}
+
+.app-title-button {
+  font-family: 'RabbitFullMoon', 'Zen Maru Gothic', 'Zen Kaku Gothic New', 'Yu Gothic', system-ui, sans-serif !important;
+  font-weight: 400 !important;
+  letter-spacing: .08em !important;
+  line-height: 1.05 !important;
+  -webkit-text-stroke: .7px rgba(255,255,255,.55);
+}
+
+body.daily-mode .app-title-button {
+  color: #FFF8D8 !important;
+  -webkit-text-stroke: .8px rgba(22,72,56,.42);
+  text-shadow:
+    0 2px 0 rgba(22,72,56,.55),
+    0 7px 18px rgba(8,42,32,.24) !important;
+}
+
+body.rpg-mode .app-title-button {
+  font-family: var(--font-sans) !important;
+  -webkit-text-stroke: 0;
+}
+
+@media (max-width: 640px) {
+  .app-header::before {
+    background-image: url('chibi_split_pngs/yushka_09_smug.png');
+    background-size: 58px auto;
+    background-position: right 14px bottom 32px;
+    opacity: .78;
+  }
+}
+
+body.header-bg-morning .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(49,39,92,.86) 0%, rgba(72,55,128,.58) 34%, rgba(255,214,186,.18) 70%, rgba(255,244,220,.08) 100%),
+    url('patient_triage_vendor/header-nurse-station-morning.png');
+}
+
+body.header-bg-day .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(35,27,82,.88) 0%, rgba(69,56,139,.62) 34%, rgba(104,92,170,.22) 68%, rgba(255,255,255,.08) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+}
+
+body.header-bg-evening .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(58,25,78,.90) 0%, rgba(107,48,92,.66) 36%, rgba(218,112,96,.24) 68%, rgba(255,180,112,.10) 100%),
+    url('patient_triage_vendor/header-nurse-station-evening.png');
+}
+
+body.header-bg-night .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(8,13,35,.98) 0%, rgba(15,23,55,.88) 38%, rgba(15,23,55,.52) 66%, rgba(8,13,35,.24) 100%),
+    url('patient_triage_vendor/header-nurse-station-night.png');
+}
+
+body.daily-mode .app-header::after,
+body.daily-mode.header-bg-morning .app-header::after,
+body.daily-mode.header-bg-day .app-header::after,
+body.daily-mode.header-bg-evening .app-header::after,
+body.daily-mode.header-bg-night .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(15,58,46,.96) 0%, rgba(22,122,90,.80) 34%, rgba(22,122,90,.35) 68%, rgba(255,255,255,.04) 100%),
+    url('patient_triage_vendor/header-daily-life.png');
+  background-position: center right;
+  opacity: .88;
+}
+
+/* ── stat pill ── */
+.stat-pill {
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.20);
+  border-radius: 99px;
+  padding: 6px 14px;
+  display:flex; align-items:baseline; gap:5px;
+  backdrop-filter: blur(4px);
+}
+
+/* ── alert bar ── */
+.alert-bar {
+  background: linear-gradient(135deg, #FFF1F2 0%, #FFF7ED 100%);
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--r);
+  box-shadow: 0 3px 12px rgba(239,68,68,.12);
+}
+
+/* ── stuck bar ── */
+.stuck-bar {
+  background: linear-gradient(135deg, #FFF1F2 0%, #FEF2F2 100%);
+  border: 1.5px solid #FCA5A5;
+  border-radius: var(--r);
+  box-shadow: 0 3px 12px rgba(220,38,38,.10);
+}
+
+@font-face {
+  font-family: 'BestTenDOT';
+  src: url('patient_triage_vendor/BestTen-DOT.otf') format('opentype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'RabbitFullMoon';
+  src: url('patient_triage_vendor/RabbitandFullMoonFree-Regular.otf') format('opentype');
+  font-display: swap;
+}
+
+/* Retro RPG display mode */
+body.rpg-mode {
+  --font-sans: 'BestTenDOT', 'MS Gothic', 'Yu Gothic', monospace;
+  --font-serif: 'BestTenDOT', 'MS Gothic', 'Yu Gothic', monospace;
+  --bg: #111827;
+  --surface: #07142f;
+  --surface-2: #0b1b3f;
+  --surface-3: #13285a;
+  --border: #f8fafc;
+  --border-2: #fde68a;
+  --text: #ffffff;
+  --text-2: #e5e7eb;
+  --text-3: #a7b4d6;
+  --accent: #facc15;
+  --accent-h: #fde047;
+  --done: #86efac;
+  --stuck-fg: #fca5a5;
+  --shadow-sm: 0 0 0 2px #020617, 0 8px 0 rgba(0,0,0,.34);
+  --shadow: 0 0 0 2px #020617, 0 10px 0 rgba(0,0,0,.38);
+  --shadow-lg: 0 0 0 3px #020617, 0 14px 0 rgba(0,0,0,.42);
+  background-color: #111827 !important;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.035) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.035) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.035) 75%) !important;
+  background-size: 28px 28px !important;
+  background-position: 0 0, 0 14px, 14px -14px, -14px 0 !important;
+}
+
+body.rpg-mode .app-header {
+  background: #050b1d !important;
+  border: 4px double #f8fafc !important;
+  border-radius: 4px !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+body.rpg-mode .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.98) 0%, rgba(5,11,29,.88) 38%, rgba(5,11,29,.58) 66%, rgba(5,11,29,.28) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+  opacity: .72;
+}
+
+body.rpg-mode .app-header::before {
+  filter: drop-shadow(0 4px 0 rgba(0,0,0,.55));
+}
+
+body.rpg-mode.header-bg-morning .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.96) 0%, rgba(9,18,45,.78) 38%, rgba(72,55,128,.42) 66%, rgba(255,214,186,.12) 100%),
+    url('patient_triage_vendor/header-nurse-station-morning.png');
+}
+
+body.rpg-mode.header-bg-day .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.97) 0%, rgba(9,18,45,.82) 38%, rgba(42,50,102,.48) 66%, rgba(104,92,170,.16) 100%),
+    url('patient_triage_vendor/header-nurse-station.png');
+}
+
+body.rpg-mode.header-bg-evening .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(5,11,29,.98) 0%, rgba(26,15,45,.84) 38%, rgba(92,45,76,.50) 66%, rgba(255,144,96,.14) 100%),
+    url('patient_triage_vendor/header-nurse-station-evening.png');
+}
+
+body.rpg-mode.header-bg-night .app-header::after {
+  background-image:
+    linear-gradient(90deg, rgba(2,6,23,.99) 0%, rgba(2,6,23,.91) 38%, rgba(2,6,23,.62) 66%, rgba(2,6,23,.32) 100%),
+    url('patient_triage_vendor/header-nurse-station-night.png');
+}
+
+body.rpg-mode .card,
+body.rpg-mode .focus-card,
+body.rpg-mode .suggestion-card,
+body.rpg-mode .alert-bar,
+body.rpg-mode .stuck-bar,
+body.rpg-mode .desktop-add-patient {
+  background: #07142f !important;
+  border: 3px double #f8fafc !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+body.rpg-mode .card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow) !important;
+}
+body.rpg-mode .card.pri-high   { border-left: 7px solid #EF4444 !important; }
+body.rpg-mode .card.pri-normal { border-left: 7px solid #D4930A !important; }
+body.rpg-mode .card.pri-low    { border-left: 7px solid #22C55E !important; }
+
+body.rpg-mode .command-dock {
+  background: rgba(2, 6, 23, .72) !important;
+  border: 3px double #f8fafc !important;
+  border-radius: 4px !important;
+  box-shadow: var(--shadow-sm) !important;
+  backdrop-filter: none !important;
+}
+
+body.rpg-mode .action-cluster {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+
+body.rpg-mode .btn-dark,
+body.rpg-mode .btn-green,
+body.rpg-mode .btn-ghost,
+body.rpg-mode .btn-rose,
+body.rpg-mode .btn-sm {
+  border: 2px solid #f8fafc !important;
+  border-radius: 4px !important;
+  background: #07142f !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+body.rpg-mode .btn-dark::before,
+body.rpg-mode .btn-green::before,
+body.rpg-mode .btn-ghost-active::before {
+  content: "▶";
+  color: #facc15;
+  font-size: 10px;
+}
+
+body.rpg-mode .btn-ghost-active {
+  border-color: #fde68a !important;
+  background: #13285a !important;
+  color: #fef3c7 !important;
+}
+
+body.rpg-mode .inp,
+body.rpg-mode textarea,
+body.rpg-mode input,
+body.rpg-mode select {
+  background: #020617 !important;
+  border: 2px solid #e5e7eb !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+body.rpg-mode .tag,
+body.rpg-mode .time-tag,
+body.rpg-mode .stat-pill,
+body.rpg-mode .gas-badge {
+  border-radius: 4px !important;
+  border: 1.5px solid rgba(248,250,252,.75) !important;
+  box-shadow: none !important;
+}
+
+body.rpg-mode .alert-bar h3 {
+  color: #fde68a !important;
+  text-shadow: 0 1px 0 #020617;
+}
+
+body.rpg-mode .alert-bar svg {
+  stroke: #facc15 !important;
+}
+
+body.rpg-mode .alert-bar li,
+body.rpg-mode .alert-bar li span {
+  color: #f8fafc !important;
+}
+
+body.rpg-mode .alert-bar .time-tag {
+  background: #fef3c7 !important;
+  color: #111827 !important;
+  border-color: #facc15 !important;
+  font-weight: 800 !important;
+}
+
+body.rpg-mode .alert-bar .time-tag.past {
+  background: #fecaca !important;
+  color: #7f1d1d !important;
+  border-color: #f87171 !important;
+}
+
+body.rpg-mode .toast,
+body.rpg-mode .chibi-coach-bubble {
+  background: #07142f !important;
+  border: 3px double #f8fafc !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+  box-shadow: var(--shadow) !important;
+}
+
+</style>
+
+</head>
+<body>
+<div id="root"></div>
+<script src="prototype_unified_triage.app.js"></script>
+
+
+
+<script>
+(function(){
+  const CHIBI_BASE = 'chibi_split_pngs/';
+  const cast = {
+    mentor: {
+      name: 'エスト',
+      alt: '白い服の落ち着いたエスト',
+      img: {
+        neutral: 'blue_white_girl_01_neutral.png',
+        thumb: 'blue_white_girl_02_thumbsup.png',
+        cheer: 'blue_white_girl_03_cheer.png',
+        thinking: 'blue_white_girl_04_thinking.png',
+        hurry: 'blue_white_girl_05_hurrying.png',
+        clipboard: 'blue_white_girl_06_clipboard.png',
+        done: 'blue_white_girl_07_completed.png',
+        sleep: 'blue_white_girl_08_sleeping.png'
+      },
+      lines: {
+        start: ['今日もひとつずつ整えていきましょう。', '大丈夫、見えるところからで十分です。'],
+        suggest: ['次の一手、軽く決めてしまいましょう。', '迷ったら短いものから。流れが戻ります。'],
+        add: ['受け持ち追加、把握しました。', '記録できました。落ち着いて進めましょう。'],
+        done: ['完了です。よく整理できました。', '一件片づきました。呼吸もひとつ。'],
+        endday: ['本日分、きれいに片づきました。ゆっくり休んでください。', '今日の整理はここまで。十分に積み上がっています。'],
+        stuck: ['詰まりは発見できた時点で半分前進です。', '小さな次の一歩に分けましょう。'],
+        idle: ['目の前の一件だけ見れば大丈夫です。', '確認、処置、記録。順番にいきましょう。']
+      }
+    },
+    spark: {
+      name: 'ナディア',
+      alt: '赤い髪の元気なナディア',
+      img: {
+        neutral: 'red_antler_girl_01_neutral.png',
+        thumb: 'red_antler_girl_02_thumbsup.png',
+        cheer: 'red_antler_girl_03_cheer.png',
+        thinking: 'red_antler_girl_04_thinking.png',
+        hurry: 'red_antler_girl_05_hurrying.png',
+        clipboard: 'red_antler_girl_06_clipboard.png',
+        done: 'red_antler_girl_07_completed.png',
+        sleep: 'red_antler_girl_08_sleeping.png'
+      },
+      lines: {
+        start: ['よし、今日の冒険開始だね。', '勢いあるうちに一個いこ！'],
+        suggest: ['これだ！まず手をつけちゃお！', '次のターゲット発見！'],
+        add: ['タスク追加！見落としなしでいこ！', '追加完了！地図に印つけた感じ！'],
+        done: ['やった！ひとつ突破！', 'クリア！この調子この調子！'],
+        endday: ['今日も走り切ったね！おつかれさま！', '完了分すっきり！今日はここまでで勝ち！'],
+        stuck: ['詰まったら迂回路さがそ！', '小さく割れば突破口あるって！'],
+        idle: ['止まっててもOK、次の一歩だけ探そ。', 'いま動けるところから突撃だ！']
+      }
+    },
+    butler: {
+      name: 'ジーン',
+      alt: 'コウモリの羽と栗色の髪のジーン',
+      img: {
+        neutral: 'bat_wing_girl_01_neutral.png',
+        thumb: 'bat_wing_girl_02_thumbsup.png',
+        cheer: 'bat_wing_girl_03_cheer.png',
+        thinking: 'bat_wing_girl_04_thinking.png',
+        hurry: 'bat_wing_girl_05_hurrying.png',
+        clipboard: 'bat_wing_girl_06_clipboard.png',
+        done: 'bat_wing_girl_07_completed.png',
+        sleep: 'bat_wing_girl_08_sleeping.png'
+      },
+      lines: {
+        start: ['本日もお手伝いしますね。', '一覧はぼくが見守っています。'],
+        suggest: ['ここから手をつけるのがよさそうです。', '次の候補、ひとつ選んでおきました。'],
+        add: ['受け持ちに追加しました。ちゃんと見ています。', '記録しました。これで忘れにくくなりますね。'],
+        done: ['いいですね。完了として残しておきます。', 'ひとつ片づきました。すばらしいです。'],
+        endday: ['本日もお手伝いできてよかったです。あとは休みましょう。', '一覧は整いました。今日はここで閉じて大丈夫です。'],
+        stuck: ['困っているところ、ちゃんと見えました。', 'まずは小さな確認からいきましょう。'],
+        idle: ['必要なら、ぼくが次を一緒に探します。', '焦らず、順に整えていきましょう。']
+      }
+    },
+    yushka: {
+      name: 'ユシュカ',
+      alt: '赤い髪と角のユシュカ',
+      img: {
+        neutral: 'yushka_01_neutral.png',
+        thumb: 'yushka_02_thumbsup.png',
+        cheer: 'yushka_03_cheer.png',
+        thinking: 'yushka_04_thinking.png',
+        hurry: 'yushka_05_hurrying.png',
+        clipboard: 'yushka_06_laptop.png',
+        done: 'yushka_07_paper.png',
+        sleep: 'yushka_08_sleeping.png',
+        smug: 'yushka_09_smug.png'
+      },
+      lines: {
+        start: ['来たな。今日も俺が見ててやる、まず一件片づけよう。', '段取りは俺に任せろ。派手に行く前に、手元だけ見ろ。'],
+        suggest: ['次はここだろう。迷う時間は短くていい。', 'なんでだよ…ってなる前に、候補をひとつ決めるぞ。'],
+        add: ['よし、拾えたな。記録に残せば勝ちだ。', 'いい判断だな。面倒なところほど先に押さえる。'],
+        done: ['やるじゃないか。ひとつ終わらせた、それは強い。', '完了だな。胸を張れ、次もいける。'],
+        endday: ['よし、今日はもう十分だな。あとは休め。', '片づけた分は消した。胸を張って帰れ、よくやった。'],
+        stuck: ['詰まったか。いい、そこで止まれるのも腕だ。', '焦るな。小さく分けろ、俺が横で見てる。'],
+        idle: ['少し息を整えろ。戻る場所は逃げない。', '次に触る一件だけ決めよう。それで十分だ。']
+      }
+    }
+  };
+
+  const flows = {
+    start: [['mentor','neutral'], ['butler','neutral'], ['spark','cheer'], ['yushka','neutral']],
+    suggest: [['spark','thinking'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking']],
+    estimate: [['mentor','clipboard'], ['butler','clipboard'], ['spark','thinking'], ['yushka','clipboard'], ['yushka','thinking']],
+    add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer']],
+    done: [['spark','done'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug']],
+    endday: [['mentor','sleep'], ['butler','done'], ['spark','cheer'], ['yushka','smug'], ['yushka','done']],
+    stuck: [['mentor','thinking'], ['butler','thinking'], ['spark','hurry'], ['yushka','hurry'], ['yushka','thinking']],
+    idle: [['mentor','neutral'], ['butler','neutral'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep']]
+  };
+  const estimateLines = {
+    mentor: meta => meta.count
+      ? `\u6b8b\u308a${meta.count}\u4ef6\u3001\u898b\u7a4d\u3082\u308a\u306f${meta.duration}\u3067\u3059\u3002\u4eca\u304b\u3089\u306a\u3089${meta.finishTime}\u3054\u308d\u304c\u76ee\u5b89\u3067\u3059\u306d\u3002`
+      : '\u6b8b\u30bf\u30b9\u30af\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u4eca\u306f\u5c11\u3057\u606f\u3092\u3064\u3044\u3066\u5927\u4e08\u592b\u3067\u3059\u3002',
+    butler: meta => meta.count
+      ? `\u6b8b\u308a${meta.count}\u4ef6\u3001\u5408\u8a08${meta.duration}\u3067\u3059\u3002${meta.finishTime}\u3054\u308d\u3092\u76ee\u5b89\u306b\u3001\u9806\u306b\u6574\u3048\u3066\u3044\u304d\u307e\u3057\u3087\u3046\u3002`
+      : '\u6b8b\u30bf\u30b9\u30af\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u4e00\u89a7\u306f\u307c\u304f\u304c\u898b\u5b88\u3063\u3066\u3044\u307e\u3059\u3002',
+    spark: meta => meta.count
+      ? `\u6b8b\u308a${meta.count}\u4ef6\u3067${meta.duration}\uff01\u3053\u306e\u307e\u307e\u9032\u3081\u3070${meta.finishTime}\u3054\u308d\u306b\u7740\u5730\u3067\u304d\u305d\u3046\uff01`
+      : '\u6b8b\u30bf\u30b9\u30af\u306a\u3057\uff01\u3044\u3044\u611f\u3058\u3001\u3053\u3053\u3067\u4e00\u56de\u6574\u3048\u3088\uff01',
+    yushka: meta => meta.count
+      ? `\u6b8b\u308a${meta.count}\u4ef6\u3001\u898b\u7a4d\u3082\u308a\u5408\u8a08${meta.duration}\u3002\u4eca\u304b\u3089\u306a\u3089${meta.finishTime}\u3054\u308d\u3060\u306a\u3002\u5272\u308a\u8fbc\u307f\u304c\u6765\u305f\u3089\u307e\u305f\u898b\u76f4\u305b\u3070\u3044\u3044\u3002`
+      : '\u6b8b\u30bf\u30b9\u30af\u306f\u306a\u3057\u3002\u3088\u3057\u3001\u4eca\u306f\u4e00\u606f\u3064\u3051\u308b\u3068\u3053\u308d\u3060\u306a\u3002'
+  };
+  const dailyLines = {
+    mentor: {
+      start: ['今日の暮らしも、小さく整えていきましょう。', 'まずは見えている用事をひとつ置ければ十分です。'],
+      suggest: ['今の一手はこれくらいがよさそうです。', '短く終わるものから、流れを作りましょう。'],
+      add: ['書き出せました。忘れない形にできましたね。', '生活の用事、ちゃんと受け止めました。'],
+      done: ['ひとつ整いました。よく動けています。', '完了です。暮らしが少し軽くなりました。'],
+      endday: ['今日の生活タスク、ここまでで十分です。休みましょう。', 'よく片づけました。あとは明日の自分に渡せます。'],
+      stuck: ['止まったら、もっと小さくして大丈夫です。', 'できない理由が見えたなら、次の形に直せます。'],
+      idle: ['家のことは、ひとつずつで大丈夫です。', '全部ではなく、今できる一個だけ見ましょう。']
+    },
+    spark: {
+      start: ['でいとり開始！まず一個だけいこ！', '生活クエスト開幕！軽いやつから拾お！'],
+      suggest: ['これなら今いけそう！', '次はこれ！小さく突破しよ！'],
+      add: ['追加した！これで忘れないね！', 'よし、用事を捕まえた！'],
+      done: ['クリア！生活がちょっと進んだ！', 'やった！ひとつ片づいたね！'],
+      endday: ['今日も生活を守った！えらい！', 'ここまでできたら勝ち！おつかれさま！'],
+      stuck: ['詰まったら別ルート！小さくしよ！', '止まったなら作戦変更だね！'],
+      idle: ['動ける時に一個でOK！', '勢いがなくても、選べたら勝ち！']
+    },
+    butler: {
+      start: ['本日の日常タスクも、ぼくが見守っています。', 'まずは散らばった用事を一緒に並べましょう。'],
+      suggest: ['次はこれがよさそうです。無理なくいきましょう。', '今の状態なら、この一手が扱いやすそうです。'],
+      add: ['記録しました。あとで困りにくくなりますね。', '用事を一覧に入れました。ぼくも確認しています。'],
+      done: ['片づきましたね。生活が少し整いました。', 'いいですね。ひとつ終わりました。'],
+      endday: ['今日の一覧はここまでで大丈夫です。休みましょう。', 'よく整えました。明日の準備もできています。'],
+      stuck: ['困ったところは、小さく分けておきましょう。', '止まった用事も、置き方を変えれば進めます。'],
+      idle: ['焦らず、暮らしを少しずつ戻しましょう。', 'ぼくはここにいます。次を一緒に探しますね。']
+    },
+    yushka: {
+      start: ['来たな。生活の方も俺が見ててやる。まず一個だ。', '散らかった用事は並べればいい。そこからだな。'],
+      suggest: ['次はこれだろう。今の手で届くやつだ。', 'これを片づけろ。大物に行く前に足場を作る。'],
+      add: ['よし、捕まえたな。書いた時点で半分勝ちだ。', '忘れる前に置けた。悪くない判断だな。'],
+      done: ['やるじゃないか。暮らしをひとつ守った。', '完了だな。こういう小さい勝ちが効く。'],
+      endday: ['今日はもう十分だな。生活を回した、それで勝ちだ。', '片づけた分はちゃんと積み上がってる。胸張れ。'],
+      stuck: ['詰まったか。なら小さく割れ。俺が見てる。', 'なんでだよ…ってなる前に、手順を半分にしろ。'],
+      idle: ['全部やろうとするな。次の一個だけでいい。', '休むなら休め。戻る場所はここに残してある。']
+    }
+  };
+
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  let el, img, textEl, hideTimer, lastShown = 0, currentMode = 'patient';
+
+  function ensureCoach(){
+    if (el) return;
+    el = document.createElement('div');
+    el.className = 'chibi-coach';
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML = '<img decoding="async" loading="eager" alt=""><div class="chibi-coach-bubble"><span class="chibi-coach-text"></span></div>';
+    document.body.appendChild(el);
+    img = el.querySelector('img');
+    textEl = el.querySelector('.chibi-coach-text');
+  }
+
+  function show(kind, force, customText, meta){
+    const now = Date.now();
+    if (!force && now - lastShown < 1800) return;
+    lastShown = now;
+    ensureCoach();
+    const [who, pose] = pick(flows[kind] || flows.idle);
+    const actor = cast[who];
+    img.src = CHIBI_BASE + actor.img[pose || 'neutral'];
+    img.alt = actor.alt;
+    const lines = currentMode === 'daily' && dailyLines[who] ? dailyLines[who] : actor.lines;
+    textEl.textContent = customText || (kind === 'estimate' && estimateLines[who] ? estimateLines[who](meta || {}) : pick(lines[kind] || lines.idle));
+    clearTimeout(hideTimer);
+    el.classList.add('show');
+    hideTimer = setTimeout(() => el.classList.remove('show'), kind === 'start' ? 4200 : 3300);
+  }
+
+  function classifyButton(button){
+    const text = (button.textContent || '').replace(/\s+/g, '');
+    const klass = button.className || '';
+    if (klass.includes('btn-green')) return 'done';
+    if (klass.includes('btn-rose')) return 'stuck';
+    if (text.includes('保留')) return 'idle';
+    if (text.includes('詰') || text.includes('困') || text.includes('stuck')) return 'stuck';
+    if (text.includes('次') || text.includes('候補') || text.includes('決め')) return 'suggest';
+    if (text.includes('追加') || text.includes('Add') || text.includes('+')) return 'add';
+    if (text.includes('終了') || text.includes('退院') || text.includes('完了') || text.includes('済') || text.includes('Done')) return 'done';
+    return null;
+  }
+
+  window.addEventListener('chibi-coach', event => {
+    show(event.detail?.kind || 'idle', true, event.detail?.text || '', event.detail?.estimate || null);
+  });
+  window.addEventListener('triage-mode-change', event => {
+    currentMode = event.detail?.mode === 'daily' ? 'daily' : 'patient';
+    show('start', true);
+  });
+
+  window.addEventListener('load', () => {
+    setTimeout(() => show('start', true), 1300);
+    setInterval(() => {
+      if (document.hidden) return;
+      show('idle', false);
+    }, 90000);
+  });
+
+  document.addEventListener('click', event => {
+    const button = event.target.closest && event.target.closest('button');
+    if (!button) return;
+    const kind = classifyButton(button);
+    if (kind) setTimeout(() => show(kind, false), 160);
+  }, true);
+})();
+</script>
+
+<script>
+(() => {
+  let installPrompt = null;
+  const isStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  window.addEventListener('beforeinstallprompt', event => {
+    if (isStandalone()) return;
+    event.preventDefault();
+    installPrompt = event;
+    let button = document.querySelector('.pwa-install-button');
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pwa-install-button';
+      button.textContent = 'アプリをインストール';
+      document.body.appendChild(button);
+      button.addEventListener('click', async () => {
+        if (!installPrompt) return;
+        button.classList.remove('show');
+        installPrompt.prompt();
+        await installPrompt.userChoice.catch(() => null);
+        installPrompt = null;
+      });
+    }
+    button.classList.add('show');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    document.querySelector('.pwa-install-button')?.remove();
+  });
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  });
+}
+</script>
+
+</body></html>
