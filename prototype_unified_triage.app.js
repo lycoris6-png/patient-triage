@@ -1930,6 +1930,160 @@ function FocusView({
     onClick: () => onUnstick(current.patientId, current.id)
   }, "\u8A70\u307E\u308A\u89E3\u9664")));
 }
+function DailyFocusView({
+  tasks,
+  typeMeta,
+  estMeta,
+  now,
+  onComplete,
+  onDoing,
+  onHold,
+  onExit
+}) {
+  const priorityMeta = id => DAILY_TASK_PRIORITIES.find(p => p.id === id) || DAILY_TASK_PRIORITIES[2];
+  const dueMeta = due => {
+    if (!due) return null;
+    const today = todayStr();
+    if (due < today) return {
+      text: '\u671F\u9650 ' + due,
+      bg: '#FEE2E2',
+      fg: '#B91C1C',
+      weight: 220
+    };
+    if (due === today) return {
+      text: '\u4ECA\u65E5\u307E\u3067',
+      bg: '#FEF3C7',
+      fg: '#92400E',
+      weight: 180
+    };
+    return {
+      text: due,
+      bg: '#E0F2FE',
+      fg: '#0369A1',
+      weight: 40
+    };
+  };
+  const score = t => {
+    const pri = priorityMeta(t.dailyPriority);
+    const due = dueMeta(t.dueDate);
+    const est = Number(t.estimate || 5);
+    const quickBoost = est <= 5 ? 35 : est <= 10 ? 18 : 0;
+    const ts = timeStatus(t.scheduledTime, now);
+    const timeBoost = ts === 'past' ? 260 : ts === 'now' ? 230 : ts === 'soon' ? 160 : ts === 'upcoming' ? 60 : 0;
+    const statusBoost = t.status === 'doing' ? 1000 : t.status === 'hold' ? -80 : 0;
+    return statusBoost + pri.weight * 100 + (due?.weight || 0) + timeBoost + quickBoost - est;
+  };
+  const current = [...tasks.filter(t => t.status !== 'done')].sort((a, b) => score(b) - score(a))[0];
+  if (!current) return React.createElement("div", {
+    className: "focus-card",
+    style: {
+      textAlign: 'center'
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 40,
+      marginBottom: 16
+    }
+  }, "\u2728"), React.createElement("p", {
+    style: {
+      fontSize: 17,
+      color: 'var(--text-2)',
+      fontFamily: 'var(--font-serif)',
+      fontWeight: 500
+    }
+  }, "\u3059\u3079\u3066\u5B8C\u4E86 \u2014 \u4ECA\u65E5\u306F\u3053\u3053\u307E\u3067\u6574\u3063\u3066\u3044\u307E\u3059"));
+  const type = typeMeta(current.type);
+  const est = estMeta(current.estimate);
+  const pri = priorityMeta(current.dailyPriority);
+  const due = dueMeta(current.dueDate);
+  return React.createElement("div", {
+    className: "focus-card"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: 'var(--accent)',
+      marginBottom: 16,
+      fontWeight: 700,
+      letterSpacing: '.08em',
+      textTransform: 'uppercase'
+    }
+  }, "\u4ECA\u3060\u3051\u3053\u308C"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 7,
+      marginBottom: 12,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("span", {
+    className: "tag",
+    style: {
+      background: pri.color + '22',
+      color: pri.color
+    }
+  }, pri.label), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: type.dot + '18',
+      color: type.dot
+    }
+  }, type.label), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, est.label), due && React.createElement("span", {
+    className: "tag",
+    style: {
+      background: due.bg,
+      color: due.fg
+    }
+  }, due.text), React.createElement(TimeBadge, {
+    scheduledTime: current.scheduledTime,
+    now: now
+  })), React.createElement("p", {
+    style: {
+      fontSize: 24,
+      fontWeight: 700,
+      fontFamily: 'var(--font-serif)',
+      color: current.status === 'hold' ? 'var(--stuck-fg)' : 'var(--text)',
+      lineHeight: 1.45,
+      marginBottom: 10
+    }
+  }, current.title), React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: 'var(--text-3)',
+      margin: '0 0 20px',
+      fontWeight: 600
+    }
+  }, current.status === 'doing' ? '\u3053\u308C\u306F\u3082\u3046\u7740\u624B\u4E2D\u3067\u3059\u3002\u7D42\u308F\u3063\u305F\u3089\u5B8C\u4E86\u306B\u3057\u307E\u3057\u3087\u3046\u3002' : current.status === 'hold' ? '\u4E00\u65E6\u4FDD\u7559\u306B\u3057\u305F\u30BF\u30B9\u30AF\u3067\u3059\u3002\u52D5\u3051\u305D\u3046\u306A\u3089\u7740\u624B\u306B\u623B\u305B\u307E\u3059\u3002' : '\u4ECA\u306E\u4E00\u624B\u306F\u3053\u308C\u3002\u5C0F\u3055\u304F\u7247\u3065\u3051\u307E\u3057\u3087\u3046\u3002'), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("button", {
+    className: "btn-green",
+    onClick: () => onComplete(current.id)
+  }, React.createElement(Check, {
+    size: 15
+  }), "\u5B8C\u4E86"), current.status !== 'doing' && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => onDoing(current.id)
+  }, React.createElement(Play, {
+    size: 14
+  }), "\u7740\u624B"), current.status !== 'hold' && React.createElement("button", {
+    className: "btn-rose",
+    onClick: () => onHold(current.id)
+  }, React.createElement(AlertCircle, {
+    size: 14
+  }), "\u4FDD\u7559"), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onExit
+  }, "\u4E00\u89A7\u3092\u898B\u308B")));
+}
 function GeneralTaskSection({
   tasks,
   open,
@@ -4181,7 +4335,20 @@ function PatientTriage() {
     onCompleteTask: () => suggestion.task && (suggestion.fromGeneral ? completeGeneralTask(suggestion.task.id) : completeTask(suggestion.task.patientId, suggestion.task.id)),
     onReroll: suggestNext,
     onDismiss: () => setSuggestion(null)
-  }), focusMode && !isDailyMode ? React.createElement(FocusView, {
+  }), focusMode && isDailyMode ? React.createElement(DailyFocusView, {
+    tasks: activeGeneralTasks,
+    typeMeta: generalTypeMeta,
+    estMeta: estMeta,
+    now: now,
+    onComplete: completeGeneralTask,
+    onDoing: taskId => updateGeneralTask(taskId, {
+      status: 'doing'
+    }),
+    onHold: taskId => updateGeneralTask(taskId, {
+      status: 'hold'
+    }),
+    onExit: () => setFocusMode(false)
+  }) : focusMode ? React.createElement(FocusView, {
     patients: sortedPatients,
     typeMeta: typeMeta,
     estMeta: estMeta,
