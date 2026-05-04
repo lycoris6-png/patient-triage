@@ -3974,7 +3974,7 @@ function PatientTriage() {
     color: active ? 'var(--accent)' : 'var(--text-3)'
   });
   const appTitle = isDailyMode ? 'でいとり！' : 'ぺいとり！';
-  const appSubtitle = isDailyMode ? '日常タスクを今日の動ける形に分ける試作モード' : '患者さんと処置タスクを整理するモード';
+  const appSubtitle = isDailyMode ? '日常タスクを今日の動ける形に分けるモード' : '患者さんと処置タスクを整理するモード';
   const entityLabel = isDailyMode ? 'カテゴリ' : '受け持ち';
   const addEntityLabel = isDailyMode ? 'カテゴリ追加' : '受け持ち追加';
   if (!loaded) return React.createElement("div", {
@@ -4367,7 +4367,11 @@ function PatientTriage() {
       status: 'doing'
     }),
     onUnstick: unstick
-  }) : React.createElement(React.Fragment, null, isDailyMode && React.createElement(GeneralTaskSection, {
+  }) : React.createElement("div", {
+    className: `desktop-main-grid${isDailyMode ? ' desktop-main-grid-daily' : ''}`
+  }, React.createElement("section", {
+    className: "desktop-patient-column"
+  }, isDailyMode ? React.createElement(GeneralTaskSection, {
     tasks: activeGeneralTasks,
     open: generalOpen,
     onToggleOpen: () => setGeneralOpen(v => !v),
@@ -4382,7 +4386,7 @@ function PatientTriage() {
     estMeta: estMeta,
     now: now,
     dailyMode: true
-  }), !isDailyMode && React.createElement("div", {
+  }) : React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -4399,7 +4403,7 @@ function PatientTriage() {
       background: 'rgba(255,255,255,.5)',
       fontWeight: 500
     }
-  }, isDailyMode ? "\u307E\u305A\u306F\u30AB\u30C6\u30B4\u30EA\u30921\u3064\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044" : "\u307E\u305A\u306F\u53D7\u3051\u6301\u3061\u30921\u4EBA\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"), sortedPatients.map(p => React.createElement(PatientCard, {
+  }, "\u307E\u305A\u306F\u53D7\u3051\u6301\u3061\u30921\u4EBA\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"), sortedPatients.map(p => React.createElement(PatientCard, {
     key: p.id,
     patient: p,
     expanded: activeExpandedPatients[p.id],
@@ -4448,7 +4452,9 @@ function PatientTriage() {
     typeMeta: typeMeta,
     estMeta: estMeta,
     now: now
-  }))), !isDailyMode && React.createElement(GeneralTaskSection, {
+  })))), !isDailyMode && React.createElement("aside", {
+    className: "desktop-side-column"
+  }, React.createElement(GeneralTaskSection, {
     tasks: activeGeneralTasks,
     open: generalOpen,
     onToggleOpen: () => setGeneralOpen(v => !v),
@@ -4462,78 +4468,7 @@ function PatientTriage() {
     typeMeta: generalTypeMeta,
     estMeta: estMeta,
     now: now
-  }), React.createElement("div", {
-    style: {
-      marginTop: 14,
-      display: 'none'
-    }
-  }, React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 8,
-      marginBottom: 10
-    }
-  }, React.createElement("input", {
-    value: newPatientName,
-    onChange: e => setNewPatientName(e.target.value),
-    onKeyDown: e => e.key === 'Enter' && addPatient(),
-    placeholder: "\u7B26\u4E01\u3092\u5165\u529B\u3057\u3066 Enter (\u4F8B: 305-3)",
-    className: "inp"
-  }), React.createElement("button", {
-    className: "btn-dark",
-    onClick: addPatient,
-    style: {
-      flexShrink: 0
-    }
-  }, React.createElement(Plus, {
-    size: 15
-  }), "\u8FFD\u52A0")), React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 6,
-      alignItems: 'center'
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--text-3)',
-      fontWeight: 600
-    }
-  }, "\u512A\u5148\u5EA6:"), PRIORITIES.map(pri => React.createElement("button", {
-    key: pri.id,
-    onClick: () => setNewPatientPri(pri.id),
-    className: "tag",
-    style: {
-      background: newPatientPri === pri.id ? pri.color : 'var(--surface)',
-      color: newPatientPri === pri.id ? '#fff' : pri.color,
-      border: `1.5px solid ${pri.color}50`,
-      cursor: 'pointer',
-      fontSize: 11,
-      padding: '4px 12px',
-      transition: 'all .15s',
-      boxShadow: newPatientPri === pri.id ? `0 3px 10px ${pri.color}40` : 'none'
-    }
-  }, pri.label))), React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--text-3)',
-      fontWeight: 600,
-      marginLeft: 6
-    }
-  }, "\u75C5\u68DF:"), WARDS.map(ward => React.createElement("button", {
-    key: ward.id || 'none',
-    onClick: () => setNewPatientWard(ward.id),
-    className: "tag",
-    style: {
-      background: newPatientWard === ward.id ? 'var(--accent)' : 'var(--surface)',
-      color: newPatientWard === ward.id ? '#fff' : 'var(--text-2)',
-      border: '1.5px solid var(--border)',
-      cursor: 'pointer',
-      fontSize: 11,
-      padding: '4px 10px',
-      transition: 'all .15s'
-    }
-  }, ward.label)))), !focusMode && stuckTasks.length > 0 && React.createElement("div", {
+  }))), !focusMode && stuckTasks.length > 0 && React.createElement("div", {
     className: "stuck-bar",
     style: {
       marginTop: 22,

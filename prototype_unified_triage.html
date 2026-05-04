@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ぺいとり！">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="pwa-icons/icon-192.png">
-<title>ぺいとり！ / でいとり！ 試作</title>
+<title>ぺいとり！ / でいとり！</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <style>/* cyrillic */
 /* vietnamese */
@@ -587,6 +587,80 @@ body.daily-mode.header-bg-night .app-header::after {
   border: 1.5px solid #FCA5A5;
   border-radius: var(--r);
   box-shadow: 0 3px 12px rgba(220,38,38,.10);
+}
+
+/* Desktop optimized layout */
+@media (min-width: 980px) {
+  body {
+    background-size: 28px 28px;
+  }
+  #root > div {
+    max-width: 1180px !important;
+    padding: 28px 28px 72px !important;
+  }
+  .app-header {
+    border-radius: 18px !important;
+    padding: 26px 32px !important;
+    margin-bottom: 18px !important;
+  }
+  .desktop-main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 18px;
+    align-items: start;
+  }
+  .desktop-main-grid-daily {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .desktop-patient-column,
+  .desktop-side-column {
+    min-width: 0;
+  }
+  .desktop-patient-column > div:first-child {
+    gap: 12px !important;
+  }
+  .desktop-side-column {
+    position: sticky;
+    top: 18px;
+    align-self: start;
+  }
+  .desktop-side-column > *:first-child {
+    margin-top: 0 !important;
+  }
+  .suggestion-card {
+    margin-bottom: 18px !important;
+  }
+  .alert-bar ul,
+  .stuck-bar ul {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px !important;
+  }
+  .dialog {
+    max-width: 560px !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  #root > div {
+    max-width: 1240px !important;
+  }
+  .desktop-main-grid {
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 22px;
+  }
+  .desktop-main-grid-daily {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 979px) {
+  .desktop-main-grid {
+    display: block;
+  }
+  .desktop-side-column {
+    margin-top: 14px;
+  }
 }
 
 @font-face {
