@@ -1,0 +1,40 @@
+{
+  "name": "ぺいとり！ デスクトップ",
+  "short_name": "ぺいとり！",
+  "description": "患者さんと処置タスクをデスクトップ幅で整理するトリアージアプリ",
+  "lang": "ja",
+  "id": "/patient-triage/desktop",
+  "start_url": "./patient-triage_v3_desktop.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EEE8FF",
+  "theme_color": "#6C3EF8",
+  "categories": ["productivity", "medical"],
+  "icons": [
+    {
+      "src": "pwa-icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa-icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa-icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "pwa-icons/icon-source.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
