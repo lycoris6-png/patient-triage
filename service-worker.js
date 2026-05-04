@@ -1,9 +1,11 @@
-const CACHE_NAME = 'patient-triage-pwa-v5';
+const CACHE_NAME = 'patient-triage-pwa-v6';
 const APP_SHELL = [
   './',
   './index.html',
   './patient-triage_v3.html',
   './patient-triage_v3.app.js',
+  './prototype_unified_triage.html',
+  './prototype_unified_triage.app.js',
   './manifest.webmanifest',
   './pwa-icons/icon-192.png',
   './pwa-icons/icon-512.png',
@@ -12,10 +14,12 @@ const APP_SHELL = [
   './patient_triage_vendor/dbc28e58-b689-4d38-85ca-d5774aa34960.js',
   './patient_triage_vendor/402aa1bf-e6bd-4abd-9e2d-1d1b154e991e.js',
   './patient_triage_vendor/BestTen-DOT.otf',
+  './patient_triage_vendor/RabbitandFullMoonFree-Regular.otf',
   './patient_triage_vendor/header-nurse-station.png',
   './patient_triage_vendor/header-nurse-station-morning.png',
   './patient_triage_vendor/header-nurse-station-evening.png',
   './patient_triage_vendor/header-nurse-station-night.png',
+  './patient_triage_vendor/header-daily-life.png',
   './chibi_split_pngs/blue_white_girl_06_clipboard.png',
   './chibi_split_pngs/red_antler_girl_03_cheer.png',
   './chibi_split_pngs/bat_wing_girl_01_neutral.png',
