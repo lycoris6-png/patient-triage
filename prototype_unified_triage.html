@@ -55,9 +55,14 @@
       width: 92px;
       height: 92px;
       object-fit: contain;
+      transform-origin: center bottom;
       filter: drop-shadow(0 8px 16px rgba(52, 38, 99, .22));
       animation: chibiFloat 1.9s ease-in-out infinite;
     }
+    .chibi-coach[data-actor="mentor"] { --chibi-scale: 1; }
+    .chibi-coach[data-actor="spark"] { --chibi-scale: 1; }
+    .chibi-coach[data-actor="butler"] { --chibi-scale: .99; }
+    .chibi-coach[data-actor="yushka"] { --chibi-scale: .95; }
     .chibi-coach-bubble {
       position: relative;
       margin-bottom: 12px;
@@ -86,8 +91,8 @@
       transform: rotate(45deg);
     }
     @keyframes chibiFloat {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-4px); }
+      0%, 100% { transform: translateY(0) scale(var(--chibi-scale, 1)); }
+      50% { transform: translateY(-4px) scale(var(--chibi-scale, 1)); }
     }
     @media (max-width: 560px) {
       .chibi-coach {
@@ -480,16 +485,43 @@ input[type="time"]::-webkit-calendar-picker-indicator { opacity:.5; }
     url('chibi_split_pngs/bat_wing_girl_01_neutral.png'),
     url('chibi_split_pngs/blue_white_girl_06_clipboard.png');
   background-repeat: no-repeat;
-  background-size: 72px auto, 62px auto, 58px auto, 60px auto;
+  background-size: 66px auto, 64px auto, 64px auto, 64px auto;
   background-position:
-    right 34px bottom 5px,
-    right 118px bottom 7px,
-    right 188px bottom 8px,
-    right 252px bottom 7px;
+    right 34px bottom 6px,
+    right 112px bottom 7px,
+    right 184px bottom 7px,
+    right 258px bottom 7px;
   opacity: .96;
   pointer-events: none;
   z-index: 1;
   filter: drop-shadow(0 8px 9px rgba(24,15,62,.34));
+  transition: opacity .28s ease, filter .28s ease;
+}
+
+body.header-cast-b .app-header::before {
+  background-image:
+    url('chibi_split_pngs/blue_white_girl_07_completed.png'),
+    url('chibi_split_pngs/yushka_06_laptop.png'),
+    url('chibi_split_pngs/red_antler_girl_02_thumbsup.png');
+  background-size: 64px auto, 66px auto, 64px auto;
+  background-position:
+    right 42px bottom 7px,
+    right 118px bottom 6px,
+    right 194px bottom 7px;
+}
+
+body.header-cast-c .app-header::before {
+  background-image:
+    url('chibi_split_pngs/bat_wing_girl_02_thumbsup.png'),
+    url('chibi_split_pngs/red_antler_girl_06_clipboard.png'),
+    url('chibi_split_pngs/yushka_03_cheer.png'),
+    url('chibi_split_pngs/blue_white_girl_01_neutral.png');
+  background-size: 64px auto, 64px auto, 66px auto, 64px auto;
+  background-position:
+    right 36px bottom 7px,
+    right 108px bottom 7px,
+    right 182px bottom 6px,
+    right 258px bottom 7px;
 }
 
 .app-header > * {
@@ -521,9 +553,17 @@ body.rpg-mode .app-title-button {
 @media (max-width: 640px) {
   .app-header::before {
     background-image: url('chibi_split_pngs/yushka_09_smug.png');
-    background-size: 58px auto;
+    background-size: 56px auto;
     background-position: right 14px bottom 32px;
     opacity: .78;
+  }
+  body.header-cast-b .app-header::before {
+    background-image: url('chibi_split_pngs/blue_white_girl_07_completed.png');
+    background-size: 56px auto;
+  }
+  body.header-cast-c .app-header::before {
+    background-image: url('chibi_split_pngs/bat_wing_girl_02_thumbsup.png');
+    background-size: 56px auto;
   }
 }
 
@@ -1037,7 +1077,22 @@ body.rpg-mode .chibi-coach-bubble {
   };
 
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
-  let el, img, textEl, hideTimer, lastShown = 0, currentMode = 'patient';
+  let el, img, textEl, hideTimer, lastShown = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0;
+  const headerCastClasses = ['', 'header-cast-b', 'header-cast-c'];
+  function rotateHeaderCast(force){
+    if (document.hidden && !force) return;
+    document.body.classList.remove('header-cast-b', 'header-cast-c');
+    headerCastIndex = (headerCastIndex + 1) % headerCastClasses.length;
+    const next = headerCastClasses[headerCastIndex];
+    if (next) document.body.classList.add(next);
+  }
+  function pickCastEntry(entries){
+    if (!entries || !entries.length) return ['mentor', 'neutral'];
+    const pool = entries.length > 1 ? entries.filter(([who]) => who !== lastActor) : entries;
+    const entry = pick(pool.length ? pool : entries);
+    lastActor = entry[0];
+    return entry;
+  }
 
   function ensureCoach(){
     if (el) return;
@@ -1055,8 +1110,9 @@ body.rpg-mode .chibi-coach-bubble {
     if (!force && now - lastShown < 1800) return;
     lastShown = now;
     ensureCoach();
-    const [who, pose] = pick(flows[kind] || flows.idle);
+    const [who, pose] = pickCastEntry(flows[kind] || flows.idle);
     const actor = cast[who];
+    el.dataset.actor = who;
     img.src = CHIBI_BASE + actor.img[pose || 'neutral'];
     img.alt = actor.alt;
     const lines = currentMode === 'daily' && dailyLines[who] ? dailyLines[who] : actor.lines;
@@ -1084,15 +1140,18 @@ body.rpg-mode .chibi-coach-bubble {
   });
   window.addEventListener('triage-mode-change', event => {
     currentMode = event.detail?.mode === 'daily' ? 'daily' : 'patient';
+    rotateHeaderCast(true);
     show('start', true);
   });
 
   window.addEventListener('load', () => {
+    rotateHeaderCast(true);
     setTimeout(() => show('start', true), 1300);
     setInterval(() => {
       if (document.hidden) return;
       show('idle', false);
-    }, 90000);
+      rotateHeaderCast(false);
+    }, 60000);
   });
 
   document.addEventListener('click', event => {
