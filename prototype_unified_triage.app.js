@@ -321,6 +321,54 @@ const DAILY_TASK_PRIORITIES = [{
   color: '#22C55E',
   weight: .62
 }];
+const WEEKDAY_OPTIONS = [{
+  id: 1,
+  label: '月'
+}, {
+  id: 2,
+  label: '火'
+}, {
+  id: 3,
+  label: '水'
+}, {
+  id: 4,
+  label: '木'
+}, {
+  id: 5,
+  label: '金'
+}, {
+  id: 6,
+  label: '土'
+}, {
+  id: 0,
+  label: '日'
+}];
+const DEFAULT_ROUTINE_PRESETS = [{
+  id: 'weekday-review',
+  kind: 'task',
+  mode: 'patient',
+  title: '書類確認',
+  type: 'docs',
+  estimate: '5',
+  dailyPriority: 'normal',
+  weekdays: [1, 2, 3, 4, 5]
+}, {
+  id: 'daily-reset',
+  kind: 'task',
+  mode: 'daily',
+  title: '明日の準備',
+  type: 'later',
+  estimate: '10',
+  dailyPriority: 'today',
+  weekdays: [1, 2, 3, 4, 5]
+}, {
+  id: 'conference',
+  kind: 'event',
+  mode: 'both',
+  title: 'カンファレンス',
+  scheduledTime: '16:00',
+  weekdays: [1, 2, 3, 4, 5]
+}];
 const PRIORITIES = [{
   id: 'er',
   label: 'ER',
@@ -2095,6 +2143,9 @@ function GeneralTaskSection({
   onRemove,
   onClearDone,
   onQuickAdd,
+  quickTasks,
+  quickOpen,
+  onToggleQuick,
   typeMeta,
   estMeta,
   now,
@@ -2117,7 +2168,7 @@ function GeneralTaskSection({
     setEditingTaskId(null);
     setDraftTaskTitle('');
   };
-  const quickTasks = dailyMode ? QUICK_DAILY_TASKS : QUICK_GENERAL_TASKS;
+  const presets = quickTasks || (dailyMode ? QUICK_DAILY_TASKS : QUICK_GENERAL_TASKS);
   const openTasks = tasks.filter(t => t.status !== 'done');
   const doneTasks = tasks.filter(t => t.status === 'done');
   const sortedOpen = [...openTasks].sort((a, b) => {
@@ -2278,7 +2329,52 @@ function GeneralTaskSection({
         marginTop: 5,
         flexWrap: 'wrap'
       }
-    }, task.status !== 'doing' && React.createElement("button", {
+    }, React.createElement("select", {
+      value: task.type || formDefaultType,
+      onChange: e => onUpdate(task.id, {
+        type: e.target.value
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '3px 8px',
+        fontSize: 11
+      },
+      title: "カテゴリを変更"
+    }, taskTypes.map(tt => React.createElement("option", {
+      key: tt.id,
+      value: tt.id
+    }, tt.label))), dailyMode && React.createElement("select", {
+      value: task.dailyPriority || 'normal',
+      onChange: e => onUpdate(task.id, {
+        dailyPriority: e.target.value
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '3px 8px',
+        fontSize: 11
+      },
+      title: "緊急度を変更"
+    }, DAILY_TASK_PRIORITIES.map(pri => React.createElement("option", {
+      key: pri.id,
+      value: pri.id
+    }, pri.label))), React.createElement("select", {
+      value: task.estimate || '5',
+      onChange: e => onUpdate(task.id, {
+        estimate: e.target.value
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '3px 8px',
+        fontSize: 11
+      },
+      title: "目安時間を変更"
+    }, ESTIMATES.map(es => React.createElement("option", {
+      key: es.id,
+      value: es.id
+    }, es.label))), task.status !== 'doing' && React.createElement("button", {
       className: "btn-sm",
       onClick: () => onUpdate(task.id, {
         status: 'doing'
@@ -2422,17 +2518,32 @@ function GeneralTaskSection({
       flexWrap: 'wrap',
       alignItems: 'center'
     }
-  }, React.createElement("span", {
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: onToggleQuick,
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      border: '1px solid var(--border)',
+      borderRadius: 99,
+      padding: '4px 10px'
+    }
+  }, quickOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "\u3088\u304F\u4F7F\u3046 (", presets.length, ")"), quickOpen && React.createElement("span", {
     style: {
       fontSize: 11,
       color: 'var(--text-3)',
       fontWeight: 700,
       marginRight: 2
     }
-  }, "\u3088\u304F\u4F7F\u3046:"), quickTasks.map(q => {
+  }, "\u8FFD\u52A0:"), quickOpen && presets.map(q => {
     const type = typeMeta(q.type);
     return React.createElement("button", {
-      key: q.title,
+      key: q.id || q.title,
       className: "set-chip",
       onClick: () => onQuickAdd(q),
       title: q.title + 'を追加',
@@ -3232,6 +3343,308 @@ function ScheduledEventSection({
     }
   }, sorted.map(row))));
 }
+function QuickPresetManager({
+  patientPresets,
+  dailyPresets,
+  onUpdatePatient,
+  onUpdateDaily,
+  onAddPatient,
+  onAddDaily,
+  onRemovePatient,
+  onRemoveDaily,
+  showPatient = true,
+  showDaily = true
+}) {
+  const renderList = (label, presets, dailyMode, onUpdate, onAdd, onRemove) => {
+    const taskTypes = dailyMode ? DAILY_TASK_TYPES : GENERAL_TASK_TYPES;
+    return React.createElement("div", {
+      style: {
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 12
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8
+      }
+    }, React.createElement("strong", {
+      style: {
+        fontSize: 13
+      }
+    }, label), React.createElement("button", {
+      className: "btn-sm",
+      onClick: onAdd
+    }, "+ 追加")), presets.map((preset, idx) => React.createElement("div", {
+      key: preset.id || `${preset.title}-${idx}`,
+      style: {
+        display: 'grid',
+        gridTemplateColumns: dailyMode ? 'minmax(0,1.4fr) minmax(76px,.7fr) minmax(70px,.55fr) minmax(70px,.55fr) auto' : 'minmax(0,1.5fr) minmax(76px,.7fr) minmax(70px,.55fr) auto',
+        gap: 6,
+        alignItems: 'center',
+        marginTop: 6
+      }
+    }, React.createElement("input", {
+      value: preset.title || '',
+      onChange: e => onUpdate(idx, {
+        title: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }), React.createElement("select", {
+      value: preset.type || (dailyMode ? 'home' : 'docs'),
+      onChange: e => onUpdate(idx, {
+        type: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, taskTypes.map(t => React.createElement("option", {
+      key: t.id,
+      value: t.id
+    }, t.label))), React.createElement("select", {
+      value: preset.estimate || '5',
+      onChange: e => onUpdate(idx, {
+        estimate: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, ESTIMATES.map(e => React.createElement("option", {
+      key: e.id,
+      value: e.id
+    }, e.label))), dailyMode && React.createElement("select", {
+      value: preset.dailyPriority || 'normal',
+      onChange: e => onUpdate(idx, {
+        dailyPriority: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, DAILY_TASK_PRIORITIES.map(p => React.createElement("option", {
+      key: p.id,
+      value: p.id
+    }, p.label))), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onRemove(idx),
+      style: {
+        opacity: .65
+      }
+    }, "削除"))));
+  };
+  return React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: 'grid',
+      gap: 10
+    }
+  }, showPatient && renderList("ぺいとり: よく使う", patientPresets, false, onUpdatePatient, onAddPatient, onRemovePatient), showDaily && renderList("でいとり: よく使う", dailyPresets, true, onUpdateDaily, onAddDaily, onRemoveDaily));
+}
+function RoutinePresetSection({
+  presets,
+  open,
+  onToggleOpen,
+  onUpdate,
+  onAdd,
+  onRemove,
+  onApplyToday
+}) {
+  const toggleWeekday = (preset, day) => {
+    const days = new Set(preset.weekdays || []);
+    if (days.has(day)) days.delete(day);else days.add(day);
+    onUpdate(preset.id, {
+      weekdays: [...days].sort((a, b) => a - b)
+    });
+  };
+  const rows = presets.map(preset => {
+    const isEvent = preset.kind === 'event';
+    const taskTypes = preset.mode === 'daily' ? DAILY_TASK_TYPES : GENERAL_TASK_TYPES;
+    return React.createElement("div", {
+      key: preset.id,
+      style: {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0,1.3fr) 78px 92px 100px',
+        gap: 6,
+        alignItems: 'center',
+        borderTop: '1px solid var(--border)',
+        paddingTop: 8,
+        marginTop: 8
+      }
+    }, React.createElement("input", {
+      value: preset.title || '',
+      onChange: e => onUpdate(preset.id, {
+        title: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }), React.createElement("select", {
+      value: preset.kind || 'task',
+      onChange: e => onUpdate(preset.id, {
+        kind: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, React.createElement("option", {
+      value: "task"
+    }, "すきま"), React.createElement("option", {
+      value: "event"
+    }, "予定")), isEvent ? React.createElement("input", {
+      type: "time",
+      value: preset.scheduledTime || '',
+      onChange: e => onUpdate(preset.id, {
+        scheduledTime: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }) : React.createElement("select", {
+      value: preset.mode || 'daily',
+      onChange: e => onUpdate(preset.id, {
+        mode: e.target.value
+      }),
+      className: "inp",
+      style: {
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, React.createElement("option", {
+      value: "patient"
+    }, "ぺいとり"), React.createElement("option", {
+      value: "daily"
+    }, "でいとり")), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onRemove(preset.id)
+    }, "削除"), React.createElement("div", {
+      style: {
+        gridColumn: '1 / -1',
+        display: 'flex',
+        gap: 5,
+        flexWrap: 'wrap'
+      }
+    }, WEEKDAY_OPTIONS.map(day => React.createElement("button", {
+      key: day.id,
+      className: "tag",
+      onClick: () => toggleWeekday(preset, day.id),
+      style: {
+        background: (preset.weekdays || []).includes(day.id) ? 'var(--accent)' : 'var(--surface-2)',
+        color: (preset.weekdays || []).includes(day.id) ? '#fff' : 'var(--text-3)',
+      border: '1px solid var(--border)',
+      cursor: 'pointer'
+    }
+    }, day.label))), !isEvent && React.createElement("div", {
+      style: {
+        gridColumn: '1 / -1',
+        display: 'flex',
+        gap: 6,
+        flexWrap: 'wrap'
+      }
+    }, React.createElement("select", {
+      value: preset.type || (preset.mode === 'daily' ? 'home' : 'docs'),
+      onChange: e => onUpdate(preset.id, {
+        type: e.target.value
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, taskTypes.map(t => React.createElement("option", {
+      key: t.id,
+      value: t.id
+    }, t.label))), React.createElement("select", {
+      value: preset.estimate || '5',
+      onChange: e => onUpdate(preset.id, {
+        estimate: e.target.value
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, ESTIMATES.map(e => React.createElement("option", {
+      key: e.id,
+      value: e.id
+    }, e.label))), preset.mode === 'daily' && React.createElement("select", {
+      value: preset.dailyPriority || 'normal',
+      onChange: e => onUpdate(preset.id, {
+        dailyPriority: e.target.value
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '5px 8px',
+        fontSize: 12
+      }
+    }, DAILY_TASK_PRIORITIES.map(p => React.createElement("option", {
+      key: p.id,
+      value: p.id
+    }, p.label)))));
+  });
+  return React.createElement("div", {
+    style: {
+      marginTop: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 12,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "固定予定・固定すきま (", presets.length, ")"), open && React.createElement("div", {
+    style: {
+      marginTop: 10,
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 14,
+      padding: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-dark",
+    onClick: onApplyToday
+  }, "今日分を一括登録"), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onAdd
+  }, "+ 固定項目")), rows));
+}
 function PatientTriage() {
   const {
     useState,
@@ -3271,9 +3684,17 @@ function PatientTriage() {
   const [importText, setImportText] = useState('');
   const [dataToolsOpen, setDataToolsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [quickPresetsOpen, setQuickPresetsOpen] = useState(false);
+  const [dailyQuickPresetsOpen, setDailyQuickPresetsOpen] = useState(false);
+  const [routineOpen, setRoutineOpen] = useState(false);
   const [templates, setTemplates] = useState([]);
+  const [quickGeneralPresets, setQuickGeneralPresets] = useState(QUICK_GENERAL_TASKS);
+  const [quickDailyPresets, setQuickDailyPresets] = useState(QUICK_DAILY_TASKS);
+  const [routinePresets, setRoutinePresets] = useState(DEFAULT_ROUTINE_PRESETS);
   const [generalTasks, setGeneralTasks] = useState([]);
   const [generalOpen, setGeneralOpen] = useState(true);
+  const [quickGeneralOpen, setQuickGeneralOpen] = useState(false);
+  const [quickDailyOpen, setQuickDailyOpen] = useState(false);
   const [generalForm, setGeneralForm] = useState({
     title: '',
     type: 'docs',
@@ -3363,6 +3784,9 @@ function PatientTriage() {
       setDailyPatients(Array.isArray(parsed.dailyPatients) ? parsed.dailyPatients : []);
       if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
       setTemplates(Array.isArray(parsed.templates) ? parsed.templates : DEFAULT_TEMPLATES);
+      setQuickGeneralPresets(Array.isArray(parsed.quickGeneralPresets) ? parsed.quickGeneralPresets : QUICK_GENERAL_TASKS);
+      setQuickDailyPresets(Array.isArray(parsed.quickDailyPresets) ? parsed.quickDailyPresets : QUICK_DAILY_TASKS);
+      setRoutinePresets(Array.isArray(parsed.routinePresets) ? parsed.routinePresets : DEFAULT_ROUTINE_PRESETS);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
       setScheduledEvents(Array.isArray(parsed.scheduledEvents) ? parsed.scheduledEvents : []);
@@ -3377,12 +3801,15 @@ function PatientTriage() {
       patients,
       stats,
       templates,
+      quickGeneralPresets,
+      quickDailyPresets,
+      routinePresets,
       generalTasks,
       dailyPatients,
       dailyGeneralTasks,
       scheduledEvents
     });
-  }, [patients, stats, templates, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -3437,6 +3864,9 @@ function PatientTriage() {
     patients: cloneForUndo(activePatients),
     stats: cloneForUndo(stats),
     templates: cloneForUndo(templates),
+    quickGeneralPresets: cloneForUndo(quickGeneralPresets),
+    quickDailyPresets: cloneForUndo(quickDailyPresets),
+    routinePresets: cloneForUndo(routinePresets),
     generalTasks: cloneForUndo(activeGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
     expandedPatients: cloneForUndo(activeExpandedPatients),
@@ -3451,6 +3881,9 @@ function PatientTriage() {
       date: todayStr()
     });
     setTemplates(Array.isArray(undoEntry.templates) ? undoEntry.templates : DEFAULT_TEMPLATES);
+    setQuickGeneralPresets(Array.isArray(undoEntry.quickGeneralPresets) ? undoEntry.quickGeneralPresets : QUICK_GENERAL_TASKS);
+    setQuickDailyPresets(Array.isArray(undoEntry.quickDailyPresets) ? undoEntry.quickDailyPresets : QUICK_DAILY_TASKS);
+    setRoutinePresets(Array.isArray(undoEntry.routinePresets) ? undoEntry.routinePresets : DEFAULT_ROUTINE_PRESETS);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
     setActiveExpandedPatients(undoEntry.expandedPatients || {});
@@ -4006,6 +4439,104 @@ function PatientTriage() {
     ...t,
     items: t.items.filter((_, i) => i !== idx)
   } : t));
+  const addQuickPreset = mode => {
+    rememberUndo('よく使う項目追加');
+    const item = mode === 'daily' ? {
+      id: uid(),
+      title: '新しい項目',
+      type: 'home',
+      estimate: '5',
+      dailyPriority: 'normal'
+    } : {
+      id: uid(),
+      title: '新しい項目',
+      type: 'docs',
+      estimate: '5'
+    };
+    if (mode === 'daily') setQuickDailyPresets(prev => [...prev, item]);else setQuickGeneralPresets(prev => [...prev, item]);
+  };
+  const updateQuickPreset = (mode, idx, updates) => {
+    const setter = mode === 'daily' ? setQuickDailyPresets : setQuickGeneralPresets;
+    setter(prev => prev.map((item, i) => i === idx ? {
+      ...item,
+      ...updates
+    } : item));
+  };
+  const removeQuickPreset = (mode, idx) => {
+    rememberUndo('よく使う項目削除');
+    const setter = mode === 'daily' ? setQuickDailyPresets : setQuickGeneralPresets;
+    setter(prev => prev.filter((_, i) => i !== idx));
+  };
+  const addRoutinePreset = () => {
+    rememberUndo('固定項目追加');
+    setRoutinePresets(prev => [...prev, {
+      id: uid(),
+      kind: 'task',
+      mode: isDailyMode ? 'daily' : 'patient',
+      title: '新しい固定項目',
+      type: isDailyMode ? 'home' : 'docs',
+      estimate: '5',
+      dailyPriority: 'normal',
+      scheduledTime: '09:00',
+      weekdays: [1, 2, 3, 4, 5]
+    }]);
+  };
+  const updateRoutinePreset = (id, updates) => {
+    setRoutinePresets(prev => prev.map(item => item.id === id ? {
+      ...item,
+      ...updates
+    } : item));
+  };
+  const removeRoutinePreset = id => {
+    rememberUndo('固定項目削除');
+    setRoutinePresets(prev => prev.filter(item => item.id !== id));
+  };
+  const applyTodayRoutines = () => {
+    const day = new Date().getDay();
+    const matched = routinePresets.filter(item => (item.weekdays || []).includes(day) && item.title?.trim());
+    if (!matched.length) {
+      showToast('今日に該当する固定項目はありません');
+      return;
+    }
+    rememberUndo('固定項目一括登録');
+    const stamp = todayStr();
+    const newPatientTasks = [];
+    const newDailyTasks = [];
+    const newEvents = [];
+    matched.forEach(item => {
+      if (item.kind === 'event') {
+        newEvents.push({
+          id: uid(),
+          title: item.title.trim(),
+          scheduledTime: item.scheduledTime || '09:00',
+          status: 'todo',
+          createdAt: Date.now(),
+          routineId: item.id,
+          routineDate: stamp,
+          scheduledEvent: true
+        });
+      } else {
+        const task = {
+          id: uid(),
+          title: item.title.trim(),
+          type: item.type || (item.mode === 'daily' ? 'home' : 'docs'),
+          estimate: item.estimate || '5',
+          dailyPriority: item.mode === 'daily' ? item.dailyPriority || 'normal' : undefined,
+          dueDate: null,
+          status: 'todo',
+          createdAt: Date.now(),
+          general: true,
+          routineId: item.id,
+          routineDate: stamp
+        };
+        if (item.mode === 'daily') newDailyTasks.push(task);else newPatientTasks.push(task);
+      }
+    });
+    if (newPatientTasks.length) setGeneralTasks(prev => [...prev, ...newPatientTasks]);
+    if (newDailyTasks.length) setDailyGeneralTasks(prev => [...prev, ...newDailyTasks]);
+    if (newEvents.length) setScheduledEvents(prev => [...prev, ...newEvents]);
+    showToast(`固定項目を${matched.length}件入れました`);
+  };
   const setGasConfig = cfg => {
     setGasConfigState(cfg);
     saveGasConfig(cfg);
@@ -4014,17 +4545,23 @@ function PatientTriage() {
     patients,
     stats,
     templates,
+    quickGeneralPresets,
+    quickDailyPresets,
+    routinePresets,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 4
+    version: 5
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
     setPatients(parsed.patients);
     if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
+    if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
+    if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
+    if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -4085,16 +4622,19 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
     templates,
+    quickGeneralPresets,
+    quickDailyPresets,
+    routinePresets,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 4,
+    version: 5,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -4139,6 +4679,9 @@ function PatientTriage() {
     setPatients(parsed.patients);
     if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
+    if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
+    if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
+    if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -4630,7 +5173,7 @@ function PatientTriage() {
     className: `desktop-main-grid${isDailyMode ? ' desktop-main-grid-daily' : ''}`
   }, React.createElement("section", {
     className: "desktop-patient-column"
-  }, isDailyMode ? React.createElement(GeneralTaskSection, {
+  }, isDailyMode ? React.createElement(React.Fragment, null, React.createElement(GeneralTaskSection, {
     tasks: activeGeneralTasks,
     open: generalOpen,
     onToggleOpen: () => setGeneralOpen(v => !v),
@@ -4641,11 +5184,43 @@ function PatientTriage() {
     onRemove: removeGeneralTask,
     onClearDone: clearDoneGeneralTasks,
     onQuickAdd: addQuickGeneralTask,
+    quickTasks: quickDailyPresets,
+    quickOpen: quickDailyOpen,
+    onToggleQuick: () => setQuickDailyOpen(v => !v),
     typeMeta: generalTypeMeta,
     estMeta: estMeta,
     now: now,
     dailyMode: true
-  }) : React.createElement("div", {
+  }), React.createElement("div", {
+    style: {
+      marginTop: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setDailyQuickPresetsOpen(v => !v),
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 12,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, dailyQuickPresetsOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "\u3067\u3044\u3068\u308A \u3088\u304F\u4F7F\u3046\u7DE8\u96C6 (", quickDailyPresets.length, ")"), dailyQuickPresetsOpen && React.createElement(QuickPresetManager, {
+    patientPresets: quickGeneralPresets,
+    dailyPresets: quickDailyPresets,
+    onUpdatePatient: (idx, updates) => updateQuickPreset('patient', idx, updates),
+    onUpdateDaily: (idx, updates) => updateQuickPreset('daily', idx, updates),
+    onAddPatient: () => addQuickPreset('patient'),
+    onAddDaily: () => addQuickPreset('daily'),
+    onRemovePatient: idx => removeQuickPreset('patient', idx),
+    onRemoveDaily: idx => removeQuickPreset('daily', idx),
+    showPatient: false
+  }))) : React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -4724,6 +5299,9 @@ function PatientTriage() {
     onRemove: removeGeneralTask,
     onClearDone: clearDoneGeneralTasks,
     onQuickAdd: addQuickGeneralTask,
+    quickTasks: quickGeneralPresets,
+    quickOpen: quickGeneralOpen,
+    onToggleQuick: () => setQuickGeneralOpen(v => !v),
     typeMeta: generalTypeMeta,
     estMeta: estMeta,
     now: now
@@ -4973,6 +5551,43 @@ function PatientTriage() {
     onAddItem: addTemplateItem,
     onUpdateItem: updateTemplateItem,
     onRemoveItem: removeTemplateItem
+  }), React.createElement("div", {
+    style: {
+      marginTop: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setQuickPresetsOpen(v => !v),
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 12,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, quickPresetsOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "\u307A\u3044\u3068\u308A \u3088\u304F\u4F7F\u3046\u7DE8\u96C6 (", quickGeneralPresets.length, ")"), quickPresetsOpen && React.createElement(QuickPresetManager, {
+    patientPresets: quickGeneralPresets,
+    dailyPresets: quickDailyPresets,
+    onUpdatePatient: (idx, updates) => updateQuickPreset('patient', idx, updates),
+    onUpdateDaily: (idx, updates) => updateQuickPreset('daily', idx, updates),
+    onAddPatient: () => addQuickPreset('patient'),
+    onAddDaily: () => addQuickPreset('daily'),
+    onRemovePatient: idx => removeQuickPreset('patient', idx),
+    onRemoveDaily: idx => removeQuickPreset('daily', idx),
+    showDaily: false
+  }), React.createElement(RoutinePresetSection, {
+    presets: routinePresets,
+    open: routineOpen,
+    onToggleOpen: () => setRoutineOpen(v => !v),
+    onUpdate: updateRoutinePreset,
+    onAdd: addRoutinePreset,
+    onRemove: removeRoutinePreset,
+    onApplyToday: applyTodayRoutines
   })), gasDialog && React.createElement(GasConfigDialog, {
     config: gasConfig,
     onSave: cfg => {
@@ -5288,6 +5903,6 @@ function PatientTriage() {
     }
   }, "\u4ECA\u65E5\u306E\u4F5C\u696D\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
-  }, toast));
+  }, toast)));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(PatientTriage, null));
