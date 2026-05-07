@@ -2281,7 +2281,6 @@ function GeneralTaskSection({
           setDraftTaskTitle('');
         }
       },
-      onBlur: () => commitTitleEdit(task),
       className: "inp",
       style: {
         flex: '1 1 12rem',
@@ -2318,11 +2317,11 @@ function GeneralTaskSection({
     }, due.text), React.createElement("span", {
       style: {
         fontSize: 11,
-        color: 'var(--text-3)',
-        fontWeight: 600,
-        marginLeft: 'auto'
-      }
-    }, est.label)), !isDone && React.createElement("div", {
+      color: 'var(--text-3)',
+      fontWeight: 600,
+      marginLeft: 'auto'
+    }
+    }, est.label)), editingTaskId === task.id && React.createElement("div", {
       style: {
         display: 'flex',
         gap: 10,
@@ -2374,7 +2373,34 @@ function GeneralTaskSection({
     }, ESTIMATES.map(es => React.createElement("option", {
       key: es.id,
       value: es.id
-    }, es.label))), task.status !== 'doing' && React.createElement("button", {
+    }, es.label))), React.createElement("input", {
+      type: "date",
+      value: task.dueDate || '',
+      onChange: e => onUpdate(task.id, {
+        dueDate: e.target.value || null
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '3px 8px',
+        fontSize: 11
+      },
+      title: "期限を変更"
+    }), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => commitTitleEdit(task),
+      style: {
+        marginLeft: 'auto',
+        color: 'var(--accent)'
+      }
+    }, "完了")), !isDone && React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 10,
+        marginTop: 5,
+        flexWrap: 'wrap'
+      }
+    }, task.status !== 'doing' && React.createElement("button", {
       className: "btn-sm",
       onClick: () => onUpdate(task.id, {
         status: 'doing'
