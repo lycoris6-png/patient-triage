@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patient-triage-pwa-v15';
+const CACHE_NAME = 'patient-triage-pwa-v16';
 const APP_SHELL = [
   './',
   './index.html',
@@ -51,8 +51,10 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  const path = url.pathname;
+  const isFreshCode = request.mode === 'navigate' || /\.(?:html|js|webmanifest)$/i.test(path) || path.endsWith('/service-worker.js');
 
-  if (request.mode === 'navigate') {
+  if (isFreshCode) {
     event.respondWith(
       fetch(request)
         .then(response => {
@@ -60,7 +62,7 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
           return response;
         })
-        .catch(() => caches.match('./index.html'))
+        .catch(() => caches.match(request).then(cached => cached || caches.match('./index.html')))
     );
     return;
   }
