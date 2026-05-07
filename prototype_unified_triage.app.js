@@ -763,7 +763,7 @@ function timeStatus(scheduledTime, nowMs) {
   const d = (sched - nowMs) / 60000;
   if (d < -5) return 'past';
   if (d < 5) return 'now';
-  if (d < 30) return 'soon';
+  if (d <= 30) return 'soon';
   if (d < 120) return 'upcoming';
   return 'future';
 }
@@ -3051,6 +3051,187 @@ function TemplatesSection({
     size: 13
   }), "\u65B0\u898F\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8"));
 }
+function ScheduledEventSection({
+  events,
+  open,
+  onToggleOpen,
+  form,
+  setForm,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onClearDone,
+  now
+}) {
+  const activeEvents = events.filter(e => e.status !== 'done');
+  const doneEvents = events.filter(e => e.status === 'done');
+  const sorted = [...activeEvents].sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || '') || (a.createdAt || 0) - (b.createdAt || 0));
+  if (!open) return null;
+  const statusMeta = event => {
+    const ts = timeStatus(event.scheduledTime, now);
+    if (ts === 'past') return {
+      label: '経過',
+      bg: '#FEE2E2',
+      fg: '#991B1B'
+    };
+    if (ts === 'now') return {
+      label: 'まもなく',
+      bg: '#FEF3C7',
+      fg: '#92400E'
+    };
+    if (ts === 'soon') return {
+      label: '30分以内',
+      bg: '#DBEAFE',
+      fg: '#1D4ED8'
+    };
+    return {
+      label: '予定',
+      bg: 'var(--surface-2)',
+      fg: 'var(--text-3)'
+    };
+  };
+  const row = event => {
+    const meta = statusMeta(event);
+    return React.createElement("li", {
+      key: event.id,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '8px 0',
+        borderTop: '1px solid var(--border)'
+      }
+    }, React.createElement("span", {
+      className: "time-tag",
+      style: {
+        minWidth: 52,
+        justifyContent: 'center',
+        background: meta.bg,
+        color: meta.fg
+      }
+    }, event.scheduledTime), React.createElement("input", {
+      value: event.title,
+      onChange: e => onUpdate(event.id, {
+        title: e.target.value
+      }),
+      className: "inp",
+      style: {
+        flex: 1,
+        minWidth: 0,
+        padding: '6px 9px',
+        fontSize: 13,
+        fontWeight: 650
+      },
+      "aria-label": "予定名"
+    }), React.createElement("span", {
+      className: "tag",
+      style: {
+        background: meta.bg,
+        color: meta.fg,
+        fontSize: 10,
+        flexShrink: 0
+      }
+    }, meta.label), React.createElement("button", {
+      className: "btn-green",
+      onClick: () => onUpdate(event.id, {
+        status: 'done',
+        completedAt: Date.now()
+      }),
+      style: {
+        padding: '5px 10px',
+        fontSize: 11,
+        flexShrink: 0
+      }
+    }, "済"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onRemove(event.id),
+      style: {
+        flexShrink: 0
+      }
+    }, "削除"));
+  };
+  return React.createElement("section", {
+    className: "card scheduled-event-section",
+    style: {
+      marginBottom: 16,
+      padding: '14px 16px'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onToggleOpen,
+    style: {
+      padding: '6px 10px',
+      fontSize: 13,
+      fontWeight: 900
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 14
+  }) : React.createElement(ChevronRight, {
+    size: 14
+  }), React.createElement(Clock, {
+    size: 14
+  }), "予定", activeEvents.length ? ` (${activeEvents.length})` : ''), doneEvents.length > 0 && React.createElement("button", {
+    className: "btn-sm",
+    onClick: onClearDone
+  }, "済みを片づける")), React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(86px, 110px) minmax(0, 1fr) auto',
+      gap: 8,
+      marginTop: 12
+    }
+  }, React.createElement("input", {
+    type: "time",
+    value: form.scheduledTime,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      scheduledTime: e.target.value
+    })),
+    className: "inp",
+    "aria-label": "予定時刻"
+  }), React.createElement("input", {
+    value: form.title,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      title: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') onAdd();
+    },
+    className: "inp",
+    placeholder: "15:00 IC、16:00 カンファレンスなど",
+    "aria-label": "予定名"
+  }), React.createElement("button", {
+    className: "btn-dark",
+    onClick: onAdd,
+    disabled: !form.title.trim() || !form.scheduledTime,
+    style: {
+      opacity: !form.title.trim() || !form.scheduledTime ? .45 : 1
+    }
+  }, React.createElement(Plus, {
+    size: 14
+  }), "追加")), sorted.length === 0 ? React.createElement("p", {
+    style: {
+      margin: '12px 0 0',
+      color: 'var(--text-3)',
+      fontSize: 12
+    }
+  }, "患者にもすき間にも属さない、時間で動く予定をここに置けます。30分前から時限タスク欄に出ます。") : React.createElement("ul", {
+    style: {
+      listStyle: 'none',
+      margin: '12px 0 0',
+      padding: 0
+    }
+  }, sorted.map(row))));
+}
 function PatientTriage() {
   const {
     useState,
@@ -3099,6 +3280,12 @@ function PatientTriage() {
     estimate: '5',
     dueDate: '',
     dailyPriority: 'normal'
+  });
+  const [scheduledEvents, setScheduledEvents] = useState([]);
+  const [scheduledOpen, setScheduledOpen] = useState(false);
+  const [scheduledForm, setScheduledForm] = useState({
+    title: '',
+    scheduledTime: ''
   });
   const [toast, setToast] = useState(null);
   const [endDayConfirm, setEndDayConfirm] = useState(false);
@@ -3178,6 +3365,7 @@ function PatientTriage() {
       setTemplates(Array.isArray(parsed.templates) ? parsed.templates : DEFAULT_TEMPLATES);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
+      setScheduledEvents(Array.isArray(parsed.scheduledEvents) ? parsed.scheduledEvents : []);
     } else {
       setTemplates(DEFAULT_TEMPLATES);
     }
@@ -3191,9 +3379,10 @@ function PatientTriage() {
       templates,
       generalTasks,
       dailyPatients,
-      dailyGeneralTasks
+      dailyGeneralTasks,
+      scheduledEvents
     });
-  }, [patients, stats, templates, generalTasks, dailyPatients, dailyGeneralTasks, loaded]);
+  }, [patients, stats, templates, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -3227,13 +3416,21 @@ function PatientTriage() {
   const donePatientTaskCount = useMemo(() => flatTasks.filter(t => t.status === 'done').length, [flatTasks]);
   const openGeneralCount = useMemo(() => activeGeneralTasks.filter(t => t.status !== 'done').length, [activeGeneralTasks]);
   const doneGeneralTaskCount = useMemo(() => activeGeneralTasks.filter(t => t.status === 'done').length, [activeGeneralTasks]);
+  const openScheduledCount = useMemo(() => scheduledEvents.filter(e => e.status !== 'done').length, [scheduledEvents]);
   const doneTaskCount = donePatientTaskCount + doneGeneralTaskCount;
   const timedAlerts = useMemo(() => {
-    return flatTasks.filter(t => t.status !== 'done' && t.scheduledTime).map(t => ({
+    const patientAlerts = flatTasks.filter(t => t.status !== 'done' && t.scheduledTime).map(t => ({
       ...t,
       ts: timeStatus(t.scheduledTime, now)
-    })).filter(t => t.ts && (timedAlertMode === 'all' || t.ts === 'past' || t.ts === 'now' || t.ts === 'soon')).sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
-  }, [flatTasks, now, timedAlertMode]);
+    })).filter(t => t.ts && (timedAlertMode === 'all' || t.ts === 'past' || t.ts === 'now' || t.ts === 'soon'));
+    const eventAlerts = scheduledEvents.filter(e => e.status !== 'done' && e.scheduledTime).map(e => ({
+      ...e,
+      patientName: '予定',
+      scheduledEvent: true,
+      ts: timeStatus(e.scheduledTime, now)
+    })).filter(e => e.ts === 'past' || e.ts === 'now' || e.ts === 'soon');
+    return [...patientAlerts, ...eventAlerts].sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+  }, [flatTasks, scheduledEvents, now, timedAlertMode]);
   const cloneForUndo = value => JSON.parse(JSON.stringify(value));
   const rememberUndo = label => setUndoEntry({
     label,
@@ -3241,6 +3438,7 @@ function PatientTriage() {
     stats: cloneForUndo(stats),
     templates: cloneForUndo(templates),
     generalTasks: cloneForUndo(activeGeneralTasks),
+    scheduledEvents: cloneForUndo(scheduledEvents),
     expandedPatients: cloneForUndo(activeExpandedPatients),
     suggestion: cloneForUndo(suggestion),
     at: Date.now()
@@ -3254,6 +3452,7 @@ function PatientTriage() {
     });
     setTemplates(Array.isArray(undoEntry.templates) ? undoEntry.templates : DEFAULT_TEMPLATES);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
+    setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
     setActiveExpandedPatients(undoEntry.expandedPatients || {});
     setSuggestion(undoEntry.suggestion || null);
     setEndDayCelebrate(null);
@@ -3595,6 +3794,40 @@ function PatientTriage() {
       };
     });
   };
+  const addScheduledEvent = () => {
+    const title = (scheduledForm.title || '').trim();
+    const scheduledTime = scheduledForm.scheduledTime;
+    if (!title || !scheduledTime) return;
+    rememberUndo('予定追加');
+    setScheduledEvents(prev => [...prev, {
+      id: uid(),
+      title,
+      scheduledTime,
+      status: 'todo',
+      createdAt: Date.now(),
+      scheduledEvent: true
+    }]);
+    setScheduledForm({
+      title: '',
+      scheduledTime
+    });
+    setScheduledOpen(true);
+  };
+  const updateScheduledEvent = (eventId, updates) => {
+    if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('予定状態変更');
+    setScheduledEvents(prev => prev.map(e => e.id === eventId ? {
+      ...e,
+      ...updates
+    } : e));
+  };
+  const removeScheduledEvent = eventId => {
+    rememberUndo('予定削除');
+    setScheduledEvents(prev => prev.filter(e => e.id !== eventId));
+  };
+  const clearDoneScheduledEvents = () => {
+    rememberUndo('完了済み予定消去');
+    setScheduledEvents(prev => prev.filter(e => e.status !== 'done'));
+  };
   const suggestNext = () => {
     let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');
     if (erOnly) {
@@ -3784,7 +4017,8 @@ function PatientTriage() {
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
-    version: 3
+    scheduledEvents,
+    version: 4
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
@@ -3794,6 +4028,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
+    if (Array.isArray(parsed.scheduledEvents)) setScheduledEvents(parsed.scheduledEvents);
     return true;
   };
   const gasPush = async () => {
@@ -3850,7 +4085,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, generalTasks, dailyPatients, dailyGeneralTasks, loaded]);
+  }, [patients, stats, templates, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -3858,7 +4093,8 @@ function PatientTriage() {
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
-    version: 3,
+    scheduledEvents,
+    version: 4,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -3906,6 +4142,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
+    if (Array.isArray(parsed.scheduledEvents)) setScheduledEvents(parsed.scheduledEvents);
     return true;
   };
   const importFromFile = file => {
@@ -4234,7 +4471,7 @@ function PatientTriage() {
   }, timedAlerts.map(t => {
     const ts = TIME_STATES[t.ts];
     return React.createElement("li", {
-      key: t.id,
+      key: `${t.scheduledEvent ? 'event' : 'task'}-${t.id}`,
       style: {
         display: 'flex',
         alignItems: 'center',
@@ -4265,7 +4502,10 @@ function PatientTriage() {
       }
     }, t.title), React.createElement("button", {
       className: "btn-green",
-      onClick: () => completeTask(t.patientId, t.id),
+      onClick: () => t.scheduledEvent ? updateScheduledEvent(t.id, {
+        status: 'done',
+        completedAt: Date.now()
+      }) : completeTask(t.patientId, t.id),
       style: {
         padding: '4px 12px',
         fontSize: 11,
@@ -4311,7 +4551,15 @@ function PatientTriage() {
     onClick: () => setAddPatientDialog(true)
   }, React.createElement(Plus, {
     size: 14
-  }), addEntityLabel), !isDailyMode && React.createElement("button", {
+  }), addEntityLabel), React.createElement("button", {
+    className: `btn-ghost${scheduledOpen ? ' btn-ghost-active' : ''}`,
+    onClick: () => setScheduledOpen(o => !o),
+    "aria-label": "予定追加",
+    "aria-pressed": scheduledOpen,
+    title: "ICやカンファレンスなど、患者にもすき間にも属さない予定"
+  }, React.createElement(Plus, {
+    size: 14
+  }), "予定追加", openScheduledCount ? ` ${openScheduledCount}` : ''), !isDailyMode && React.createElement("button", {
     className: `btn-ghost${patientSortMode === 'ward' ? ' btn-ghost-active' : ''}`,
     onClick: () => setPatientSortMode(m => m === 'priority' ? 'ward' : 'priority'),
     "aria-label": "\u60A3\u8005\u306E\u4E26\u3079\u66FF\u3048",
@@ -4326,7 +4574,18 @@ function PatientTriage() {
     onClick: suggestFromStuck
   }, React.createElement(AlertCircle, {
     size: 13
-  }), "\u8A70\u307E\u308A\u304B\u30891\u3064")), suggestion && React.createElement(SuggestionCard, {
+  }), "\u8A70\u307E\u308A\u304B\u30891\u3064")), React.createElement(ScheduledEventSection, {
+    events: scheduledEvents,
+    open: scheduledOpen,
+    onToggleOpen: () => setScheduledOpen(o => !o),
+    form: scheduledForm,
+    setForm: setScheduledForm,
+    onAdd: addScheduledEvent,
+    onUpdate: updateScheduledEvent,
+    onRemove: removeScheduledEvent,
+    onClearDone: clearDoneScheduledEvents,
+    now: now
+  }), suggestion && React.createElement(SuggestionCard, {
     suggestion: suggestion,
     typeMeta: typeMeta,
     estMeta: estMeta,
