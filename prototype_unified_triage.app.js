@@ -110,29 +110,9 @@ const TASK_TYPES = [{
   label: '退院',
   dot: '#06B6D4'
 }, {
-  id: 'clean',
-  label: '掃除',
-  dot: '#06B6D4'
-}, {
-  id: 'laundry',
-  label: '洗濯',
-  dot: '#3B82F6'
-}, {
-  id: 'health',
-  label: '体調',
-  dot: '#22C55E'
-}, {
-  id: 'shopping',
-  label: '買う',
-  dot: '#F97316'
-}, {
-  id: 'contact',
-  label: '連絡',
-  dot: '#10B981'
-}, {
-  id: 'prep',
-  label: '準備',
-  dot: '#A855F7'
+  id: 'docs',
+  label: '書類',
+  dot: '#6366F1'
 }, {
   id: 'other',
   label: 'その他',
