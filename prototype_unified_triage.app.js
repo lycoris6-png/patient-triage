@@ -703,6 +703,27 @@ const minutesUntilNextMidnight = date => {
   midnight.setHours(24, 0, 0, 0);
   return Math.max(0, Math.ceil((midnight.getTime() - date.getTime()) / 60000));
 };
+const CELEBRATION_RAYS = [-165, -138, -112, -82, -52, -24, 18, 45, 74, 105, 134, 162].map((angle, i) => ({
+  angle,
+  color: ['#facc15', '#fb7185', '#38bdf8', '#a78bfa', '#34d399'][i % 5],
+  delay: `${i * 0.025}s`,
+  distance: `${128 + i % 4 * 18}px`
+}));
+const CELEBRATION_CONFETTI = Array.from({
+  length: 34
+}, (_, i) => {
+  const angle = -170 + i * 10.2;
+  const distance = 110 + i % 7 * 22;
+  const rad = angle * Math.PI / 180;
+  return {
+    dx: `${Math.cos(rad) * distance}px`,
+    dy: `${Math.sin(rad) * distance - 34 - i % 5 * 12}px`,
+    spin: `${(i % 2 ? -1 : 1) * (180 + i * 23)}deg`,
+    color: ['#facc15', '#fb7185', '#38bdf8', '#a78bfa', '#34d399', '#f97316'][i % 6],
+    delay: `${0.06 + i % 9 * 0.035}s`,
+    shape: i % 5 === 0 ? 'round' : i % 4 === 0 ? 'ribbon' : ''
+  };
+});
 const STUCK_STEP_GOALS = [2, 3, 5, 8];
 const stuckStepGoal = task => {
   const n = Number.parseInt(task?.stuckStepGoal, 10);
@@ -6122,6 +6143,31 @@ function PatientTriage() {
       animation: 'fadeUp .18s ease both'
     }
   }, React.createElement("div", {
+    className: "celebrate-rays",
+    "aria-hidden": "true"
+  }, CELEBRATION_RAYS.map((ray, index) => React.createElement("span", {
+    key: index,
+    className: "cracker-ray",
+    style: {
+      '--angle': `${ray.angle}deg`,
+      '--distance': ray.distance,
+      '--color': ray.color,
+      '--delay': ray.delay
+    }
+  }))), React.createElement("div", {
+    className: "celebrate-confetti",
+    "aria-hidden": "true"
+  }, CELEBRATION_CONFETTI.map((piece, index) => React.createElement("span", {
+    key: index,
+    className: `confetti-piece ${piece.shape}`.trim(),
+    style: {
+      '--dx': piece.dx,
+      '--dy': piece.dy,
+      '--spin': piece.spin,
+      '--color': piece.color,
+      '--delay': piece.delay
+    }
+  }))), React.createElement("div", {
     style: {
       width: 'min(420px, 92vw)',
       background: 'var(--surface)',

@@ -199,6 +199,57 @@ body {
   from { background-position: -200% center; }
   to   { background-position: 200% center; }
 }
+@keyframes crackerRayPop {
+  0%   { opacity:0; transform:translate(-50%, -50%) rotate(var(--angle)) translateX(18px) scaleX(.15); }
+  18%  { opacity:1; }
+  100% { opacity:0; transform:translate(-50%, -50%) rotate(var(--angle)) translateX(var(--distance)) scaleX(1); }
+}
+@keyframes confettiPop {
+  0%   { opacity:0; transform:translate(-50%, -50%) rotate(0deg) scale(.55); }
+  12%  { opacity:1; }
+  100% { opacity:0; transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--spin)) scale(1); }
+}
+.celebrate-confetti,
+.celebrate-rays {
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  overflow:hidden;
+}
+.cracker-ray {
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:clamp(82px, 18vw, 170px);
+  height:4px;
+  border-radius:999px;
+  background:linear-gradient(90deg, transparent, var(--color), transparent);
+  transform-origin:left center;
+  animation:crackerRayPop .78s cubic-bezier(.18,.92,.22,1) both;
+  animation-delay:var(--delay);
+}
+.confetti-piece {
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:10px;
+  height:16px;
+  border-radius:3px;
+  background:var(--color);
+  box-shadow:0 2px 6px rgba(24,15,62,.16);
+  animation:confettiPop 1.35s cubic-bezier(.12,.82,.22,1) both;
+  animation-delay:var(--delay);
+}
+.confetti-piece.round {
+  width:11px;
+  height:11px;
+  border-radius:50%;
+}
+.confetti-piece.ribbon {
+  width:18px;
+  height:7px;
+  border-radius:999px;
+}
 
 /* ── カード ── */
 .card {
@@ -918,7 +969,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="prototype_unified_triage.app.js?v=20260512-daily-free-time"></script>
+<script src="prototype_unified_triage.app.js?v=20260512-endday-confetti"></script>
 
 
 
