@@ -59,10 +59,10 @@
       filter: drop-shadow(0 8px 16px rgba(52, 38, 99, .22));
       animation: chibiFloat 1.9s ease-in-out infinite;
     }
-    .chibi-coach[data-actor="mentor"] { --chibi-scale: 1; }
-    .chibi-coach[data-actor="spark"] { --chibi-scale: 1; }
-    .chibi-coach[data-actor="butler"] { --chibi-scale: .99; }
-    .chibi-coach[data-actor="yushka"] { --chibi-scale: .95; }
+    .chibi-coach[data-actor="mentor"],
+    .chibi-coach[data-actor="spark"],
+    .chibi-coach[data-actor="butler"],
+    .chibi-coach[data-actor="yushka"] { --chibi-scale: 1; }
     .chibi-coach-bubble {
       position: relative;
       margin-bottom: 12px;
@@ -485,7 +485,7 @@ input[type="time"]::-webkit-calendar-picker-indicator { opacity:.5; }
     url('chibi_split_pngs/bat_wing_girl_01_neutral.png'),
     url('chibi_split_pngs/blue_white_girl_06_clipboard.png');
   background-repeat: no-repeat;
-  background-size: 66px auto, 64px auto, 64px auto, 64px auto;
+  background-size: auto 68px, auto 68px, auto 68px, auto 68px;
   background-position:
     right 34px bottom 6px,
     right 112px bottom 7px,
@@ -503,7 +503,7 @@ body.header-cast-b .app-header::before {
     url('chibi_split_pngs/blue_white_girl_07_completed.png'),
     url('chibi_split_pngs/yushka_06_laptop.png'),
     url('chibi_split_pngs/red_antler_girl_02_thumbsup.png');
-  background-size: 64px auto, 66px auto, 64px auto;
+  background-size: auto 68px, auto 68px, auto 68px;
   background-position:
     right 42px bottom 7px,
     right 118px bottom 6px,
@@ -516,7 +516,7 @@ body.header-cast-c .app-header::before {
     url('chibi_split_pngs/red_antler_girl_06_clipboard.png'),
     url('chibi_split_pngs/yushka_03_cheer.png'),
     url('chibi_split_pngs/blue_white_girl_01_neutral.png');
-  background-size: 64px auto, 64px auto, 66px auto, 64px auto;
+  background-size: auto 68px, auto 68px, auto 68px, auto 68px;
   background-position:
     right 36px bottom 7px,
     right 108px bottom 7px,
@@ -552,18 +552,26 @@ body.rpg-mode .app-title-button {
 
 @media (max-width: 640px) {
   .app-header::before {
-    background-image: url('chibi_split_pngs/yushka_09_smug.png');
-    background-size: 56px auto;
-    background-position: right 14px bottom 32px;
-    opacity: .78;
+    background-image:
+      url('chibi_split_pngs/yushka_09_smug.png'),
+      url('chibi_split_pngs/red_antler_girl_03_cheer.png');
+    background-size: auto 58px, auto 56px;
+    background-position:
+      right 12px bottom 30px,
+      right 70px bottom 31px;
+    opacity: .82;
   }
   body.header-cast-b .app-header::before {
-    background-image: url('chibi_split_pngs/blue_white_girl_07_completed.png');
-    background-size: 56px auto;
+    background-image:
+      url('chibi_split_pngs/blue_white_girl_07_completed.png'),
+      url('chibi_split_pngs/yushka_06_laptop.png');
+    background-size: auto 58px, auto 56px;
   }
   body.header-cast-c .app-header::before {
-    background-image: url('chibi_split_pngs/bat_wing_girl_02_thumbsup.png');
-    background-size: 56px auto;
+    background-image:
+      url('chibi_split_pngs/bat_wing_girl_02_thumbsup.png'),
+      url('chibi_split_pngs/red_antler_girl_06_clipboard.png');
+    background-size: auto 58px, auto 56px;
   }
 }
 
