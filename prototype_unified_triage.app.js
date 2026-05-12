@@ -4503,11 +4503,19 @@ function PatientTriage() {
       const quick = pool.filter(t => t.estimate === '2');
       pool = quick.length > 0 ? quick : pool;
     }
+    if (!suggestion?.fromGeneral && suggestion?.task?.id && pool.length > 1) {
+      const alternatePool = pool.filter(t => t.id !== suggestion.task.id);
+      if (alternatePool.length) pool = alternatePool;
+    }
     if (!pool.length) {
       let generalPool = erOnly ? [] : activeGeneralTasks.filter(t => t.status === 'todo' || t.status === 'doing');
       if (quickOnly) {
         const quick = generalPool.filter(t => t.estimate === '2');
         generalPool = quick.length > 0 ? quick : generalPool;
+      }
+      if (suggestion?.fromGeneral && suggestion?.task?.id && generalPool.length > 1) {
+        const alternateGeneralPool = generalPool.filter(t => t.id !== suggestion.task.id);
+        if (alternateGeneralPool.length) generalPool = alternateGeneralPool;
       }
       if (!generalPool.length) {
         setSuggestion({
