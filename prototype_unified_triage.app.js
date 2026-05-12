@@ -698,6 +698,11 @@ const formatDuration = minutes => {
   return m ? `${h}\u6642\u9593${m}\u5206` : `${h}\u6642\u9593`;
 };
 const formatClock = date => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+const minutesUntilNextMidnight = date => {
+  const midnight = new Date(date);
+  midnight.setHours(24, 0, 0, 0);
+  return Math.max(0, Math.ceil((midnight.getTime() - date.getTime()) / 60000));
+};
 const STUCK_STEP_GOALS = [2, 3, 5, 8];
 const stuckStepGoal = task => {
   const n = Number.parseInt(task?.stuckStepGoal, 10);
@@ -4594,6 +4599,24 @@ function PatientTriage() {
   const showFinishEstimate = () => {
     const remaining = [...remainingPatientTasks, ...remainingGeneralTasks];
     const count = remaining.length;
+    if (isDailyMode) {
+      const taskMinutes = remaining.reduce((sum, task) => sum + estimateMinutes(task), 0);
+      const untilMidnight = minutesUntilNextMidnight(new Date());
+      const freeMinutes = Math.max(0, untilMidnight - taskMinutes);
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: 'estimate',
+          estimate: {
+            mode: 'daily',
+            count,
+            duration: formatDuration(taskMinutes),
+            freeDuration: formatDuration(freeMinutes),
+            untilMidnight: formatDuration(untilMidnight)
+          }
+        }
+      }));
+      return;
+    }
     if (!count) {
       window.dispatchEvent(new CustomEvent('chibi-coach', {
         detail: {

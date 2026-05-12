@@ -918,7 +918,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="prototype_unified_triage.app.js?v=20260512-reroll-next-task"></script>
+<script src="prototype_unified_triage.app.js?v=20260512-daily-free-time"></script>
 
 
 
@@ -1045,6 +1045,20 @@ body.rpg-mode .chibi-coach-bubble {
       ? `\u6b8b\u308a${meta.count}\u4ef6\u3001\u898b\u7a4d\u3082\u308a\u5408\u8a08${meta.duration}\u3002\u4eca\u304b\u3089\u306a\u3089${meta.finishTime}\u3054\u308d\u3060\u306a\u3002\u5272\u308a\u8fbc\u307f\u304c\u6765\u305f\u3089\u307e\u305f\u898b\u76f4\u305b\u3070\u3044\u3044\u3002`
       : '\u6b8b\u30bf\u30b9\u30af\u306f\u306a\u3057\u3002\u3088\u3057\u3001\u4eca\u306f\u4e00\u606f\u3064\u3051\u308b\u3068\u3053\u308d\u3060\u306a\u3002'
   };
+  const dailyEstimateLines = {
+    mentor: meta => meta.count
+      ? `0:00\u307e\u3067\u306e\u81ea\u7531\u6642\u9593\u306f\u7d04${meta.freeDuration}\u3067\u3059\u3002\u6b8b\u308a${meta.count}\u4ef6\u3092${meta.duration}\u3068\u898b\u3066\u3001\u5c11\u3057\u4f59\u767d\u3092\u6b8b\u3057\u307e\u3057\u3087\u3046\u3002`
+      : `0:00\u307e\u3067\u306e\u81ea\u7531\u6642\u9593\u306f\u7d04${meta.freeDuration}\u3067\u3059\u3002\u4eca\u306f\u305d\u306e\u307e\u307e\u4f11\u3093\u3067\u5927\u4e08\u592b\u3067\u3059\u3002`,
+    butler: meta => meta.count
+      ? `\u7fcc\u65e50:00\u307e\u3067\u306e\u4f59\u767d\u306f${meta.freeDuration}\u307b\u3069\u3067\u3059\u3002\u6b8b\u308a${meta.count}\u4ef6\u3001\u7121\u7406\u306a\u304f\u9806\u306b\u6574\u3048\u307e\u3057\u3087\u3046\u3002`
+      : `\u7fcc\u65e50:00\u307e\u3067\u3001${meta.freeDuration}\u307b\u3069\u81ea\u7531\u306b\u4f7f\u3048\u307e\u3059\u3002\u307c\u304f\u306f\u4e00\u89a7\u3092\u898b\u5b88\u3063\u3066\u3044\u307e\u3059\u3002`,
+    spark: meta => meta.count
+      ? `0:00\u307e\u3067\u306e\u81ea\u7531\u6642\u9593\u3001\u7d04${meta.freeDuration}\uff01\u6b8b\u308a${meta.count}\u4ef6\u3060\u3051\u7247\u3065\u3051\u305f\u3089\u3001\u3042\u3068\u306f\u8efd\u304f\u3044\u3051\u305d\u3046\uff01`
+      : `0:00\u307e\u3067\u7d04${meta.freeDuration}\u3042\u308b\u3088\uff01\u4eca\u65e5\u306e\u4f59\u767d\u3001\u5927\u4e8b\u306b\u4f7f\u304a\uff01`,
+    yushka: meta => meta.count
+      ? `0:00\u307e\u3067\u306e\u81ea\u7531\u6642\u9593\u306f${meta.freeDuration}\u3050\u3089\u3044\u3060\u306a\u3002\u6b8b\u308a${meta.count}\u4ef6\u3067${meta.duration}\u3002\u8a70\u3081\u8fbc\u307f\u3059\u304e\u308b\u306a\u3088\u3002`
+      : `0:00\u307e\u3067${meta.freeDuration}\u3050\u3089\u3044\u7a7a\u3044\u3066\u308b\u306a\u3002\u3088\u3057\u3001\u4eca\u306f\u606f\u3059\u308b\u6642\u9593\u306b\u3057\u3066\u3044\u3044\u3060\u308d\u3046\u3002`
+  };
   const dailyLines = {
     mentor: {
       start: ['今日の暮らしも、小さく整えていきましょう。', 'まずは見えている用事をひとつ置ければ十分です。'],
@@ -1124,7 +1138,8 @@ body.rpg-mode .chibi-coach-bubble {
     img.src = CHIBI_BASE + actor.img[pose || 'neutral'];
     img.alt = actor.alt;
     const lines = currentMode === 'daily' && dailyLines[who] ? dailyLines[who] : actor.lines;
-    textEl.textContent = customText || (kind === 'estimate' && estimateLines[who] ? estimateLines[who](meta || {}) : pick(lines[kind] || lines.idle));
+    const estimateSet = currentMode === 'daily' ? dailyEstimateLines : estimateLines;
+    textEl.textContent = customText || (kind === 'estimate' && estimateSet[who] ? estimateSet[who](meta || {}) : pick(lines[kind] || lines.idle));
     clearTimeout(hideTimer);
     el.classList.add('show');
     hideTimer = setTimeout(() => el.classList.remove('show'), kind === 'start' ? 4200 : 3300);
