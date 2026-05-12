@@ -795,6 +795,32 @@ function timeStatus(scheduledTime, nowMs) {
   if (d < 120) return 'upcoming';
   return 'future';
 }
+function dateTimeStatus(scheduledDate, scheduledTime, nowMs) {
+  if (!scheduledTime) return null;
+  const [h, m] = scheduledTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  const base = scheduledDate || todayStr();
+  const sched = new Date(`${base}T00:00:00`);
+  if (Number.isNaN(sched.getTime())) return timeStatus(scheduledTime, nowMs);
+  sched.setHours(h, m, 0, 0);
+  const d = (sched - nowMs) / 60000;
+  if (d < -5) return 'past';
+  if (d < 5) return 'now';
+  if (d <= 30) return 'soon';
+  if (d < 120) return 'upcoming';
+  return 'future';
+}
+function dateLabel(dateStr) {
+  if (!dateStr) return '';
+  const today = todayStr();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  if (dateStr === today) return '今日';
+  if (dateStr === tomorrowStr) return '明日';
+  const [, month, day] = dateStr.split('-');
+  return month && day ? `${Number(month)}/${Number(day)}` : dateStr;
+}
 async function gasFetch(cfg, payload) {
   await fetch(cfg.url, {
     method: 'POST',
@@ -3182,10 +3208,10 @@ function ScheduledEventSection({
 }) {
   const activeEvents = events.filter(e => e.status !== 'done');
   const doneEvents = events.filter(e => e.status === 'done');
-  const sorted = [...activeEvents].sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || '') || (a.createdAt || 0) - (b.createdAt || 0));
+  const sorted = [...activeEvents].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || '') || (a.createdAt || 0) - (b.createdAt || 0));
   if (!open) return null;
   const statusMeta = event => {
-    const ts = timeStatus(event.scheduledTime, now);
+    const ts = dateTimeStatus(event.scheduledDate, event.scheduledTime, now);
     if (ts === 'past') return {
       label: '経過',
       bg: '#FEE2E2',
@@ -3226,7 +3252,12 @@ function ScheduledEventSection({
         background: meta.bg,
         color: meta.fg
       }
-    }, event.scheduledTime), React.createElement("input", {
+    }, React.createElement("span", null, event.scheduledTime), event.scheduledDate && React.createElement("span", {
+      style: {
+        marginLeft: 4,
+        opacity: .72
+      }
+    }, dateLabel(event.scheduledDate))), React.createElement("input", {
       value: event.title,
       onChange: e => onUpdate(event.id, {
         title: e.target.value
@@ -3301,11 +3332,20 @@ function ScheduledEventSection({
   }, "済みを片づける")), React.createElement(React.Fragment, null, React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: 'minmax(86px, 110px) minmax(0, 1fr) auto',
+      gridTemplateColumns: 'minmax(128px, 150px) minmax(86px, 110px) minmax(0, 1fr) auto',
       gap: 8,
       marginTop: 12
     }
   }, React.createElement("input", {
+    type: "date",
+    value: form.scheduledDate,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      scheduledDate: e.target.value
+    })),
+    className: "inp",
+    "aria-label": "予定日"
+  }), React.createElement("input", {
     type: "time",
     value: form.scheduledTime,
     onChange: e => setForm(prev => ({
@@ -3324,7 +3364,7 @@ function ScheduledEventSection({
       if (e.key === 'Enter') onAdd();
     },
     className: "inp",
-    placeholder: "15:00 IC、16:00 カンファレンスなど",
+    placeholder: "ごみ捨て、IC、カンファレンスなど",
     "aria-label": "予定名"
   }), React.createElement("button", {
     className: "btn-dark",
@@ -3341,7 +3381,7 @@ function ScheduledEventSection({
       color: 'var(--text-3)',
       fontSize: 12
     }
-  }, "患者にもすき間にも属さない、時間で動く予定をここに置けます。30分前から時限タスク欄に出ます。") : React.createElement("ul", {
+  }, "患者にもすき間にも属さない、日付と時間で動く予定をここに置けます。30分前から時限タスク欄に出ます。") : React.createElement("ul", {
     style: {
       listStyle: 'none',
       margin: '12px 0 0',
@@ -3458,6 +3498,152 @@ function QuickPresetManager({
       gap: 10
     }
   }, showPatient && renderList("ぺいとり: よく使う", patientPresets, false, onUpdatePatient, onAddPatient, onRemovePatient), showDaily && renderList("でいとり: よく使う", dailyPresets, true, onUpdateDaily, onAddDaily, onRemoveDaily));
+}
+function DailyLinkSection({
+  links,
+  open,
+  onToggleOpen,
+  form,
+  setForm,
+  onAdd,
+  onUpdate,
+  onRemove
+}) {
+  const normalizeUrl = url => {
+    const trimmed = (url || '').trim();
+    if (!trimmed) return '';
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #0EA5E9'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(14,165,233,.07)'
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 15
+  }) : React.createElement(ChevronRight, {
+    size: 15
+  }), React.createElement("strong", {
+    style: {
+      fontSize: 14,
+      color: 'var(--text)'
+    }
+  }, "リンク集"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(14,165,233,.14)',
+      color: '#0369A1'
+    }
+  }, links.length, "件")), open && React.createElement("div", {
+    style: {
+      padding: '0 16px 16px',
+      borderTop: '1px solid var(--border)'
+    }
+  }, links.length === 0 ? React.createElement("p", {
+    style: {
+      margin: '12px 0',
+      color: 'var(--text-3)',
+      fontSize: 12
+    }
+  }, "ごみカレンダー、自治体ページ、買い物メモなどを置けます。") : React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 7,
+      marginTop: 12
+    }
+  }, links.map(link => React.createElement("div", {
+    key: link.id,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, .8fr) minmax(0, 1.2fr) auto auto',
+      gap: 6,
+      alignItems: 'center'
+    }
+  }, React.createElement("input", {
+    value: link.title || '',
+    onChange: e => onUpdate(link.id, {
+      title: e.target.value
+    }),
+    className: "inp",
+    style: {
+      padding: '6px 9px',
+      fontSize: 12
+    },
+    "aria-label": "リンク名"
+  }), React.createElement("input", {
+    value: link.url || '',
+    onChange: e => onUpdate(link.id, {
+      url: e.target.value
+    }),
+    className: "inp",
+    style: {
+      padding: '6px 9px',
+      fontSize: 12
+    },
+    "aria-label": "URL"
+  }), React.createElement("a", {
+    className: "btn-sm",
+    href: normalizeUrl(link.url),
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      textDecoration: 'none',
+      color: 'var(--accent)'
+    }
+  }, "開く"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onRemove(link.id),
+    style: {
+      opacity: .65
+    }
+  }, "削除")))), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,.8fr) minmax(0,1.2fr) auto',
+      gap: 6,
+      marginTop: 12
+    }
+  }, React.createElement("input", {
+    value: form.title,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      title: e.target.value
+    })),
+    className: "inp",
+    placeholder: "ごみカレンダー",
+    "aria-label": "追加するリンク名"
+  }), React.createElement("input", {
+    value: form.url,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      url: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') onAdd();
+    },
+    className: "inp",
+    placeholder: "https://...",
+    "aria-label": "追加するURL"
+  }), React.createElement("button", {
+    className: "btn-dark",
+    onClick: onAdd,
+    disabled: !form.title.trim() || !form.url.trim(),
+    style: {
+      opacity: !form.title.trim() || !form.url.trim() ? .45 : 1
+    }
+  }, "追加"))));
 }
 function RoutinePresetSection({
   presets,
@@ -3697,6 +3883,12 @@ function PatientTriage() {
   const [quickGeneralPresets, setQuickGeneralPresets] = useState(QUICK_GENERAL_TASKS);
   const [quickDailyPresets, setQuickDailyPresets] = useState(QUICK_DAILY_TASKS);
   const [routinePresets, setRoutinePresets] = useState(DEFAULT_ROUTINE_PRESETS);
+  const [dailyLinks, setDailyLinks] = useState([]);
+  const [dailyLinksOpen, setDailyLinksOpen] = useState(false);
+  const [dailyLinkForm, setDailyLinkForm] = useState({
+    title: '',
+    url: ''
+  });
   const [generalTasks, setGeneralTasks] = useState([]);
   const [generalOpen, setGeneralOpen] = useState(true);
   const [quickGeneralOpen, setQuickGeneralOpen] = useState(false);
@@ -3712,6 +3904,7 @@ function PatientTriage() {
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const [scheduledForm, setScheduledForm] = useState({
     title: '',
+    scheduledDate: todayStr(),
     scheduledTime: ''
   });
   const [toast, setToast] = useState(null);
@@ -3793,6 +3986,7 @@ function PatientTriage() {
       setQuickGeneralPresets(Array.isArray(parsed.quickGeneralPresets) ? parsed.quickGeneralPresets : QUICK_GENERAL_TASKS);
       setQuickDailyPresets(Array.isArray(parsed.quickDailyPresets) ? parsed.quickDailyPresets : QUICK_DAILY_TASKS);
       setRoutinePresets(Array.isArray(parsed.routinePresets) ? parsed.routinePresets : DEFAULT_ROUTINE_PRESETS);
+      setDailyLinks(Array.isArray(parsed.dailyLinks) ? parsed.dailyLinks : []);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
       setScheduledEvents(Array.isArray(parsed.scheduledEvents) ? parsed.scheduledEvents : []);
@@ -3810,12 +4004,13 @@ function PatientTriage() {
       quickGeneralPresets,
       quickDailyPresets,
       routinePresets,
+      dailyLinks,
       generalTasks,
       dailyPatients,
       dailyGeneralTasks,
       scheduledEvents
     });
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -3860,9 +4055,9 @@ function PatientTriage() {
       ...e,
       patientName: '予定',
       scheduledEvent: true,
-      ts: timeStatus(e.scheduledTime, now)
+      ts: dateTimeStatus(e.scheduledDate, e.scheduledTime, now)
     })).filter(e => e.ts === 'past' || e.ts === 'now' || e.ts === 'soon');
-    return [...patientAlerts, ...eventAlerts].sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+    return [...patientAlerts, ...eventAlerts].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
   }, [flatTasks, scheduledEvents, now, timedAlertMode]);
   const cloneForUndo = value => JSON.parse(JSON.stringify(value));
   const rememberUndo = label => setUndoEntry({
@@ -3873,6 +4068,7 @@ function PatientTriage() {
     quickGeneralPresets: cloneForUndo(quickGeneralPresets),
     quickDailyPresets: cloneForUndo(quickDailyPresets),
     routinePresets: cloneForUndo(routinePresets),
+    dailyLinks: cloneForUndo(dailyLinks),
     generalTasks: cloneForUndo(activeGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
     expandedPatients: cloneForUndo(activeExpandedPatients),
@@ -3890,6 +4086,7 @@ function PatientTriage() {
     setQuickGeneralPresets(Array.isArray(undoEntry.quickGeneralPresets) ? undoEntry.quickGeneralPresets : QUICK_GENERAL_TASKS);
     setQuickDailyPresets(Array.isArray(undoEntry.quickDailyPresets) ? undoEntry.quickDailyPresets : QUICK_DAILY_TASKS);
     setRoutinePresets(Array.isArray(undoEntry.routinePresets) ? undoEntry.routinePresets : DEFAULT_ROUTINE_PRESETS);
+    setDailyLinks(Array.isArray(undoEntry.dailyLinks) ? undoEntry.dailyLinks : []);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
     setActiveExpandedPatients(undoEntry.expandedPatients || {});
@@ -4236,11 +4433,13 @@ function PatientTriage() {
   const addScheduledEvent = () => {
     const title = (scheduledForm.title || '').trim();
     const scheduledTime = scheduledForm.scheduledTime;
+    const scheduledDate = scheduledForm.scheduledDate || todayStr();
     if (!title || !scheduledTime) return;
     rememberUndo('予定追加');
     setScheduledEvents(prev => [...prev, {
       id: uid(),
       title,
+      scheduledDate,
       scheduledTime,
       status: 'todo',
       createdAt: Date.now(),
@@ -4248,6 +4447,7 @@ function PatientTriage() {
     }]);
     setScheduledForm({
       title: '',
+      scheduledDate,
       scheduledTime
     });
     setScheduledOpen(true);
@@ -4266,6 +4466,33 @@ function PatientTriage() {
   const clearDoneScheduledEvents = () => {
     rememberUndo('完了済み予定消去');
     setScheduledEvents(prev => prev.filter(e => e.status !== 'done'));
+  };
+  const addDailyLink = () => {
+    const title = (dailyLinkForm.title || '').trim();
+    const url = (dailyLinkForm.url || '').trim();
+    if (!title || !url) return;
+    rememberUndo('リンク追加');
+    setDailyLinks(prev => [...prev, {
+      id: uid(),
+      title,
+      url,
+      createdAt: Date.now()
+    }]);
+    setDailyLinkForm({
+      title: '',
+      url: ''
+    });
+    setDailyLinksOpen(true);
+  };
+  const updateDailyLink = (id, updates) => {
+    setDailyLinks(prev => prev.map(link => link.id === id ? {
+      ...link,
+      ...updates
+    } : link));
+  };
+  const removeDailyLink = id => {
+    rememberUndo('リンク削除');
+    setDailyLinks(prev => prev.filter(link => link.id !== id));
   };
   const suggestNext = () => {
     let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');
@@ -4514,6 +4741,7 @@ function PatientTriage() {
         newEvents.push({
           id: uid(),
           title: item.title.trim(),
+          scheduledDate: stamp,
           scheduledTime: item.scheduledTime || '09:00',
           status: 'todo',
           createdAt: Date.now(),
@@ -4554,11 +4782,12 @@ function PatientTriage() {
     quickGeneralPresets,
     quickDailyPresets,
     routinePresets,
+    dailyLinks,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 5
+    version: 6
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
@@ -4568,6 +4797,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
+    if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -4628,7 +4858,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -4636,11 +4866,12 @@ function PatientTriage() {
     quickGeneralPresets,
     quickDailyPresets,
     routinePresets,
+    dailyLinks,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 5,
+    version: 6,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -4688,6 +4919,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
+    if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -5034,7 +5266,7 @@ function PatientTriage() {
         background: ts.bg,
         color: ts.fg
       }
-    }, t.scheduledTime), React.createElement("span", {
+    }, t.scheduledEvent && t.scheduledDate ? `${dateLabel(t.scheduledDate)} ${t.scheduledTime}` : t.scheduledTime), React.createElement("span", {
       style: {
         fontFamily: 'monospace',
         fontSize: 11,
@@ -5197,6 +5429,15 @@ function PatientTriage() {
     estMeta: estMeta,
     now: now,
     dailyMode: true
+  }), React.createElement(DailyLinkSection, {
+    links: dailyLinks,
+    open: dailyLinksOpen,
+    onToggleOpen: () => setDailyLinksOpen(v => !v),
+    form: dailyLinkForm,
+    setForm: setDailyLinkForm,
+    onAdd: addDailyLink,
+    onUpdate: updateDailyLink,
+    onRemove: removeDailyLink
   }), React.createElement("div", {
     style: {
       marginTop: 10

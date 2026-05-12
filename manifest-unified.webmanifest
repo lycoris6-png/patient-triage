@@ -7,7 +7,7 @@
   "start_url": "./prototype_unified_triage.html?source=pwa",
   "scope": "./",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "portrait",
   "background_color": "#EEE8FF",
   "theme_color": "#6C3EF8",
   "categories": ["productivity", "medical"],
