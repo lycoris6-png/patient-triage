@@ -39,7 +39,7 @@
       bottom: max(14px, env(safe-area-inset-bottom));
       z-index: 9000;
       display: grid;
-      grid-template-columns: 92px minmax(160px, 250px);
+      grid-template-columns: 124px minmax(170px, 270px);
       align-items: end;
       gap: 10px;
       pointer-events: none;
@@ -52,8 +52,8 @@
       transform: translateY(0) scale(1);
     }
     .chibi-coach img {
-      width: 92px;
-      height: 92px;
+      width: 124px;
+      height: 124px;
       object-fit: contain;
       transform-origin: center bottom;
       filter: drop-shadow(0 8px 16px rgba(52, 38, 99, .22));
@@ -98,15 +98,15 @@
       .chibi-coach {
         right: 10px;
         bottom: 10px;
-        grid-template-columns: 74px minmax(0, 1fr);
+        grid-template-columns: 96px minmax(0, 1fr);
         max-width: calc(100vw - 20px);
       }
       .chibi-coach img {
-        width: 74px;
-        height: 74px;
+        width: 96px;
+        height: 96px;
       }
       .chibi-coach-bubble {
-        max-width: calc(100vw - 116px);
+        max-width: calc(100vw - 138px);
         padding: 9px 10px;
         font-size: 11px;
       }
@@ -986,6 +986,7 @@ body.rpg-mode .chibi-coach-bubble {
         cheer: 'blue_white_girl_03_cheer.png',
         thinking: 'blue_white_girl_04_thinking.png',
         hurry: 'blue_white_girl_05_hurrying.png',
+        pointing: 'blue_white_girl_05_hurrying.png',
         clipboard: 'blue_white_girl_06_clipboard.png',
         done: 'blue_white_girl_07_completed.png',
         sleep: 'blue_white_girl_08_sleeping.png'
@@ -1005,12 +1006,14 @@ body.rpg-mode .chibi-coach-bubble {
       alt: '赤い髪の元気なナディア',
       img: {
         neutral: 'red_antler_girl_01_neutral.png',
+        ready: 'red_antler_girl_01_neutral.png',
         thumb: 'red_antler_girl_02_thumbsup.png',
         cheer: 'red_antler_girl_03_cheer.png',
         thinking: 'red_antler_girl_04_thinking.png',
         hurry: 'red_antler_girl_05_hurrying.png',
         clipboard: 'red_antler_girl_06_clipboard.png',
         done: 'red_antler_girl_07_completed.png',
+        certificate: 'red_antler_girl_08_sleeping.png',
         sleep: 'red_antler_girl_08_sleeping.png'
       },
       lines: {
@@ -1034,6 +1037,7 @@ body.rpg-mode .chibi-coach-bubble {
         hurry: 'bat_wing_girl_05_hurrying.png',
         clipboard: 'bat_wing_girl_06_clipboard.png',
         done: 'bat_wing_girl_07_completed.png',
+        bow: 'bat_wing_girl_08_sleeping.png',
         sleep: 'bat_wing_girl_08_sleeping.png'
       },
       lines: {
@@ -1073,14 +1077,14 @@ body.rpg-mode .chibi-coach-bubble {
   };
 
   const flows = {
-    start: [['mentor','neutral'], ['butler','neutral'], ['spark','cheer'], ['yushka','neutral']],
-    suggest: [['spark','thinking'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking']],
+    start: [['mentor','neutral'], ['butler','neutral'], ['spark','ready'], ['spark','cheer'], ['yushka','neutral']],
+    suggest: [['spark','thinking'], ['mentor','clipboard'], ['mentor','pointing'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking']],
     estimate: [['mentor','clipboard'], ['butler','clipboard'], ['spark','thinking'], ['yushka','clipboard'], ['yushka','thinking']],
     add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer']],
-    done: [['spark','done'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug']],
-    endday: [['mentor','sleep'], ['butler','done'], ['spark','cheer'], ['yushka','smug'], ['yushka','done']],
-    stuck: [['mentor','thinking'], ['butler','thinking'], ['spark','hurry'], ['yushka','hurry'], ['yushka','thinking']],
-    idle: [['mentor','neutral'], ['butler','neutral'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep']]
+    done: [['spark','done'], ['spark','certificate'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug']],
+    endday: [['mentor','sleep'], ['butler','bow'], ['butler','done'], ['spark','certificate'], ['spark','cheer'], ['yushka','smug'], ['yushka','done']],
+    stuck: [['mentor','thinking'], ['mentor','pointing'], ['butler','thinking'], ['spark','hurry'], ['spark','ready'], ['yushka','hurry'], ['yushka','thinking']],
+    idle: [['mentor','neutral'], ['butler','neutral'], ['butler','bow'], ['spark','ready'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep']]
   };
   const estimateLines = {
     mentor: meta => meta.count
