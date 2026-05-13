@@ -50,6 +50,8 @@
     .chibi-coach.show {
       opacity: 1;
       transform: translateY(0) scale(1);
+      pointer-events: auto;
+      cursor: pointer;
     }
     .chibi-coach img {
       width: 124px;
@@ -975,7 +977,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="prototype_unified_triage.app.js?v=20260512-endday-confetti"></script>
+<script src="prototype_unified_triage.app.js?v=20260513-timer-chibi"></script>
 
 
 
@@ -1160,6 +1162,25 @@ body.rpg-mode .chibi-coach-bubble {
   };
 
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  const STORAGE_KEY_FOR_REWARDS = 'patient-triage-v1';
+  function readRewards(){
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_FOR_REWARDS);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.rewards) ? parsed.rewards.filter(r => r && (r.text || '').trim()) : [];
+    } catch { return []; }
+  }
+  function pickReward(){
+    const list = readRewards();
+    if (!list.length) return null;
+    return list[Math.floor(Math.random() * list.length)];
+  }
+  function formatRewardLine(r){
+    const when = (r.when || '').trim();
+    return when ? `🎁 ご褒美：${r.text}（${when}）` : `🎁 ご褒美：${r.text}`;
+  }
+  const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['spark','certificate']];
   let el, img, textEl, hideTimer, lastShown = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0;
   const headerCastClasses = ['', 'header-cast-b', 'header-cast-c'];
   function rotateHeaderCast(force){
@@ -1182,10 +1203,15 @@ body.rpg-mode .chibi-coach-bubble {
     el = document.createElement('div');
     el.className = 'chibi-coach';
     el.setAttribute('aria-live', 'polite');
+    el.setAttribute('role', 'button');
+    el.setAttribute('title', 'つつくとご褒美をくれる');
     el.innerHTML = '<img decoding="async" loading="eager" alt=""><div class="chibi-coach-bubble"><span class="chibi-coach-text"></span></div>';
     document.body.appendChild(el);
     img = el.querySelector('img');
     textEl = el.querySelector('.chibi-coach-text');
+    el.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('chibi-coach', { detail: { kind: 'reward' } }));
+    });
   }
 
   function show(kind, force, customText, meta){
@@ -1193,17 +1219,32 @@ body.rpg-mode .chibi-coach-bubble {
     if (!force && now - lastShown < 1800) return;
     lastShown = now;
     ensureCoach();
-    const [who, pose] = pickCastEntry(flows[kind] || flows.idle);
+    let effectiveKind = kind;
+    let rewardOverride = null;
+    if (kind === 'reward') {
+      const r = pickReward();
+      if (r) {
+        rewardOverride = formatRewardLine(r);
+      } else {
+        rewardOverride = '🎁 ご褒美はまだ設定されていません。でいとり！の「ご褒美」から登録できます。';
+      }
+    } else if (!customText && (kind === 'done' || kind === 'endday') && Math.random() < 0.05) {
+      const r = pickReward();
+      if (r) rewardOverride = formatRewardLine(r);
+    }
+    const flowKey = (kind === 'reward') ? 'reward' : kind;
+    const flowList = (flowKey === 'reward') ? rewardFlow : (flows[flowKey] || flows.idle);
+    const [who, pose] = pickCastEntry(flowList);
     const actor = cast[who];
     el.dataset.actor = who;
-    img.src = CHIBI_BASE + actor.img[pose || 'neutral'];
+    img.src = CHIBI_BASE + (actor.img[pose] || actor.img.neutral);
     img.alt = actor.alt;
     const lines = currentMode === 'daily' && dailyLines[who] ? dailyLines[who] : actor.lines;
     const estimateSet = currentMode === 'daily' ? dailyEstimateLines : estimateLines;
-    textEl.textContent = customText || (kind === 'estimate' && estimateSet[who] ? estimateSet[who](meta || {}) : pick(lines[kind] || lines.idle));
+    textEl.textContent = customText || rewardOverride || (kind === 'estimate' && estimateSet[who] ? estimateSet[who](meta || {}) : pick(lines[kind] || lines.idle));
     clearTimeout(hideTimer);
     el.classList.add('show');
-    hideTimer = setTimeout(() => el.classList.remove('show'), kind === 'start' ? 4200 : 3300);
+    hideTimer = setTimeout(() => el.classList.remove('show'), (kind === 'start' || kind === 'reward') ? 4200 : 3300);
   }
 
   function classifyButton(button){

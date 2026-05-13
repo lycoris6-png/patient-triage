@@ -934,7 +934,10 @@ function SuggestionCard({
   onStuck,
   onCompleteTask,
   onReroll,
-  onDismiss
+  onDismiss,
+  onStartTimer,
+  onStartTally,
+  running
 }) {
   if (suggestion.empty) return React.createElement("div", {
     className: "suggestion-card",
@@ -1115,7 +1118,39 @@ function SuggestionCard({
     }
   }, React.createElement(RotateCcw, {
     size: 12
-  }), "\u5225\u306E\u3092")));
+  }), "\u5225\u306E\u3092")), (onStartTimer || onStartTally) && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginTop: 10,
+      paddingTop: 10,
+      borderTop: '1px dashed var(--border)'
+    }
+  }, onStartTimer && estimateMinutes(t) > 0 && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => onStartTimer({ ...t, general: suggestion.fromGeneral }),
+    style: {
+      fontSize: 12,
+      padding: '6px 12px'
+    },
+    title: "\u898B\u7A4D\u3082\u308A\u6642\u9593\u3067\u30AB\u30A6\u30F3\u30C8\u30C0\u30A6\u30F3\u958B\u59CB"
+  }, "\u23F1 " + estimateMinutes(t) + "\u5206\u3067\u958B\u59CB"), onStartTally && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => onStartTally({ ...t, general: suggestion.fromGeneral }),
+    style: {
+      fontSize: 12,
+      padding: '6px 12px'
+    },
+    title: "\u4EF6\u6570\u3067\u30AB\u30A6\u30F3\u30C8\u958B\u59CB"
+  }, "\uD83D\uDD22 \u4EF6\u6570\u3067\u8A08\u6E2C" + (t.targetCount ? ` (\u524D\u56DE ${t.targetCount}\u4EF6)` : '')), running && running.taskId === t.id && React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--accent)',
+      fontWeight: 700,
+      alignSelf: 'center'
+    }
+  }, running.mode === 'tally' ? `\u8A08\u6E2C\u4E2D: ${running.currentCount || 0}/${running.targetCount}\u4EF6` : '\u8A08\u6E2C\u4E2D')));
 }
 function TaskRow({
   task,
@@ -1872,7 +1907,10 @@ function FocusView({
   onComplete,
   onStuck,
   onDoing,
-  onUnstick
+  onUnstick,
+  onStartTimer,
+  onStartTally,
+  running
 }) {
   const allOpen = patients.flatMap(p => p.tasks.filter(t => t.status !== 'done').map(t => ({
     ...t,
@@ -2008,7 +2046,26 @@ function FocusView({
   }), "\u8A70\u307E\u3063\u305F"), current.status === 'stuck' && React.createElement("button", {
     className: "btn-ghost",
     onClick: () => onUnstick(current.patientId, current.id)
-  }, "\u8A70\u307E\u308A\u89E3\u9664")));
+  }, "\u8A70\u307E\u308A\u89E3\u9664")), (onStartTimer || onStartTally) && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginTop: 12,
+      paddingTop: 12,
+      borderTop: '1px dashed var(--border)'
+    }
+  }, onStartTimer && estimateMinutes(current) > 0 && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => onStartTimer({ ...current, general: false }),
+    style: { fontSize: 12 }
+  }, "\u23F1 " + estimateMinutes(current) + "\u5206\u3067\u958B\u59CB"), onStartTally && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => onStartTally({ ...current, general: false }),
+    style: { fontSize: 12 }
+  }, "\uD83D\uDD22 \u4EF6\u6570\u3067\u8A08\u6E2C" + (current.targetCount ? ` (\u524D\u56DE ${current.targetCount})` : '')), running && running.taskId === current.id && React.createElement("span", {
+    style: { fontSize: 11, color: 'var(--accent)', fontWeight: 700, alignSelf: 'center' }
+  }, running.mode === 'tally' ? `\u8A08\u6E2C\u4E2D: ${running.currentCount || 0}/${running.targetCount}\u4EF6` : '\u8A08\u6E2C\u4E2D')));
 }
 function DailyFocusView({
   tasks,
@@ -2018,7 +2075,10 @@ function DailyFocusView({
   onComplete,
   onDoing,
   onHold,
-  onExit
+  onExit,
+  onStartTimer,
+  onStartTally,
+  running
 }) {
   const priorityMeta = id => DAILY_TASK_PRIORITIES.find(p => p.id === id) || DAILY_TASK_PRIORITIES[2];
   const dueMeta = due => {
@@ -2162,7 +2222,26 @@ function DailyFocusView({
   }), "\u4FDD\u7559"), React.createElement("button", {
     className: "btn-ghost",
     onClick: onExit
-  }, "\u4E00\u89A7\u3092\u898B\u308B")));
+  }, "\u4E00\u89A7\u3092\u898B\u308B")), (onStartTimer || onStartTally) && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginTop: 12,
+      paddingTop: 12,
+      borderTop: '1px dashed var(--border)'
+    }
+  }, onStartTimer && estimateMinutes(current) > 0 && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => onStartTimer({ ...current, general: true }),
+    style: { fontSize: 12 }
+  }, "\u23F1 " + estimateMinutes(current) + "\u5206\u3067\u958B\u59CB"), onStartTally && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => onStartTally({ ...current, general: true }),
+    style: { fontSize: 12 }
+  }, "\uD83D\uDD22 \u4EF6\u6570\u3067\u8A08\u6E2C" + (current.targetCount ? ` (\u524D\u56DE ${current.targetCount})` : '')), running && running.taskId === current.id && React.createElement("span", {
+    style: { fontSize: 11, color: 'var(--accent)', fontWeight: 700, alignSelf: 'center' }
+  }, running.mode === 'tally' ? `\u8A08\u6E2C\u4E2D: ${running.currentCount || 0}/${running.targetCount}\u4EF6` : '\u8A08\u6E2C\u4E2D')));
 }
 function GeneralTaskSection({
   tasks,
@@ -3671,6 +3750,158 @@ function DailyLinkSection({
     }
   }, "追加"))));
 }
+function RewardSection({
+  rewards,
+  open,
+  onToggleOpen,
+  form,
+  setForm,
+  onAdd,
+  onUpdate,
+  onRemove
+}) {
+  const WHEN_PRESETS = ['今日', '今週末', '今月', 'いつでも'];
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #F59E0B'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(245,158,11,.10)'
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 15
+  }) : React.createElement(ChevronRight, {
+    size: 15
+  }), React.createElement("strong", {
+    style: {
+      fontSize: 14,
+      color: 'var(--text)'
+    }
+  }, "ご褒美 🎁"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(245,158,11,.18)',
+      color: '#92400E'
+    }
+  }, rewards.length, "件"), React.createElement("span", {
+    style: {
+      marginLeft: 'auto',
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, "キャラをつつくと提示")), open && React.createElement("div", {
+    style: {
+      padding: '0 16px 16px',
+      borderTop: '1px solid var(--border)'
+    }
+  }, rewards.length === 0 ? React.createElement("p", {
+    style: {
+      margin: '12px 0',
+      color: 'var(--text-3)',
+      fontSize: 12,
+      lineHeight: 1.7
+    }
+  }, "週末に31アイス、お風呂で漫画、終わったら推しの動画…自分への馬車馬のにんじんを置いておけます。") : React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 7,
+      marginTop: 12
+    }
+  }, rewards.map(reward => React.createElement("div", {
+    key: reward.id,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, .7fr) auto',
+      gap: 6,
+      alignItems: 'center'
+    }
+  }, React.createElement("input", {
+    value: reward.text || '',
+    onChange: e => onUpdate(reward.id, {
+      text: e.target.value
+    }),
+    className: "inp",
+    style: {
+      padding: '6px 9px',
+      fontSize: 12
+    },
+    "aria-label": "ご褒美の内容"
+  }), React.createElement("input", {
+    value: reward.when || '',
+    onChange: e => onUpdate(reward.id, {
+      when: e.target.value
+    }),
+    className: "inp",
+    style: {
+      padding: '6px 9px',
+      fontSize: 12
+    },
+    placeholder: "いつ",
+    list: "reward-when-presets",
+    "aria-label": "いつ"
+  }), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onRemove(reward.id),
+    style: {
+      opacity: .65
+    }
+  }, "削除")))), React.createElement("datalist", {
+    id: "reward-when-presets"
+  }, WHEN_PRESETS.map(w => React.createElement("option", {
+    key: w,
+    value: w
+  }))), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,.7fr) auto',
+      gap: 6,
+      marginTop: 12
+    }
+  }, React.createElement("input", {
+    value: form.text,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      text: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') onAdd();
+    },
+    className: "inp",
+    placeholder: "週末に31アイス",
+    "aria-label": "追加するご褒美"
+  }), React.createElement("input", {
+    value: form.when,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      when: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') onAdd();
+    },
+    className: "inp",
+    placeholder: "今週末",
+    list: "reward-when-presets",
+    "aria-label": "いつ"
+  }), React.createElement("button", {
+    className: "btn-dark",
+    onClick: onAdd,
+    disabled: !form.text.trim(),
+    style: {
+      opacity: !form.text.trim() ? .45 : 1
+    }
+  }, "追加"))));
+}
 function RoutinePresetSection({
   presets,
   open,
@@ -3863,6 +4094,214 @@ function RoutinePresetSection({
     onClick: onAdd
   }, "+ 固定項目")), rows));
 }
+function pad2(n) {
+  return String(Math.abs(n)).padStart(2, '0');
+}
+function formatMSS(totalSec) {
+  const sec = Math.max(0, Math.floor(totalSec));
+  return `${pad2(Math.floor(sec / 60))}:${pad2(sec % 60)}`;
+}
+function elapsedMsOf(running, now) {
+  if (!running) return 0;
+  const base = running.pausedAt ? running.pausedAt : now;
+  return Math.max(0, base - running.startedAt - (running.accumulatedPaused || 0));
+}
+const TIMER_CHIBI = {
+  timer: {
+    neutral: 'blue_white_girl_06_clipboard.png',
+    paused: 'blue_white_girl_04_thinking.png',
+    warn: 'blue_white_girl_05_hurrying.png',
+    over: 'red_antler_girl_05_hurrying.png',
+    done: 'blue_white_girl_07_completed.png'
+  },
+  tally: {
+    neutral: 'red_antler_girl_01_neutral.png',
+    paused: 'red_antler_girl_04_thinking.png',
+    warn: 'red_antler_girl_05_hurrying.png',
+    over: 'red_antler_girl_03_cheer.png',
+    done: 'red_antler_girl_08_sleeping.png'
+  }
+};
+function FloatingTimerBar({
+  running,
+  now,
+  onIncrement,
+  onAddMinute,
+  onPauseToggle,
+  onReset,
+  onStop,
+  onComplete
+}) {
+  if (!running) return null;
+  const isTally = running.mode === 'tally';
+  const paused = !!running.pausedAt;
+  const elapsedMs = elapsedMsOf(running, now);
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+  let main, sub, accent, progressPct, chibiPose;
+  if (isTally) {
+    const count = running.currentCount || 0;
+    const target = running.targetCount || 0;
+    const remaining = Math.max(0, target - count);
+    const pace = elapsedSec > 0 ? (count / (elapsedSec / 60)) : 0;
+    const etaMin = pace > 0 && remaining > 0 ? Math.ceil(remaining / pace) : null;
+    const done = target > 0 && count >= target;
+    accent = done ? '#16A34A' : '#0EA5E9';
+    progressPct = target > 0 ? Math.min(100, (count / target) * 100) : 0;
+    main = `${count}/${target}件`;
+    sub = `経過 ${formatMSS(elapsedSec)}・${pace > 0 ? pace.toFixed(1) : '0.0'}件/分${etaMin != null ? `・あと${etaMin}分` : (done ? '・🎉達成' : '')}`;
+    chibiPose = paused ? 'paused' : (done ? 'done' : (progressPct >= 75 ? 'over' : (count > 0 ? 'warn' : 'neutral')));
+  } else {
+    const totalMs = running.durationMs || 0;
+    const remainMs = totalMs - elapsedMs;
+    const over = remainMs < 0;
+    accent = over ? '#DC2626' : (remainMs < 60000 ? '#F59E0B' : '#6C3EF8');
+    progressPct = totalMs > 0 ? Math.min(100, (elapsedMs / totalMs) * 100) : 0;
+    main = `${over ? '+' : ''}${formatMSS(Math.abs(remainMs) / 1000)}`;
+    sub = `見積${Math.round(totalMs / 60000)}分 ${over ? '（超過）' : '残り'}`;
+    chibiPose = paused ? 'paused' : (over ? 'over' : (remainMs < 60000 ? 'warn' : 'neutral'));
+  }
+  const chibiImg = TIMER_CHIBI[isTally ? 'tally' : 'timer'][chibiPose] || TIMER_CHIBI[isTally ? 'tally' : 'timer'].neutral;
+  return React.createElement("div", {
+    style: {
+      position: 'fixed',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      bottom: 'max(96px, calc(env(safe-area-inset-bottom) + 96px))',
+      zIndex: 9050,
+      width: 'min(560px, calc(100vw - 24px))',
+      background: 'var(--surface)',
+      border: '2px solid ' + accent,
+      borderRadius: 14,
+      boxShadow: '0 10px 32px rgba(24,15,62,.28)',
+      overflow: 'hidden'
+    }
+  }, React.createElement("div", {
+    style: {
+      height: 4,
+      background: 'rgba(0,0,0,.06)'
+    }
+  }, React.createElement("div", {
+    style: {
+      width: `${progressPct}%`,
+      height: '100%',
+      background: accent,
+      transition: 'width .3s ease'
+    }
+  })), React.createElement("div", {
+    style: {
+      padding: '8px 12px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("img", {
+    src: 'chibi_split_pngs/' + chibiImg,
+    alt: '',
+    decoding: 'async',
+    style: {
+      width: 56,
+      height: 56,
+      objectFit: 'contain',
+      flexShrink: 0,
+      filter: 'drop-shadow(0 4px 8px rgba(52,38,99,.18))',
+      transform: paused ? 'scale(0.96)' : 'none',
+      opacity: paused ? 0.7 : 1,
+      transition: 'transform .2s ease, opacity .2s ease'
+    }
+  }), React.createElement("div", {
+    style: {
+      flex: '1 1 160px',
+      minWidth: 0
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 700,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    },
+    title: running.title
+  }, isTally ? '🔢 ' : '⏱ ', running.title), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: 8
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: 'monospace',
+      fontSize: 22,
+      fontWeight: 900,
+      color: accent,
+      lineHeight: 1
+    }
+  }, main), React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, paused ? '一時停止中' : sub))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4,
+      flexWrap: 'wrap'
+    }
+  }, isTally && React.createElement("button", {
+    onClick: onIncrement,
+    className: "btn-dark",
+    style: {
+      padding: '7px 14px',
+      fontSize: 14,
+      fontWeight: 900
+    },
+    "aria-label": "1件追加"
+  }, "+1"), !isTally && React.createElement("button", {
+    onClick: onAddMinute,
+    className: "btn-sm",
+    style: {
+      fontSize: 11,
+      padding: '5px 8px'
+    },
+    title: "1分延長"
+  }, "+1分"), React.createElement("button", {
+    onClick: onPauseToggle,
+    className: "btn-sm",
+    style: {
+      fontSize: 11,
+      padding: '5px 8px'
+    }
+  }, paused ? '▶' : '⏸'), React.createElement("button", {
+    onClick: onReset,
+    className: "btn-sm",
+    style: {
+      fontSize: 11,
+      padding: '5px 8px',
+      opacity: .8
+    },
+    title: "リセット"
+  }, "↺"), React.createElement("button", {
+    onClick: onComplete,
+    className: "btn-green",
+    style: {
+      fontSize: 11,
+      padding: '5px 10px'
+    },
+    title: "完了して閉じる"
+  }, "完了"), React.createElement("button", {
+    onClick: onStop,
+    className: "btn-sm",
+    style: {
+      fontSize: 11,
+      padding: '5px 8px',
+      opacity: .65
+    },
+    title: "閉じる"
+  }, "✕"))));
+}
 function PatientTriage() {
   const {
     useState,
@@ -3911,6 +4350,12 @@ function PatientTriage() {
   const [routinePresets, setRoutinePresets] = useState(DEFAULT_ROUTINE_PRESETS);
   const [dailyLinks, setDailyLinks] = useState([]);
   const [dailyLinksOpen, setDailyLinksOpen] = useState(false);
+  const [rewards, setRewards] = useState([]);
+  const [rewardsOpen, setRewardsOpen] = useState(false);
+  const [rewardForm, setRewardForm] = useState({
+    text: '',
+    when: ''
+  });
   const [dailyLinkForm, setDailyLinkForm] = useState({
     title: '',
     url: ''
@@ -3948,6 +4393,157 @@ function PatientTriage() {
   });
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const [undoEntry, setUndoEntry] = useState(null);
+  const [runningTask, setRunningTask] = useState(null);
+  const [runningTick, setRunningTick] = useState(Date.now());
+  useEffect(() => {
+    if (!runningTask || runningTask.pausedAt) return;
+    const id = setInterval(() => setRunningTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [runningTask]);
+  const timerFiredRef = React.useRef(false);
+  useEffect(() => {
+    if (!runningTask || runningTask.mode !== 'timer' || runningTask.pausedAt) return;
+    const elapsed = elapsedMsOf(runningTask, runningTick);
+    if (!timerFiredRef.current && elapsed >= runningTask.durationMs) {
+      timerFiredRef.current = true;
+      try {
+        if (navigator.vibrate) navigator.vibrate([180, 80, 180]);
+      } catch {}
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: 'done',
+          text: `⏰ ${runningTask.title} の見積もり時間です`
+        }
+      }));
+    }
+  }, [runningTask, runningTick]);
+  const startTimer = task => {
+    if (!task) return;
+    const mins = estimateMinutes(task);
+    if (!mins) {
+      showToast('見積もり分が未設定です');
+      return;
+    }
+    timerFiredRef.current = false;
+    setRunningTask({
+      mode: 'timer',
+      taskId: task.id,
+      patientId: task.patientId || null,
+      isGeneral: !!task.general,
+      title: task.title || '',
+      startedAt: Date.now(),
+      pausedAt: null,
+      accumulatedPaused: 0,
+      durationMs: mins * 60 * 1000
+    });
+    setRunningTick(Date.now());
+  };
+  const startTally = task => {
+    if (!task) return;
+    const existing = Number.parseInt(task.targetCount, 10);
+    const defaultVal = Number.isFinite(existing) && existing > 0 ? existing : '';
+    const input = window.prompt('何件で計測しますか？（半角数字）', String(defaultVal || ''));
+    if (input === null) return;
+    const target = Number.parseInt(input, 10);
+    if (!Number.isFinite(target) || target <= 0) {
+      showToast('1以上の整数で指定してください');
+      return;
+    }
+    if (task.patientId && !task.general) {
+      updateTask(task.patientId, task.id, {
+        targetCount: target
+      });
+    } else if (task.general) {
+      updateGeneralTask(task.id, {
+        targetCount: target
+      });
+    }
+    timerFiredRef.current = false;
+    setRunningTask({
+      mode: 'tally',
+      taskId: task.id,
+      patientId: task.patientId || null,
+      isGeneral: !!task.general,
+      title: task.title || '',
+      startedAt: Date.now(),
+      pausedAt: null,
+      accumulatedPaused: 0,
+      targetCount: target,
+      currentCount: 0
+    });
+    setRunningTick(Date.now());
+  };
+  const stopRunning = () => {
+    setRunningTask(null);
+    timerFiredRef.current = false;
+  };
+  const pauseToggleRunning = () => {
+    setRunningTask(prev => {
+      if (!prev) return prev;
+      if (prev.pausedAt) {
+        return {
+          ...prev,
+          pausedAt: null,
+          accumulatedPaused: (prev.accumulatedPaused || 0) + (Date.now() - prev.pausedAt)
+        };
+      }
+      return {
+        ...prev,
+        pausedAt: Date.now()
+      };
+    });
+  };
+  const resetRunning = () => {
+    timerFiredRef.current = false;
+    setRunningTask(prev => prev ? {
+      ...prev,
+      startedAt: Date.now(),
+      pausedAt: null,
+      accumulatedPaused: 0,
+      currentCount: prev.mode === 'tally' ? 0 : prev.currentCount
+    } : prev);
+    setRunningTick(Date.now());
+  };
+  const addMinuteRunning = () => {
+    setRunningTask(prev => prev && prev.mode === 'timer' ? {
+      ...prev,
+      durationMs: (prev.durationMs || 0) + 60000
+    } : prev);
+    timerFiredRef.current = false;
+  };
+  const incrementRunning = () => {
+    setRunningTask(prev => {
+      if (!prev || prev.mode !== 'tally') return prev;
+      const next = (prev.currentCount || 0) + 1;
+      const justHit = prev.targetCount > 0 && next >= prev.targetCount && (prev.currentCount || 0) < prev.targetCount;
+      if (justHit) {
+        try {
+          if (navigator.vibrate) navigator.vibrate([180, 80, 180]);
+        } catch {}
+        window.dispatchEvent(new CustomEvent('chibi-coach', {
+          detail: {
+            kind: 'done',
+            text: `🎉 ${prev.title} ${prev.targetCount}件達成！`
+          }
+        }));
+      }
+      return {
+        ...prev,
+        currentCount: next
+      };
+    });
+  };
+  const completeRunning = () => {
+    const r = runningTask;
+    if (!r) return;
+    if (r.isGeneral) {
+      completeGeneralTask(r.taskId);
+    } else if (r.patientId) {
+      completeTask(r.patientId, r.taskId);
+    }
+    setRunningTask(null);
+    timerFiredRef.current = false;
+  };
   const effectiveHeaderBackdrop = useMemo(() => getHeaderBackdrop(headerBackdropMode, now), [headerBackdropMode, now]);
   const isDailyMode = appMode === 'daily';
   const activePatients = isDailyMode ? dailyPatients : patients;
@@ -4013,6 +4609,7 @@ function PatientTriage() {
       setQuickDailyPresets(Array.isArray(parsed.quickDailyPresets) ? parsed.quickDailyPresets : QUICK_DAILY_TASKS);
       setRoutinePresets(Array.isArray(parsed.routinePresets) ? parsed.routinePresets : DEFAULT_ROUTINE_PRESETS);
       setDailyLinks(Array.isArray(parsed.dailyLinks) ? parsed.dailyLinks : []);
+      setRewards(Array.isArray(parsed.rewards) ? parsed.rewards : []);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
       setScheduledEvents(Array.isArray(parsed.scheduledEvents) ? parsed.scheduledEvents : []);
@@ -4031,12 +4628,13 @@ function PatientTriage() {
       quickDailyPresets,
       routinePresets,
       dailyLinks,
+      rewards,
       generalTasks,
       dailyPatients,
       dailyGeneralTasks,
       scheduledEvents
     });
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -4095,6 +4693,7 @@ function PatientTriage() {
     quickDailyPresets: cloneForUndo(quickDailyPresets),
     routinePresets: cloneForUndo(routinePresets),
     dailyLinks: cloneForUndo(dailyLinks),
+    rewards: cloneForUndo(rewards),
     generalTasks: cloneForUndo(activeGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
     expandedPatients: cloneForUndo(activeExpandedPatients),
@@ -4113,6 +4712,7 @@ function PatientTriage() {
     setQuickDailyPresets(Array.isArray(undoEntry.quickDailyPresets) ? undoEntry.quickDailyPresets : QUICK_DAILY_TASKS);
     setRoutinePresets(Array.isArray(undoEntry.routinePresets) ? undoEntry.routinePresets : DEFAULT_ROUTINE_PRESETS);
     setDailyLinks(Array.isArray(undoEntry.dailyLinks) ? undoEntry.dailyLinks : []);
+    setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
     setActiveExpandedPatients(undoEntry.expandedPatients || {});
@@ -4520,6 +5120,32 @@ function PatientTriage() {
     rememberUndo('リンク削除');
     setDailyLinks(prev => prev.filter(link => link.id !== id));
   };
+  const addReward = () => {
+    const text = (rewardForm.text || '').trim();
+    if (!text) return;
+    rememberUndo('ご褒美追加');
+    setRewards(prev => [...prev, {
+      id: uid(),
+      text,
+      when: (rewardForm.when || '').trim(),
+      createdAt: Date.now()
+    }]);
+    setRewardForm({
+      text: '',
+      when: ''
+    });
+    setRewardsOpen(true);
+  };
+  const updateReward = (id, updates) => {
+    setRewards(prev => prev.map(r => r.id === id ? {
+      ...r,
+      ...updates
+    } : r));
+  };
+  const removeReward = id => {
+    rememberUndo('ご褒美削除');
+    setRewards(prev => prev.filter(r => r.id !== id));
+  };
   const suggestNext = () => {
     let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');
     if (erOnly) {
@@ -4835,6 +5461,7 @@ function PatientTriage() {
     quickDailyPresets,
     routinePresets,
     dailyLinks,
+    rewards,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
@@ -4850,6 +5477,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
+    if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -4910,7 +5538,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -4919,6 +5547,7 @@ function PatientTriage() {
     quickDailyPresets,
     routinePresets,
     dailyLinks,
+    rewards,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
@@ -4972,6 +5601,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
+    if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -5090,7 +5720,31 @@ function PatientTriage() {
       marginBottom: 20,
       background: isDailyMode ? 'linear-gradient(135deg, #0F3A2E 0%, #167A5A 58%, #52B788 100%)' : (THEMES.find(t => t.id === themeId) || THEMES[0]).headerGrad
     }
-  }, React.createElement("div", {
+  }, React.createElement("button", {
+    type: "button",
+    "aria-label": "\u30AD\u30E3\u30E9\u3092\u3064\u3064\u3044\u3066\u3054\u8912\u7F8E\u3092\u898B\u308B",
+    title: "\u3064\u3064\u304F\u3068\u3054\u8912\u7F8E\u3092\u304F\u308C\u308B",
+    onClick: e => {
+      e.stopPropagation();
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: 'reward'
+        }
+      }));
+    },
+    style: {
+      position: 'absolute',
+      right: 12,
+      bottom: 6,
+      width: 'min(38vw, 220px)',
+      height: 132,
+      background: 'transparent',
+      border: 'none',
+      cursor: 'pointer',
+      padding: 0,
+      zIndex: 3
+    }
+  }), React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'flex-start',
@@ -5434,7 +6088,10 @@ function PatientTriage() {
     }) : markStuck(suggestion.task.patientId, suggestion.task.id)),
     onCompleteTask: () => suggestion.task && (suggestion.fromGeneral ? completeGeneralTask(suggestion.task.id) : completeTask(suggestion.task.patientId, suggestion.task.id)),
     onReroll: suggestNext,
-    onDismiss: () => setSuggestion(null)
+    onDismiss: () => setSuggestion(null),
+    onStartTimer: startTimer,
+    onStartTally: startTally,
+    running: runningTask
   }), focusMode && isDailyMode ? React.createElement(DailyFocusView, {
     tasks: activeGeneralTasks,
     typeMeta: generalTypeMeta,
@@ -5447,7 +6104,10 @@ function PatientTriage() {
     onHold: taskId => updateGeneralTask(taskId, {
       status: 'hold'
     }),
-    onExit: () => setFocusMode(false)
+    onExit: () => setFocusMode(false),
+    onStartTimer: startTimer,
+    onStartTally: startTally,
+    running: runningTask
   }) : focusMode ? React.createElement(FocusView, {
     patients: sortedPatients,
     typeMeta: typeMeta,
@@ -5458,7 +6118,10 @@ function PatientTriage() {
     onDoing: (pid, tid) => updateTask(pid, tid, {
       status: 'doing'
     }),
-    onUnstick: unstick
+    onUnstick: unstick,
+    onStartTimer: startTimer,
+    onStartTally: startTally,
+    running: runningTask
   }) : React.createElement("div", {
     className: `desktop-main-grid${isDailyMode ? ' desktop-main-grid-daily' : ''}`
   }, React.createElement("section", {
@@ -5490,6 +6153,15 @@ function PatientTriage() {
     onAdd: addDailyLink,
     onUpdate: updateDailyLink,
     onRemove: removeDailyLink
+  }), React.createElement(RewardSection, {
+    rewards: rewards,
+    open: rewardsOpen,
+    onToggleOpen: () => setRewardsOpen(v => !v),
+    form: rewardForm,
+    setForm: setRewardForm,
+    onAdd: addReward,
+    onUpdate: updateReward,
+    onRemove: removeReward
   }), React.createElement("div", {
     style: {
       marginTop: 10
@@ -6227,6 +6899,15 @@ function PatientTriage() {
     }
   }, "\u4ECA\u65E5\u306E\u4F5C\u696D\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
-  }, toast)));
+  }, toast), React.createElement(FloatingTimerBar, {
+    running: runningTask,
+    now: runningTick,
+    onIncrement: incrementRunning,
+    onAddMinute: addMinuteRunning,
+    onPauseToggle: pauseToggleRunning,
+    onReset: resetRunning,
+    onStop: stopRunning,
+    onComplete: completeRunning
+  })));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(PatientTriage, null));
