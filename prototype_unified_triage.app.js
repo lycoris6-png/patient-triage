@@ -5877,23 +5877,15 @@ function PatientTriage() {
       letterSpacing: 0,
       boxShadow: rpgMode ? '0 0 0 2px rgba(253,230,138,.25)' : 'none'
     }
-  }, "RPG\u98A8"), React.createElement("button", {
-    onClick: () => setTimedAlertMode(v => v === 'all' ? 'near' : 'all'),
-    title: timedAlertMode === 'all' ? "\u6642\u9650\u30BF\u30B9\u30AF\u3092\u5168\u3066\u8868\u793A" : "\u6642\u9650\u30BF\u30B9\u30AF\u3092\u76F4\u8FD1\u306E\u307F\u8868\u793A",
+  }, "RPG\u98A8"), React.createElement("div", {
+    "aria-hidden": "true",
     style: {
-      border: timedAlertMode === 'all' ? '2px solid #BFDBFE' : '1.5px solid rgba(255,255,255,.35)',
-      borderRadius: 6,
-      background: timedAlertMode === 'all' ? 'rgba(59,130,246,.26)' : 'rgba(255,255,255,.12)',
-      color: '#fff',
-      padding: '3px 8px',
-      cursor: 'pointer',
-      fontSize: 11,
-      fontWeight: 800,
-      fontFamily: 'var(--font-sans)',
-      letterSpacing: 0,
-      whiteSpace: 'nowrap'
+      flexBasis: '100%',
+      height: 0,
+      margin: 0,
+      padding: 0
     }
-  }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), React.createElement("button", {
+  }), React.createElement("button", {
     onClick: () => setHeaderBackdropMode(v => HEADER_BACKDROP_MODES[(HEADER_BACKDROP_MODES.indexOf(v) + 1) % HEADER_BACKDROP_MODES.length] || 'auto'),
     title: "\u30D8\u30C3\u30C0\u30FC\u80CC\u666F\u3092\u5207\u308A\u66FF\u3048",
     style: {
@@ -5910,6 +5902,22 @@ function PatientTriage() {
       whiteSpace: 'nowrap'
     }
   }, "\u80CC\u666F:", headerBackdropMode === 'auto' ? `\u81EA\u52D5(${HEADER_BACKDROP_LABELS[effectiveHeaderBackdrop]})` : HEADER_BACKDROP_LABELS[headerBackdropMode]), React.createElement("button", {
+    onClick: () => setTimedAlertMode(v => v === 'all' ? 'near' : 'all'),
+    title: timedAlertMode === 'all' ? "\u6642\u9650\u30BF\u30B9\u30AF\u3092\u5168\u3066\u8868\u793A" : "\u6642\u9650\u30BF\u30B9\u30AF\u3092\u76F4\u8FD1\u306E\u307F\u8868\u793A",
+    style: {
+      border: timedAlertMode === 'all' ? '2px solid #BFDBFE' : '1.5px solid rgba(255,255,255,.35)',
+      borderRadius: 6,
+      background: timedAlertMode === 'all' ? 'rgba(59,130,246,.26)' : 'rgba(255,255,255,.12)',
+      color: '#fff',
+      padding: '3px 8px',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 800,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0,
+      whiteSpace: 'nowrap'
+    }
+  }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), React.createElement("button", {
     onClick: requestEndDay,
     title: "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u5168\u3066\u7247\u3065\u3051\u308B",
     style: {
