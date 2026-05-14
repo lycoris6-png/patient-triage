@@ -3435,6 +3435,7 @@ function ScheduledEventSection({
     className: "btn-sm",
     onClick: onClearDone
   }, "済みを片づける")), React.createElement(React.Fragment, null, React.createElement("div", {
+    className: "scheduled-event-form",
     style: {
       display: 'grid',
       gridTemplateColumns: 'minmax(128px, 150px) minmax(86px, 110px) minmax(0, 1fr) auto',
@@ -3448,7 +3449,7 @@ function ScheduledEventSection({
       ...prev,
       scheduledDate: e.target.value
     })),
-    className: "inp",
+    className: "inp scheduled-date-input",
     "aria-label": "予定日"
   }), React.createElement("input", {
     type: "time",
@@ -3457,7 +3458,7 @@ function ScheduledEventSection({
       ...prev,
       scheduledTime: e.target.value
     })),
-    className: "inp",
+    className: "inp scheduled-time-input",
     "aria-label": "予定時刻"
   }), React.createElement("input", {
     value: form.title,
@@ -3468,7 +3469,7 @@ function ScheduledEventSection({
     onKeyDown: e => {
       if (e.key === 'Enter') onAdd();
     },
-    className: "inp",
+    className: "inp scheduled-title-input",
     placeholder: "ごみ捨て、IC、カンファレンスなど",
     "aria-label": "予定名"
   }), React.createElement("button", {
@@ -4145,9 +4146,10 @@ function FloatingTimerBar({
     const pace = elapsedSec > 0 ? (count / (elapsedSec / 60)) : 0;
     const etaMin = pace > 0 && remaining > 0 ? Math.ceil(remaining / pace) : null;
     const done = target > 0 && count >= target;
+    const showTarget = target <= 0 || done || remaining <= 3;
     accent = done ? '#16A34A' : '#0EA5E9';
     progressPct = target > 0 ? Math.min(100, (count / target) * 100) : 0;
-    main = `${count}/${target}件`;
+    main = showTarget ? `${count}/${target}件` : `${count}件`;
     sub = `経過 ${formatMSS(elapsedSec)}・${pace > 0 ? pace.toFixed(1) : '0.0'}件/分${etaMin != null ? `・あと${etaMin}分` : (done ? '・🎉達成' : '')}`;
     chibiPose = paused ? 'paused' : (done ? 'done' : (progressPct >= 75 ? 'over' : (count > 0 ? 'warn' : 'neutral')));
   } else {

@@ -386,6 +386,38 @@ body {
 }
 .inp:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(108,62,248,.15); }
 .inp::placeholder { color:var(--text-3); }
+@media (max-width:560px) {
+  .scheduled-event-section {
+    padding: 12px !important;
+  }
+  .scheduled-event-form {
+    grid-template-columns: minmax(0, 104px) 72px minmax(0, 1fr) auto !important;
+    gap: 6px !important;
+  }
+  .scheduled-event-form .scheduled-date-input,
+  .scheduled-event-form .scheduled-time-input {
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+  .scheduled-event-form .scheduled-title-input {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .scheduled-event-form .btn-dark {
+    width: 38px;
+    min-width: 38px;
+    padding: 8px 0;
+    justify-content: center;
+    font-size: 0;
+    gap: 0;
+  }
+  .scheduled-event-form .btn-dark svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+}
 
 /* ── チェックボックス ── */
 .check-circle {
@@ -977,7 +1009,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="prototype_unified_triage.app.js?v=20260513-header-wrap"></script>
+<script src="prototype_unified_triage.app.js?v=20260515-count-schedule"></script>
 
 
 
