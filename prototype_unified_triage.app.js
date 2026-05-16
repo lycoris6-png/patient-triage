@@ -4116,17 +4116,68 @@ function LastDoneSection({
     });
     setEditingId(null);
   };
-  const columnStyle = {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0,1.1fr) minmax(116px,.7fr) minmax(92px,.55fr) auto auto',
+  const rowStyle = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 8,
-    alignItems: 'center'
+    padding: '8px 10px',
+    background: 'rgba(20,184,166,.04)',
+    border: '1px solid var(--border)',
+    borderRadius: 10
   };
-  const headStyle = {
-    fontSize: 10,
-    color: 'var(--text-3)',
+  const labelStyle = {
+    flex: '1 1 110px',
+    minWidth: 0,
+    color: 'var(--text)',
+    fontSize: 14,
+    fontWeight: 800,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  };
+  const badgeStyleFor = item => ({
+    flex: '0 0 auto',
+    minWidth: 64,
+    textAlign: 'center',
+    padding: '4px 10px',
+    borderRadius: 999,
+    background: item.lastDone ? 'rgba(20,184,166,.14)' : 'var(--surface-2)',
+    color: item.lastDone ? '#0F766E' : 'var(--text-3)',
+    border: '1px solid var(--border)',
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: '.02em',
+    whiteSpace: 'nowrap'
+  });
+  const doBtnStyle = {
+    flex: '0 0 auto',
+    padding: '6px 16px',
+    fontSize: 12,
     fontWeight: 900,
-    letterSpacing: '.04em'
+    letterSpacing: '.06em',
+    borderRadius: 999
+  };
+  const editBtnStyle = {
+    flex: '0 0 auto',
+    padding: '4px 10px',
+    fontSize: 11,
+    color: 'var(--text-3)',
+    border: '1px solid var(--border)',
+    borderRadius: 99,
+    background: 'transparent'
+  };
+  const editInputStyle = {
+    flex: '1 1 140px',
+    minWidth: 0,
+    padding: '6px 9px',
+    fontSize: 12,
+    fontWeight: 800
+  };
+  const editDateStyle = {
+    flex: '0 0 auto',
+    padding: '6px 9px',
+    fontSize: 12
   };
   return React.createElement("div", {
     className: "card",
@@ -4169,87 +4220,60 @@ function LastDoneSection({
     }
   }, items.map(item => {
     const editing = editingId === item.id;
+    if (editing) {
+      return React.createElement("div", {
+        key: item.id,
+        style: rowStyle
+      }, React.createElement("input", {
+        value: draft.label,
+        onChange: e => setDraft(prev => ({ ...prev, label: e.target.value })),
+        className: "inp",
+        style: editInputStyle,
+        "aria-label": "項目名"
+      }), React.createElement("input", {
+        type: "date",
+        value: draft.lastDone || '',
+        onChange: e => setDraft(prev => ({ ...prev, lastDone: e.target.value })),
+        className: "inp",
+        style: editDateStyle,
+        "aria-label": "前回の日付"
+      }), React.createElement("button", {
+        className: "btn-sm",
+        onClick: () => saveEdit(item.id),
+        style: { color: 'var(--accent)' }
+      }, "保存"), React.createElement("button", {
+        className: "btn-sm",
+        onClick: () => setEditingId(null)
+      }, "戻す"), React.createElement("button", {
+        className: "btn-sm",
+        onClick: () => onRemove(item.id),
+        style: { color: 'var(--stuck-fg)' }
+      }, "削除"));
+    }
     return React.createElement("div", {
       key: item.id,
-      style: columnStyle
-    }, editing ? React.createElement("input", {
-      value: draft.label,
-      onChange: e => setDraft(prev => ({ ...prev, label: e.target.value })),
-      className: "inp",
-      style: { padding: '5px 9px', fontSize: 12, fontWeight: 800 },
-      "aria-label": "項目名"
-    }) : React.createElement("strong", {
-      style: {
-        color: 'var(--text)',
-        fontSize: 13,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap'
-      }
-    }, item.label), editing ? React.createElement("input", {
-      type: "date",
-      value: draft.lastDone || '',
-      onChange: e => setDraft(prev => ({ ...prev, lastDone: e.target.value })),
-      className: "inp",
-      style: { padding: '5px 8px', fontSize: 12 },
-      "aria-label": "前回の日付"
-    }) : React.createElement("span", {
-      style: {
-        fontSize: 12,
-        color: item.lastDone ? 'var(--text-2)' : 'var(--text-3)',
-        fontWeight: 700
-      }
-    }, item.lastDone || '未記録'), React.createElement("span", {
-      className: "tag",
-      style: {
-        justifyContent: 'center',
-        background: item.lastDone ? 'rgba(20,184,166,.14)' : 'var(--surface-2)',
-        color: item.lastDone ? '#0F766E' : 'var(--text-3)',
-        border: '1px solid var(--border)'
-      }
+      style: rowStyle,
+      title: item.lastDone ? `前回: ${item.lastDone}` : '未記録'
+    }, React.createElement("strong", {
+      style: labelStyle
+    }, item.label), React.createElement("span", {
+      style: badgeStyleFor(item)
     }, lastDoneLabel(item.lastDone)), React.createElement("button", {
       className: "btn-green",
       onClick: () => onMarkToday(item.id),
-      style: {
-        padding: '5px 10px',
-        fontSize: 11
-      }
-    }, "今日"), editing ? React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 4,
-        justifyContent: 'flex-end',
-        flexWrap: 'wrap'
-      }
-    }, React.createElement("button", {
-      className: "btn-sm",
-      onClick: () => saveEdit(item.id),
-      style: { color: 'var(--accent)' }
-    }, "保存"), React.createElement("button", {
-      className: "btn-sm",
-      onClick: () => setEditingId(null)
-    }, "戻す"), React.createElement("button", {
-      className: "btn-sm",
-      onClick: () => onRemove(item.id),
-      style: { color: 'var(--stuck-fg)' }
-    }, "削除")) : React.createElement("button", {
+      style: doBtnStyle,
+      "aria-label": `${item.label} を今日やったとして記録`
+    }, "Do"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => startEdit(item),
-      style: {
-        justifySelf: 'end',
-        padding: '3px 7px',
-        fontSize: 10,
-        color: 'var(--text-3)',
-        border: '1px solid var(--border)',
-        borderRadius: 99
-      }
+      style: editBtnStyle
     }, "編集"));
   }), React.createElement("div", {
     style: {
-      ...columnStyle,
-      marginTop: 10,
-      paddingTop: 10,
-      borderTop: '1px dashed var(--border)'
+      ...rowStyle,
+      marginTop: 6,
+      background: 'transparent',
+      border: '1px dashed var(--border)'
     }
   }, React.createElement("input", {
     value: form.label,
@@ -4259,36 +4283,26 @@ function LastDoneSection({
     },
     className: "inp",
     placeholder: "項目を追加 (例: シーツ交換)",
-    "aria-label": "追加する項目名"
+    "aria-label": "追加する項目名",
+    style: { flex: '1 1 140px', minWidth: 0, padding: '6px 10px', fontSize: 12 }
   }), React.createElement("input", {
     type: "date",
     value: form.lastDone || '',
     onChange: e => setForm(prev => ({ ...prev, lastDone: e.target.value })),
     className: "inp",
-    "aria-label": "追加する前回日"
-  }), React.createElement("span", {
-    className: "tag",
-    style: {
-      justifyContent: 'center',
-      background: 'var(--surface-2)',
-      color: 'var(--text-3)',
-      border: '1px solid var(--border)'
-    }
-  }, form.lastDone ? lastDoneLabel(form.lastDone) : '未記録'), React.createElement("button", {
+    "aria-label": "追加する前回日",
+    style: { flex: '0 0 auto', padding: '6px 9px', fontSize: 12 }
+  }), React.createElement("button", {
     className: "btn-dark",
     onClick: onAdd,
     disabled: !form.label.trim(),
     style: {
       opacity: !form.label.trim() ? .45 : 1,
-      padding: '5px 10px',
-      fontSize: 11
+      padding: '6px 14px',
+      fontSize: 12,
+      flex: '0 0 auto'
     }
-  }, "追加"), React.createElement("span", {
-    style: {
-      justifySelf: 'end',
-      width: 34
-    }
-  }))));
+  }, "追加"))));
 }
 function RewardSection({
   rewards,
