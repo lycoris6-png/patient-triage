@@ -1449,6 +1449,8 @@ function PatientCard({
   onMemoChange,
   templates,
   onApplyTemplate,
+  quickTasks,
+  onApplyQuickTask,
   adding,
   onStartAdd,
   onCancelAdd,
@@ -1477,6 +1479,8 @@ function PatientCard({
   const done = patient.tasks.filter(t => t.status === 'done');
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(patient.name);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [setOpen, setSetOpen] = useState(false);
   useEffect(() => {
     setDraftName(patient.name);
   }, [patient.name]);
@@ -1938,21 +1942,73 @@ function PatientCard({
     }
   }, React.createElement(Plus, {
     size: 13
-  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), templates && templates.length > 0 && !adding && React.createElement("div", {
+  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), !adding && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 7,
+      marginTop: 10
+    }
+  }, quickTasks && quickTasks.length > 0 && React.createElement("div", null, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setQuickOpen(v => !v),
     style: {
       display: 'flex',
       alignItems: 'center',
-      gap: 7,
-      marginTop: 10,
-      flexWrap: 'wrap'
-    }
-  }, React.createElement("span", {
-    style: {
+      gap: 4,
       fontSize: 11,
       color: 'var(--text-3)',
-      fontWeight: 600
+      fontWeight: 800,
+      border: '1px solid var(--border)',
+      borderRadius: 99,
+      padding: '4px 10px'
     }
-  }, "\u30BB\u30C3\u30C8:"), templates.map(tpl => React.createElement("button", {
+  }, quickOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "\u3088\u304F\u4F7F\u3046 (", quickTasks.length, ")"), quickOpen && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginTop: 7
+    }
+  }, quickTasks.map(q => React.createElement("button", {
+    key: q.id || q.title,
+    className: "set-chip",
+    onClick: () => onApplyQuickTask && onApplyQuickTask(q),
+    title: "\u3088\u304F\u4F7F\u3046\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"
+  }, "+ ", q.title, React.createElement("span", {
+    style: {
+      opacity: .55,
+      fontSize: 10
+    }
+  }, q.estimate, "\u5206"))))), templates && templates.length > 0 && React.createElement("div", null, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setSetOpen(v => !v),
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      border: '1px solid var(--border)',
+      borderRadius: 99,
+      padding: '4px 10px'
+    }
+  }, setOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "\u30BB\u30C3\u30C8 (", templates.length, ")"), setOpen && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginTop: 7
+    }
+  }, templates.map(tpl => React.createElement("button", {
     key: tpl.id,
     className: "set-chip",
     onClick: () => onApplyTemplate(tpl),
@@ -1962,7 +2018,7 @@ function PatientCard({
       opacity: .5,
       fontSize: 10
     }
-  }, "(", tpl.items.length, ")"))))));
+  }, "(", tpl.items.length, ")"))))))));
 }
 function FocusView({
   patients,
@@ -4106,7 +4162,7 @@ function LastDoneSection({
     }
   }, items.length, "件")), open && React.createElement("div", {
     style: {
-      padding: '0 16px 16px',
+      padding: '10px 16px 16px',
       borderTop: '1px solid var(--border)',
       display: 'grid',
       gap: 8
@@ -5318,6 +5374,26 @@ function PatientTriage() {
         scheduledTime: ''
       }
     }));
+  };
+  const addQuickPatientTask = (patientId, preset) => {
+    if (!preset?.title?.trim()) return;
+    const task = {
+      id: uid(),
+      title: preset.title.trim(),
+      type: preset.type || 'docs',
+      estimate: preset.estimate || '5',
+      scheduledTime: null,
+      status: 'todo',
+      stuckReason: '',
+      tinyStep: '',
+      createdAt: Date.now()
+    };
+    rememberUndo('患者よく使うタスク追加');
+    setActivePatients(prev => prev.map(p => p.id === patientId ? {
+      ...p,
+      tasks: [...p.tasks, task]
+    } : p));
+    showToast(`「${preset.title}」を追加`);
   };
   const updateTask = (patientId, taskId, updates) => {
     if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('タスク状態変更');
@@ -6913,6 +6989,8 @@ function PatientTriage() {
     onMemoChange: memo => updatePatientMemo(p.id, memo),
     templates: templates,
     onApplyTemplate: tpl => applyTemplate(p.id, tpl),
+    quickTasks: quickGeneralPresets,
+    onApplyQuickTask: preset => addQuickPatientTask(p.id, preset),
     adding: adding[p.id],
     onStartAdd: () => setAdding(a => ({
       ...a,
@@ -7214,7 +7292,7 @@ function PatientTriage() {
     size: 12
   }) : React.createElement(ChevronRight, {
     size: 12
-  }), "\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8\u7BA1\u7406 (", templates.length, ")"), templatesOpen && React.createElement(TemplatesSection, {
+  }), "\u307A\u3044\u3068\u308A \u30BB\u30C3\u30C8\u7DE8\u96C6 (", templates.length, ")"), templatesOpen && React.createElement(TemplatesSection, {
     templates: templates,
     onAddTemplate: addTemplate,
     onUpdateTemplate: updateTemplate,
@@ -7611,6 +7689,10 @@ function PatientTriage() {
   })));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(PatientTriage, null));
+
+
+
+
 
 
 
