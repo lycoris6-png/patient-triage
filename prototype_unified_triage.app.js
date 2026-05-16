@@ -280,6 +280,71 @@ const QUICK_DAILY_TASKS = [{
   estimate: '10',
   dailyPriority: 'today'
 }];
+const DEFAULT_DAILY_TASK_SETS = [{
+  id: 'daily-set-laundry',
+  name: '洗濯セット',
+  items: [{
+    title: '洗濯機を回す',
+    type: 'home',
+    estimate: '5',
+    dailyPriority: 'today'
+  }, {
+    title: '洗濯を干す',
+    type: 'home',
+    estimate: '10',
+    dailyPriority: 'today'
+  }, {
+    title: '畳む場所を空ける',
+    type: 'home',
+    estimate: '2',
+    dailyPriority: 'normal'
+  }]
+}, {
+  id: 'daily-set-bath',
+  name: '風呂洗いセット',
+  items: [{
+    title: '浴槽を洗う',
+    type: 'health',
+    estimate: '5',
+    dailyPriority: 'today'
+  }, {
+    title: '排水口だけ見る',
+    type: 'home',
+    estimate: '2',
+    dailyPriority: 'normal'
+  }, {
+    title: '湯はり準備',
+    type: 'health',
+    estimate: '2',
+    dailyPriority: 'normal'
+  }]
+}, {
+  id: 'daily-set-reset',
+  name: '生活リセット',
+  items: [{
+    title: '食器を片づける',
+    type: 'home',
+    estimate: '5',
+    dailyPriority: 'today'
+  }, {
+    title: '明日の準備',
+    type: 'later',
+    estimate: '10',
+    dailyPriority: 'today'
+  }, {
+    title: 'ゴミをまとめる',
+    type: 'home',
+    estimate: '5',
+    dailyPriority: 'normal'
+  }]
+}];
+const DEFAULT_LAST_DONE_ITEMS = [{
+  id: 'laundry',
+  label: '洗濯'
+}, {
+  id: 'bath-clean',
+  label: '風呂洗い'
+}];
 const DAILY_TASK_PRIORITIES = [{
   id: 'urgent',
   label: '急ぎ',
@@ -2257,6 +2322,10 @@ function GeneralTaskSection({
   quickTasks,
   quickOpen,
   onToggleQuick,
+  setOpen = false,
+  onToggleSet,
+  templateSets = [],
+  onApplySet,
   typeMeta,
   estMeta,
   now,
@@ -2695,7 +2764,47 @@ function GeneralTaskSection({
         fontSize: 10
       }
     }, q.estimate, "\u5206"));
-  })), React.createElement("div", {
+  })), templateSets.length > 0 && React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      alignItems: 'center'
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: onToggleSet,
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      border: '1px solid var(--border)',
+      borderRadius: 99,
+      padding: '4px 10px'
+    }
+  }, setOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "セット (", templateSets.length, ")"), setOpen && React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 700,
+      marginRight: 2
+    }
+  }, "展開:"), setOpen && templateSets.map(set => React.createElement("button", {
+    key: set.id || set.name,
+    className: "set-chip",
+    onClick: () => onApplySet && onApplySet(set),
+    title: set.name + 'を展開'
+  }, "+ ", set.name, " ", React.createElement("span", {
+    style: {
+      opacity: .58,
+      fontSize: 10
+    }
+  }, set.items?.length || 0, "件")))), React.createElement("div", {
     style: {
       marginTop: 10,
       background: 'var(--surface-2)',
@@ -3605,6 +3714,99 @@ function QuickPresetManager({
     }
   }, showPatient && renderList("ぺいとり: よく使う", patientPresets, false, onUpdatePatient, onAddPatient, onRemovePatient), showDaily && renderList("でいとり: よく使う", dailyPresets, true, onUpdateDaily, onAddDaily, onRemoveDaily));
 }
+function DailyTaskSetManager({
+  sets,
+  onAddSet,
+  onUpdateSet,
+  onRemoveSet,
+  onAddItem,
+  onUpdateItem,
+  onRemoveItem
+}) {
+  const inpStyle = {
+    background: 'var(--surface)',
+    border: '1.5px solid var(--border)',
+    borderRadius: 8,
+    padding: '5px 9px',
+    fontSize: 12,
+    color: 'var(--text)',
+    fontFamily: 'var(--font-sans)',
+    outline: 'none'
+  };
+  return React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: 'grid',
+      gap: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onAddSet,
+    style: {
+      justifyContent: 'center',
+      fontSize: 12
+    }
+  }, "+ セット追加"), sets.map(set => React.createElement("div", {
+    key: set.id,
+    style: {
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      padding: 12
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 7,
+      alignItems: 'center',
+      marginBottom: 9
+    }
+  }, React.createElement("input", {
+    value: set.name || '',
+    onChange: e => onUpdateSet(set.id, { name: e.target.value }),
+    style: { ...inpStyle, flex: 1, fontWeight: 800 },
+    "aria-label": "セット名"
+  }), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onRemoveSet(set.id),
+    style: { color: 'var(--stuck-fg)' }
+  }, "削除")), React.createElement("div", {
+    style: { display: 'grid', gap: 5 }
+  }, (set.items || []).map((item, idx) => React.createElement("div", {
+    key: idx,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1.4fr) minmax(74px,.65fr) minmax(64px,.5fr) minmax(64px,.5fr) auto',
+      gap: 5,
+      alignItems: 'center'
+    }
+  }, React.createElement("input", {
+    value: item.title || '',
+    onChange: e => onUpdateItem(set.id, idx, { title: e.target.value }),
+    placeholder: "タスク名",
+    style: { ...inpStyle, minWidth: 0 }
+  }), React.createElement("select", {
+    value: item.type || 'home',
+    onChange: e => onUpdateItem(set.id, idx, { type: e.target.value }),
+    style: inpStyle
+  }, DAILY_TASK_TYPES.map(t => React.createElement("option", { key: t.id, value: t.id }, t.label))), React.createElement("select", {
+    value: item.estimate || '5',
+    onChange: e => onUpdateItem(set.id, idx, { estimate: e.target.value }),
+    style: inpStyle
+  }, ESTIMATES.map(e => React.createElement("option", { key: e.id, value: e.id }, e.label))), React.createElement("select", {
+    value: item.dailyPriority || 'normal',
+    onChange: e => onUpdateItem(set.id, idx, { dailyPriority: e.target.value }),
+    style: inpStyle
+  }, DAILY_TASK_PRIORITIES.map(p => React.createElement("option", { key: p.id, value: p.id }, p.label))), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onRemoveItem(set.id, idx),
+    style: { opacity: .65 }
+  }, "削除"))), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onAddItem(set.id),
+    style: { marginTop: 7, color: 'var(--accent)' }
+  }, "+ 項目追加")))));
+}
 function DailyLinkSection({
   links,
   open,
@@ -3615,10 +3817,26 @@ function DailyLinkSection({
   onUpdate,
   onRemove
 }) {
+  const [editingId, setEditingId] = React.useState(null);
+  const [draft, setDraft] = React.useState({ title: '', url: '' });
   const normalizeUrl = url => {
     const trimmed = (url || '').trim();
     if (!trimmed) return '';
     return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+  const startEdit = link => {
+    setEditingId(link.id);
+    setDraft({
+      title: link.title || '',
+      url: link.url || ''
+    });
+  };
+  const saveEdit = id => {
+    onUpdate(id, {
+      title: draft.title,
+      url: draft.url
+    });
+    setEditingId(null);
   };
   return React.createElement("div", {
     className: "card",
@@ -3669,52 +3887,105 @@ function DailyLinkSection({
       gap: 7,
       marginTop: 12
     }
-  }, links.map(link => React.createElement("div", {
-    key: link.id,
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0, .8fr) minmax(0, 1.2fr) auto auto',
-      gap: 6,
-      alignItems: 'center'
-    }
-  }, React.createElement("input", {
-    value: link.title || '',
-    onChange: e => onUpdate(link.id, {
-      title: e.target.value
-    }),
-    className: "inp",
-    style: {
-      padding: '6px 9px',
-      fontSize: 12
-    },
-    "aria-label": "リンク名"
-  }), React.createElement("input", {
-    value: link.url || '',
-    onChange: e => onUpdate(link.id, {
-      url: e.target.value
-    }),
-    className: "inp",
-    style: {
-      padding: '6px 9px',
-      fontSize: 12
-    },
-    "aria-label": "URL"
-  }), React.createElement("a", {
-    className: "btn-sm",
-    href: normalizeUrl(link.url),
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      textDecoration: 'none',
-      color: 'var(--accent)'
-    }
-  }, "開く"), React.createElement("button", {
-    className: "btn-sm",
-    onClick: () => onRemove(link.id),
-    style: {
-      opacity: .65
-    }
-  }, "削除")))), React.createElement("div", {
+  }, links.map(link => {
+    const editing = editingId === link.id;
+    return React.createElement("div", {
+      key: link.id,
+      style: editing ? {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0,.75fr) minmax(0,1fr) auto',
+        gap: 6,
+        alignItems: 'center'
+      } : {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0,1fr) auto',
+        gap: 8,
+        alignItems: 'stretch'
+      }
+    }, editing ? React.createElement(React.Fragment, null, React.createElement("input", {
+      value: draft.title,
+      onChange: e => setDraft(prev => ({ ...prev, title: e.target.value })),
+      className: "inp",
+      style: {
+        padding: '6px 9px',
+        fontSize: 12
+      },
+      "aria-label": "リンク名"
+    }), React.createElement("input", {
+      value: draft.url,
+      onChange: e => setDraft(prev => ({ ...prev, url: e.target.value })),
+      onKeyDown: e => {
+        if (e.key === 'Enter') saveEdit(link.id);
+      },
+      className: "inp",
+      style: {
+        padding: '6px 9px',
+        fontSize: 12
+      },
+      "aria-label": "URL"
+    }), React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 4,
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap'
+      }
+    }, React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => saveEdit(link.id),
+      style: { color: 'var(--accent)' }
+    }, "保存"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setEditingId(null)
+    }, "戻す"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onRemove(link.id),
+      style: { color: 'var(--stuck-fg)' }
+    }, "削除"))) : React.createElement(React.Fragment, null, React.createElement("a", {
+      href: normalizeUrl(link.url),
+      target: "_blank",
+      rel: "noopener noreferrer",
+      style: {
+        display: 'block',
+        minHeight: 42,
+        padding: '9px 12px',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        background: 'var(--surface-2)',
+        color: 'var(--text)',
+        textDecoration: 'none'
+      }
+    }, React.createElement("strong", {
+      style: {
+        display: 'block',
+        fontSize: 13,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }
+    }, link.title || '無題リンク'), React.createElement("span", {
+      style: {
+        display: 'block',
+        marginTop: 2,
+        fontSize: 10,
+        color: 'var(--text-3)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }
+    }, link.url || 'URL未設定')), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => startEdit(link),
+      style: {
+        alignSelf: 'center',
+        padding: '3px 7px',
+        fontSize: 10,
+        color: 'var(--text-3)',
+        border: '1px solid var(--border)',
+        borderRadius: 99
+      }
+    }, "編集")));
+  })), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'minmax(0,.8fr) minmax(0,1.2fr) auto',
@@ -3750,6 +4021,218 @@ function DailyLinkSection({
       opacity: !form.title.trim() || !form.url.trim() ? .45 : 1
     }
   }, "追加"))));
+}function lastDoneLabel(date) {
+  if (!date) return '未記録';
+  const today = todayStr();
+  if (date === today) return '今日';
+  const base = new Date(today + 'T00:00:00');
+  const past = new Date(date + 'T00:00:00');
+  const days = Math.max(0, Math.round((base - past) / 86400000));
+  if (days === 0) return '今日';
+  if (days === 1) return '昨日';
+  return `${days}日前`;
+}
+function LastDoneSection({
+  items,
+  open,
+  onToggleOpen,
+  form,
+  setForm,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onMarkToday,
+  onClear
+}) {
+  const [editingId, setEditingId] = React.useState(null);
+  const [draft, setDraft] = React.useState({ label: '', lastDone: '' });
+  const startEdit = item => {
+    setEditingId(item.id);
+    setDraft({
+      label: item.label || '',
+      lastDone: item.lastDone || ''
+    });
+  };
+  const saveEdit = id => {
+    onUpdate(id, {
+      label: draft.label,
+      lastDone: draft.lastDone
+    });
+    setEditingId(null);
+  };
+  const columnStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0,1.1fr) minmax(116px,.7fr) minmax(92px,.55fr) auto auto',
+    gap: 8,
+    alignItems: 'center'
+  };
+  const headStyle = {
+    fontSize: 10,
+    color: 'var(--text-3)',
+    fontWeight: 900,
+    letterSpacing: '.04em'
+  };
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #14B8A6'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(20,184,166,.07)'
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 15
+  }) : React.createElement(ChevronRight, {
+    size: 15
+  }), React.createElement("strong", {
+    style: {
+      fontSize: 14,
+      color: 'var(--text)'
+    }
+  }, "前回いつやった?"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(20,184,166,.14)',
+      color: '#0F766E'
+    }
+  }, items.length, "件")), open && React.createElement("div", {
+    style: {
+      padding: '0 16px 16px',
+      borderTop: '1px solid var(--border)',
+      display: 'grid',
+      gap: 8
+    }
+  }, items.map(item => {
+    const editing = editingId === item.id;
+    return React.createElement("div", {
+      key: item.id,
+      style: columnStyle
+    }, editing ? React.createElement("input", {
+      value: draft.label,
+      onChange: e => setDraft(prev => ({ ...prev, label: e.target.value })),
+      className: "inp",
+      style: { padding: '5px 9px', fontSize: 12, fontWeight: 800 },
+      "aria-label": "項目名"
+    }) : React.createElement("strong", {
+      style: {
+        color: 'var(--text)',
+        fontSize: 13,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }
+    }, item.label), editing ? React.createElement("input", {
+      type: "date",
+      value: draft.lastDone || '',
+      onChange: e => setDraft(prev => ({ ...prev, lastDone: e.target.value })),
+      className: "inp",
+      style: { padding: '5px 8px', fontSize: 12 },
+      "aria-label": "前回の日付"
+    }) : React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: item.lastDone ? 'var(--text-2)' : 'var(--text-3)',
+        fontWeight: 700
+      }
+    }, item.lastDone || '未記録'), React.createElement("span", {
+      className: "tag",
+      style: {
+        justifyContent: 'center',
+        background: item.lastDone ? 'rgba(20,184,166,.14)' : 'var(--surface-2)',
+        color: item.lastDone ? '#0F766E' : 'var(--text-3)',
+        border: '1px solid var(--border)'
+      }
+    }, lastDoneLabel(item.lastDone)), React.createElement("button", {
+      className: "btn-green",
+      onClick: () => onMarkToday(item.id),
+      style: {
+        padding: '5px 10px',
+        fontSize: 11
+      }
+    }, "今日"), editing ? React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 4,
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap'
+      }
+    }, React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => saveEdit(item.id),
+      style: { color: 'var(--accent)' }
+    }, "保存"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setEditingId(null)
+    }, "戻す"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onRemove(item.id),
+      style: { color: 'var(--stuck-fg)' }
+    }, "削除")) : React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => startEdit(item),
+      style: {
+        justifySelf: 'end',
+        padding: '3px 7px',
+        fontSize: 10,
+        color: 'var(--text-3)',
+        border: '1px solid var(--border)',
+        borderRadius: 99
+      }
+    }, "編集"));
+  }), React.createElement("div", {
+    style: {
+      ...columnStyle,
+      marginTop: 10,
+      paddingTop: 10,
+      borderTop: '1px dashed var(--border)'
+    }
+  }, React.createElement("input", {
+    value: form.label,
+    onChange: e => setForm(prev => ({ ...prev, label: e.target.value })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') onAdd();
+    },
+    className: "inp",
+    placeholder: "項目を追加 (例: シーツ交換)",
+    "aria-label": "追加する項目名"
+  }), React.createElement("input", {
+    type: "date",
+    value: form.lastDone || '',
+    onChange: e => setForm(prev => ({ ...prev, lastDone: e.target.value })),
+    className: "inp",
+    "aria-label": "追加する前回日"
+  }), React.createElement("span", {
+    className: "tag",
+    style: {
+      justifyContent: 'center',
+      background: 'var(--surface-2)',
+      color: 'var(--text-3)',
+      border: '1px solid var(--border)'
+    }
+  }, form.lastDone ? lastDoneLabel(form.lastDone) : '未記録'), React.createElement("button", {
+    className: "btn-dark",
+    onClick: onAdd,
+    disabled: !form.label.trim(),
+    style: {
+      opacity: !form.label.trim() ? .45 : 1,
+      padding: '5px 10px',
+      fontSize: 11
+    }
+  }, "追加"), React.createElement("span", {
+    style: {
+      justifySelf: 'end',
+      width: 34
+    }
+  }))));
 }
 function RewardSection({
   rewards,
@@ -4349,9 +4832,17 @@ function PatientTriage() {
   const [templates, setTemplates] = useState([]);
   const [quickGeneralPresets, setQuickGeneralPresets] = useState(QUICK_GENERAL_TASKS);
   const [quickDailyPresets, setQuickDailyPresets] = useState(QUICK_DAILY_TASKS);
+  const [dailyTaskSets, setDailyTaskSets] = useState(DEFAULT_DAILY_TASK_SETS);
+  const [dailySetsOpen, setDailySetsOpen] = useState(false);
+  const [dailySetTemplatesOpen, setDailySetTemplatesOpen] = useState(false);
   const [routinePresets, setRoutinePresets] = useState(DEFAULT_ROUTINE_PRESETS);
   const [dailyLinks, setDailyLinks] = useState([]);
   const [dailyLinksOpen, setDailyLinksOpen] = useState(false);
+  const [patientLinks, setPatientLinks] = useState([]);
+  const [patientLinksOpen, setPatientLinksOpen] = useState(false);
+  const [lastDoneItems, setLastDoneItems] = useState(DEFAULT_LAST_DONE_ITEMS);
+  const [lastDoneOpen, setLastDoneOpen] = useState(false);
+  const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr() });
   const [rewards, setRewards] = useState([]);
   const [rewardsOpen, setRewardsOpen] = useState(false);
   const [rewardForm, setRewardForm] = useState({
@@ -4359,6 +4850,10 @@ function PatientTriage() {
     when: ''
   });
   const [dailyLinkForm, setDailyLinkForm] = useState({
+    title: '',
+    url: ''
+  });
+  const [patientLinkForm, setPatientLinkForm] = useState({
     title: '',
     url: ''
   });
@@ -4609,8 +5104,11 @@ function PatientTriage() {
       setTemplates(Array.isArray(parsed.templates) ? parsed.templates : DEFAULT_TEMPLATES);
       setQuickGeneralPresets(Array.isArray(parsed.quickGeneralPresets) ? parsed.quickGeneralPresets : QUICK_GENERAL_TASKS);
       setQuickDailyPresets(Array.isArray(parsed.quickDailyPresets) ? parsed.quickDailyPresets : QUICK_DAILY_TASKS);
+      setDailyTaskSets(Array.isArray(parsed.dailyTaskSets) ? parsed.dailyTaskSets : DEFAULT_DAILY_TASK_SETS);
       setRoutinePresets(Array.isArray(parsed.routinePresets) ? parsed.routinePresets : DEFAULT_ROUTINE_PRESETS);
       setDailyLinks(Array.isArray(parsed.dailyLinks) ? parsed.dailyLinks : []);
+      setPatientLinks(Array.isArray(parsed.patientLinks) ? parsed.patientLinks : []);
+      setLastDoneItems(Array.isArray(parsed.lastDoneItems) ? parsed.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
       setRewards(Array.isArray(parsed.rewards) ? parsed.rewards : []);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
@@ -4628,15 +5126,18 @@ function PatientTriage() {
       templates,
       quickGeneralPresets,
       quickDailyPresets,
+      dailyTaskSets,
       routinePresets,
       dailyLinks,
+      patientLinks,
+      lastDoneItems,
       rewards,
       generalTasks,
       dailyPatients,
       dailyGeneralTasks,
       scheduledEvents
     });
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -4693,8 +5194,11 @@ function PatientTriage() {
     templates: cloneForUndo(templates),
     quickGeneralPresets: cloneForUndo(quickGeneralPresets),
     quickDailyPresets: cloneForUndo(quickDailyPresets),
+    dailyTaskSets: cloneForUndo(dailyTaskSets),
     routinePresets: cloneForUndo(routinePresets),
     dailyLinks: cloneForUndo(dailyLinks),
+    patientLinks: cloneForUndo(patientLinks),
+    lastDoneItems: cloneForUndo(lastDoneItems),
     rewards: cloneForUndo(rewards),
     generalTasks: cloneForUndo(activeGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
@@ -4712,8 +5216,11 @@ function PatientTriage() {
     setTemplates(Array.isArray(undoEntry.templates) ? undoEntry.templates : DEFAULT_TEMPLATES);
     setQuickGeneralPresets(Array.isArray(undoEntry.quickGeneralPresets) ? undoEntry.quickGeneralPresets : QUICK_GENERAL_TASKS);
     setQuickDailyPresets(Array.isArray(undoEntry.quickDailyPresets) ? undoEntry.quickDailyPresets : QUICK_DAILY_TASKS);
+    setDailyTaskSets(Array.isArray(undoEntry.dailyTaskSets) ? undoEntry.dailyTaskSets : DEFAULT_DAILY_TASK_SETS);
     setRoutinePresets(Array.isArray(undoEntry.routinePresets) ? undoEntry.routinePresets : DEFAULT_ROUTINE_PRESETS);
     setDailyLinks(Array.isArray(undoEntry.dailyLinks) ? undoEntry.dailyLinks : []);
+    setPatientLinks(Array.isArray(undoEntry.patientLinks) ? undoEntry.patientLinks : []);
+    setLastDoneItems(Array.isArray(undoEntry.lastDoneItems) ? undoEntry.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
     setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
@@ -5121,6 +5628,69 @@ function PatientTriage() {
   const removeDailyLink = id => {
     rememberUndo('リンク削除');
     setDailyLinks(prev => prev.filter(link => link.id !== id));
+  };  const addPatientLink = () => {
+    const title = (patientLinkForm.title || '').trim();
+    const url = (patientLinkForm.url || '').trim();
+    if (!title || !url) return;
+    rememberUndo('ぺいとりリンク追加');
+    setPatientLinks(prev => [...prev, {
+      id: uid(),
+      title,
+      url,
+      createdAt: Date.now()
+    }]);
+    setPatientLinkForm({
+      title: '',
+      url: ''
+    });
+    setPatientLinksOpen(true);
+  };
+  const updatePatientLink = (id, updates) => {
+    setPatientLinks(prev => prev.map(link => link.id === id ? {
+      ...link,
+      ...updates
+    } : link));
+  };
+  const removePatientLink = id => {
+    rememberUndo('ぺいとりリンク削除');
+    setPatientLinks(prev => prev.filter(link => link.id !== id));
+  };
+  const addLastDoneItem = () => {
+    const label = (lastDoneForm.label || '').trim();
+    if (!label) return;
+    rememberUndo('前回記録項目追加');
+    setLastDoneItems(prev => [...prev, {
+      id: uid(),
+      label,
+      lastDone: lastDoneForm.lastDone || ''
+    }]);
+    setLastDoneForm({
+      label: '',
+      lastDone: todayStr()
+    });
+    setLastDoneOpen(true);
+  };
+  const updateLastDoneItem = (id, updates) => {
+    setLastDoneItems(prev => prev.map(item => item.id === id ? {
+      ...item,
+      ...updates
+    } : item));
+  };
+  const removeLastDoneItem = id => {
+    rememberUndo('前回記録項目削除');
+    setLastDoneItems(prev => prev.filter(item => item.id !== id));
+  };
+  const markLastDoneToday = id => {
+    rememberUndo('前回記録更新');
+    setLastDoneItems(prev => prev.map(item => item.id === id ? {
+      ...item,
+      lastDone: todayStr()
+    } : item));
+    setLastDoneOpen(true);
+  };
+  const clearLastDone = id => {
+    rememberUndo('前回記録クリア');
+    updateLastDoneItem(id, { lastDone: '' });
   };
   const addReward = () => {
     const text = (rewardForm.text || '').trim();
@@ -5318,7 +5888,27 @@ function PatientTriage() {
     }));
     showToast(`「${template.name}」${newTasks.length}件追加`);
   };
-  const updateTemplate = (id, updates) => setTemplates(prev => prev.map(t => t.id === id ? {
+  const applyDailyTaskSet = set => {
+    const newTasks = (set.items || []).filter(i => i.title?.trim()).map(i => ({
+      id: uid(),
+      title: i.title.trim(),
+      type: i.type || 'home',
+      estimate: i.estimate || '5',
+      dailyPriority: i.dailyPriority || 'normal',
+      dueDate: '',
+      status: 'todo',
+      createdAt: Date.now(),
+      general: true
+    }));
+    if (!newTasks.length) {
+      showToast('セットが空です');
+      return;
+    }
+    rememberUndo('でいとりセット展開');
+    setDailyGeneralTasks(prev => [...prev, ...newTasks]);
+    setGeneralOpen(true);
+    showToast(`「${set.name}」${newTasks.length}件追加`);
+  };  const updateTemplate = (id, updates) => setTemplates(prev => prev.map(t => t.id === id ? {
     ...t,
     ...updates
   } : t));
@@ -5379,6 +5969,43 @@ function PatientTriage() {
     rememberUndo('よく使う項目削除');
     const setter = mode === 'daily' ? setQuickDailyPresets : setQuickGeneralPresets;
     setter(prev => prev.filter((_, i) => i !== idx));
+  };  const addDailyTaskSet = () => {
+    rememberUndo('でいとりセット追加');
+    setDailyTaskSets(prev => [...prev, {
+      id: uid(),
+      name: '新しいセット',
+      items: []
+    }]);
+  };
+  const updateDailyTaskSet = (id, updates) => {
+    setDailyTaskSets(prev => prev.map(set => set.id === id ? { ...set, ...updates } : set));
+  };
+  const removeDailyTaskSet = id => {
+    rememberUndo('でいとりセット削除');
+    setDailyTaskSets(prev => prev.filter(set => set.id !== id));
+  };
+  const addDailyTaskSetItem = id => {
+    setDailyTaskSets(prev => prev.map(set => set.id === id ? {
+      ...set,
+      items: [...(set.items || []), {
+        title: '',
+        type: 'home',
+        estimate: '5',
+        dailyPriority: 'normal'
+      }]
+    } : set));
+  };
+  const updateDailyTaskSetItem = (id, idx, updates) => {
+    setDailyTaskSets(prev => prev.map(set => set.id === id ? {
+      ...set,
+      items: (set.items || []).map((item, i) => i === idx ? { ...item, ...updates } : item)
+    } : set));
+  };
+  const removeDailyTaskSetItem = (id, idx) => {
+    setDailyTaskSets(prev => prev.map(set => set.id === id ? {
+      ...set,
+      items: (set.items || []).filter((_, i) => i !== idx)
+    } : set));
   };
   const addRoutinePreset = () => {
     rememberUndo('固定項目追加');
@@ -5461,14 +6088,17 @@ function PatientTriage() {
     templates,
     quickGeneralPresets,
     quickDailyPresets,
+    dailyTaskSets,
     routinePresets,
     dailyLinks,
+    patientLinks,
+    lastDoneItems,
     rewards,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 6
+    version: 7
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
@@ -5477,8 +6107,11 @@ function PatientTriage() {
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
     if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
+    if (Array.isArray(parsed.dailyTaskSets)) setDailyTaskSets(parsed.dailyTaskSets);
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
+    if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
+    if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
@@ -5540,21 +6173,24 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, routinePresets, dailyLinks, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
     templates,
     quickGeneralPresets,
     quickDailyPresets,
+    dailyTaskSets,
     routinePresets,
     dailyLinks,
+    patientLinks,
+    lastDoneItems,
     rewards,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 6,
+    version: 7,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -5601,8 +6237,11 @@ function PatientTriage() {
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
     if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
+    if (Array.isArray(parsed.dailyTaskSets)) setDailyTaskSets(parsed.dailyTaskSets);
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
+    if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
+    if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
@@ -6150,10 +6789,25 @@ function PatientTriage() {
     quickTasks: quickDailyPresets,
     quickOpen: quickDailyOpen,
     onToggleQuick: () => setQuickDailyOpen(v => !v),
+    setOpen: dailySetsOpen,
+    onToggleSet: () => setDailySetsOpen(v => !v),
     typeMeta: generalTypeMeta,
     estMeta: estMeta,
     now: now,
-    dailyMode: true
+    dailyMode: true,
+    templateSets: dailyTaskSets,
+    onApplySet: applyDailyTaskSet
+  }), React.createElement(LastDoneSection, {
+    items: lastDoneItems,
+    open: lastDoneOpen,
+    onToggleOpen: () => setLastDoneOpen(v => !v),
+    form: lastDoneForm,
+    setForm: setLastDoneForm,
+    onAdd: addLastDoneItem,
+    onUpdate: updateLastDoneItem,
+    onRemove: removeLastDoneItem,
+    onMarkToday: markLastDoneToday,
+    onClear: clearLastDone
   }), React.createElement(DailyLinkSection, {
     links: dailyLinks,
     open: dailyLinksOpen,
@@ -6201,7 +6855,34 @@ function PatientTriage() {
     onRemovePatient: idx => removeQuickPreset('patient', idx),
     onRemoveDaily: idx => removeQuickPreset('daily', idx),
     showPatient: false
-  }))) : React.createElement("div", {
+  }), React.createElement("div", {
+    style: {
+      marginTop: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setDailySetTemplatesOpen(v => !v),
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 12,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, dailySetTemplatesOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "でいとり セット編集 (", dailyTaskSets.length, ")"), dailySetTemplatesOpen && React.createElement(DailyTaskSetManager, {
+    sets: dailyTaskSets,
+    onAddSet: addDailyTaskSet,
+    onUpdateSet: updateDailyTaskSet,
+    onRemoveSet: removeDailyTaskSet,
+    onAddItem: addDailyTaskSetItem,
+    onUpdateItem: updateDailyTaskSetItem,
+    onRemoveItem: removeDailyTaskSetItem
+  })))) : React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -6286,6 +6967,15 @@ function PatientTriage() {
     typeMeta: generalTypeMeta,
     estMeta: estMeta,
     now: now
+  }), React.createElement(DailyLinkSection, {
+    links: patientLinks,
+    open: patientLinksOpen,
+    onToggleOpen: () => setPatientLinksOpen(v => !v),
+    form: patientLinkForm,
+    setForm: setPatientLinkForm,
+    onAdd: addPatientLink,
+    onUpdate: updatePatientLink,
+    onRemove: removePatientLink
   }))), !focusMode && stuckTasks.length > 0 && React.createElement("div", {
     className: "stuck-bar",
     style: {
@@ -6921,3 +7611,6 @@ function PatientTriage() {
   })));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(PatientTriage, null));
+
+
+
