@@ -229,6 +229,7 @@ const QUICK_GENERAL_TASKS = [{
   type: 'wardChart',
   estimate: '15'
 }];
+const QUICK_PATIENT_TASKS = QUICK_GENERAL_TASKS;
 const QUICK_DAILY_TASKS = [{
   title: '掃除',
   type: 'home',
@@ -3662,14 +3663,19 @@ function ScheduledEventSection({
 }
 function QuickPresetManager({
   patientPresets,
+  generalPresets = [],
   dailyPresets,
   onUpdatePatient,
+  onUpdateGeneral,
   onUpdateDaily,
   onAddPatient,
+  onAddGeneral,
   onAddDaily,
   onRemovePatient,
+  onRemoveGeneral,
   onRemoveDaily,
   showPatient = true,
+  showGeneral = false,
   showDaily = true
 }) {
   const renderList = (label, presets, dailyMode, onUpdate, onAdd, onRemove) => {
@@ -3768,7 +3774,7 @@ function QuickPresetManager({
       display: 'grid',
       gap: 10
     }
-  }, showPatient && renderList("ぺいとり: よく使う", patientPresets, false, onUpdatePatient, onAddPatient, onRemovePatient), showDaily && renderList("でいとり: よく使う", dailyPresets, true, onUpdateDaily, onAddDaily, onRemoveDaily));
+  }, showPatient && renderList("ぺいとり: 患者タスク", patientPresets, false, onUpdatePatient, onAddPatient, onRemovePatient), showGeneral && renderList("ぺいとり: すきまタスク", generalPresets, false, onUpdateGeneral, onAddGeneral, onRemoveGeneral), showDaily && renderList("でいとり: よく使う", dailyPresets, true, onUpdateDaily, onAddDaily, onRemoveDaily));
 }
 function DailyTaskSetManager({
   sets,
@@ -4900,6 +4906,7 @@ function PatientTriage() {
   const [dailyQuickPresetsOpen, setDailyQuickPresetsOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
   const [templates, setTemplates] = useState([]);
+  const [quickPatientPresets, setQuickPatientPresets] = useState(QUICK_PATIENT_TASKS);
   const [quickGeneralPresets, setQuickGeneralPresets] = useState(QUICK_GENERAL_TASKS);
   const [quickDailyPresets, setQuickDailyPresets] = useState(QUICK_DAILY_TASKS);
   const [dailyTaskSets, setDailyTaskSets] = useState(DEFAULT_DAILY_TASK_SETS);
@@ -5172,6 +5179,7 @@ function PatientTriage() {
       setDailyPatients(Array.isArray(parsed.dailyPatients) ? parsed.dailyPatients : []);
       if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
       setTemplates(Array.isArray(parsed.templates) ? parsed.templates : DEFAULT_TEMPLATES);
+      setQuickPatientPresets(Array.isArray(parsed.quickPatientPresets) ? parsed.quickPatientPresets : Array.isArray(parsed.quickGeneralPresets) ? parsed.quickGeneralPresets : QUICK_PATIENT_TASKS);
       setQuickGeneralPresets(Array.isArray(parsed.quickGeneralPresets) ? parsed.quickGeneralPresets : QUICK_GENERAL_TASKS);
       setQuickDailyPresets(Array.isArray(parsed.quickDailyPresets) ? parsed.quickDailyPresets : QUICK_DAILY_TASKS);
       setDailyTaskSets(Array.isArray(parsed.dailyTaskSets) ? parsed.dailyTaskSets : DEFAULT_DAILY_TASK_SETS);
@@ -5194,6 +5202,7 @@ function PatientTriage() {
       patients,
       stats,
       templates,
+      quickPatientPresets,
       quickGeneralPresets,
       quickDailyPresets,
       dailyTaskSets,
@@ -5207,7 +5216,7 @@ function PatientTriage() {
       dailyGeneralTasks,
       scheduledEvents
     });
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -5262,6 +5271,7 @@ function PatientTriage() {
     patients: cloneForUndo(activePatients),
     stats: cloneForUndo(stats),
     templates: cloneForUndo(templates),
+    quickPatientPresets: cloneForUndo(quickPatientPresets),
     quickGeneralPresets: cloneForUndo(quickGeneralPresets),
     quickDailyPresets: cloneForUndo(quickDailyPresets),
     dailyTaskSets: cloneForUndo(dailyTaskSets),
@@ -5284,6 +5294,7 @@ function PatientTriage() {
       date: todayStr()
     });
     setTemplates(Array.isArray(undoEntry.templates) ? undoEntry.templates : DEFAULT_TEMPLATES);
+    setQuickPatientPresets(Array.isArray(undoEntry.quickPatientPresets) ? undoEntry.quickPatientPresets : Array.isArray(undoEntry.quickGeneralPresets) ? undoEntry.quickGeneralPresets : QUICK_PATIENT_TASKS);
     setQuickGeneralPresets(Array.isArray(undoEntry.quickGeneralPresets) ? undoEntry.quickGeneralPresets : QUICK_GENERAL_TASKS);
     setQuickDailyPresets(Array.isArray(undoEntry.quickDailyPresets) ? undoEntry.quickDailyPresets : QUICK_DAILY_TASKS);
     setDailyTaskSets(Array.isArray(undoEntry.dailyTaskSets) ? undoEntry.dailyTaskSets : DEFAULT_DAILY_TASK_SETS);
@@ -6046,10 +6057,10 @@ function PatientTriage() {
       type: 'docs',
       estimate: '5'
     };
-    if (mode === 'daily') setQuickDailyPresets(prev => [...prev, item]);else setQuickGeneralPresets(prev => [...prev, item]);
+    if (mode === 'daily') setQuickDailyPresets(prev => [...prev, item]);else if (mode === 'patient') setQuickPatientPresets(prev => [...prev, item]);else setQuickGeneralPresets(prev => [...prev, item]);
   };
   const updateQuickPreset = (mode, idx, updates) => {
-    const setter = mode === 'daily' ? setQuickDailyPresets : setQuickGeneralPresets;
+    const setter = mode === 'daily' ? setQuickDailyPresets : mode === 'patient' ? setQuickPatientPresets : setQuickGeneralPresets;
     setter(prev => prev.map((item, i) => i === idx ? {
       ...item,
       ...updates
@@ -6057,7 +6068,7 @@ function PatientTriage() {
   };
   const removeQuickPreset = (mode, idx) => {
     rememberUndo('よく使う項目削除');
-    const setter = mode === 'daily' ? setQuickDailyPresets : setQuickGeneralPresets;
+    const setter = mode === 'daily' ? setQuickDailyPresets : mode === 'patient' ? setQuickPatientPresets : setQuickGeneralPresets;
     setter(prev => prev.filter((_, i) => i !== idx));
   };  const addDailyTaskSet = () => {
     rememberUndo('でいとりセット追加');
@@ -6176,6 +6187,7 @@ function PatientTriage() {
     patients,
     stats,
     templates,
+    quickPatientPresets,
     quickGeneralPresets,
     quickDailyPresets,
     dailyTaskSets,
@@ -6188,13 +6200,14 @@ function PatientTriage() {
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 7
+    version: 8
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
     setPatients(parsed.patients);
     if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
+    if (Array.isArray(parsed.quickPatientPresets)) setQuickPatientPresets(parsed.quickPatientPresets);else if (Array.isArray(parsed.quickGeneralPresets)) setQuickPatientPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
     if (Array.isArray(parsed.dailyTaskSets)) setDailyTaskSets(parsed.dailyTaskSets);
@@ -6263,11 +6276,12 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
     templates,
+    quickPatientPresets,
     quickGeneralPresets,
     quickDailyPresets,
     dailyTaskSets,
@@ -6280,7 +6294,7 @@ function PatientTriage() {
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 7,
+    version: 8,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -6325,6 +6339,7 @@ function PatientTriage() {
     setPatients(parsed.patients);
     if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
     if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
+    if (Array.isArray(parsed.quickPatientPresets)) setQuickPatientPresets(parsed.quickPatientPresets);else if (Array.isArray(parsed.quickGeneralPresets)) setQuickPatientPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
     if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
     if (Array.isArray(parsed.dailyTaskSets)) setDailyTaskSets(parsed.dailyTaskSets);
@@ -6936,13 +6951,17 @@ function PatientTriage() {
   }) : React.createElement(ChevronRight, {
     size: 12
   }), "\u3067\u3044\u3068\u308A \u3088\u304F\u4F7F\u3046\u7DE8\u96C6 (", quickDailyPresets.length, ")"), dailyQuickPresetsOpen && React.createElement(QuickPresetManager, {
-    patientPresets: quickGeneralPresets,
+    patientPresets: quickPatientPresets,
+    generalPresets: quickGeneralPresets,
     dailyPresets: quickDailyPresets,
     onUpdatePatient: (idx, updates) => updateQuickPreset('patient', idx, updates),
+    onUpdateGeneral: (idx, updates) => updateQuickPreset('general', idx, updates),
     onUpdateDaily: (idx, updates) => updateQuickPreset('daily', idx, updates),
     onAddPatient: () => addQuickPreset('patient'),
+    onAddGeneral: () => addQuickPreset('general'),
     onAddDaily: () => addQuickPreset('daily'),
     onRemovePatient: idx => removeQuickPreset('patient', idx),
+    onRemoveGeneral: idx => removeQuickPreset('general', idx),
     onRemoveDaily: idx => removeQuickPreset('daily', idx),
     showPatient: false
   }), React.createElement("div", {
@@ -7003,7 +7022,7 @@ function PatientTriage() {
     onMemoChange: memo => updatePatientMemo(p.id, memo),
     templates: templates,
     onApplyTemplate: tpl => applyTemplate(p.id, tpl),
-    quickTasks: quickGeneralPresets,
+    quickTasks: quickPatientPresets,
     onApplyQuickTask: preset => addQuickPatientTask(p.id, preset),
     adding: adding[p.id],
     onStartAdd: () => setAdding(a => ({
@@ -7333,15 +7352,20 @@ function PatientTriage() {
     size: 12
   }) : React.createElement(ChevronRight, {
     size: 12
-  }), "\u307A\u3044\u3068\u308A \u3088\u304F\u4F7F\u3046\u7DE8\u96C6 (", quickGeneralPresets.length, ")"), quickPresetsOpen && React.createElement(QuickPresetManager, {
-    patientPresets: quickGeneralPresets,
+  }), "\u307A\u3044\u3068\u308A \u3088\u304F\u4F7F\u3046\u7DE8\u96C6 (", quickPatientPresets.length + quickGeneralPresets.length, ")"), quickPresetsOpen && React.createElement(QuickPresetManager, {
+    patientPresets: quickPatientPresets,
+    generalPresets: quickGeneralPresets,
     dailyPresets: quickDailyPresets,
     onUpdatePatient: (idx, updates) => updateQuickPreset('patient', idx, updates),
+    onUpdateGeneral: (idx, updates) => updateQuickPreset('general', idx, updates),
     onUpdateDaily: (idx, updates) => updateQuickPreset('daily', idx, updates),
     onAddPatient: () => addQuickPreset('patient'),
+    onAddGeneral: () => addQuickPreset('general'),
     onAddDaily: () => addQuickPreset('daily'),
     onRemovePatient: idx => removeQuickPreset('patient', idx),
+    onRemoveGeneral: idx => removeQuickPreset('general', idx),
     onRemoveDaily: idx => removeQuickPreset('daily', idx),
+    showGeneral: true,
     showDaily: false
   }), React.createElement(RoutinePresetSection, {
     presets: routinePresets,
@@ -7703,10 +7727,3 @@ function PatientTriage() {
   })));
 }
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(PatientTriage, null));
-
-
-
-
-
-
-
