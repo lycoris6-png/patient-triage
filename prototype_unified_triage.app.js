@@ -584,6 +584,7 @@ const TIME_STATES = {
 };
 const STORAGE_KEY = 'patient-triage-v1';
 const GAS_CONFIG_KEY = 'patient-triage-gas-config';
+const ROUTINE_PROMPT_STORAGE_KEY = 'patient-triage-routine-prompt-date';
 const THEMES = [{
   id: 'lavender',
   label: 'ラベンダー',
@@ -737,10 +738,46 @@ function applyTheme(theme) {
   window.__headerGrad = theme.headerGrad;
 }
 const uid = () => Math.random().toString(36).slice(2, 10);
+const WORKDAY_START_HOUR = 6;
 const todayStr = () => {
   const d = new Date();
-  if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+  if (d.getHours() < WORKDAY_START_HOUR) d.setDate(d.getDate() - 1);
   return d.toLocaleDateString('sv-SE');
+};
+const currentWorkday = () => new Date(todayStr() + 'T00:00:00');
+const dateStrFromDate = date => date.toLocaleDateString('sv-SE');
+const weekRangeForDate = dateStr => {
+  const d = new Date(dateStr + 'T00:00:00');
+  const offset = (d.getDay() + 6) % 7;
+  const start = new Date(d);
+  start.setDate(d.getDate() - offset);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return { start: dateStrFromDate(start), end: dateStrFromDate(end) };
+};
+const currentWeekRange = () => weekRangeForDate(todayStr());
+const pruneEndDayLogs = (logs, baseDate = todayStr()) => {
+  const { start, end } = weekRangeForDate(baseDate);
+  return (Array.isArray(logs) ? logs : []).filter(log => log && log.date >= start && log.date <= end).sort((a, b) => a.date.localeCompare(b.date));
+};
+const weekdayLabel = dateStr => ['日', '月', '火', '水', '木', '金', '土'][new Date(dateStr + 'T00:00:00').getDay()] || '';
+const formatEndDayLogs = logs => {
+  const weekly = pruneEndDayLogs(logs);
+  const { start, end } = currentWeekRange();
+  const lines = [`# おしまいログ ${start}(${weekdayLabel(start)}) - ${end}(${weekdayLabel(end)})`, ''];
+  if (!weekly.length) {
+    lines.push('今週のおしまいログはまだありません。');
+    return lines.join('\n');
+  }
+  weekly.forEach(log => {
+    lines.push(`## ${log.date}(${weekdayLabel(log.date)})`);
+    lines.push(`完了 ${log.count || 0}件`);
+    (log.patientTasks || []).forEach(item => lines.push(`- 患者: ${item.patientName || ''} / ${item.title || ''}`));
+    (log.generalTasks || []).forEach(item => lines.push(`- ${item.mode === 'daily' ? 'でいとり' : 'すきま'}: ${item.title || ''}`));
+    (log.events || []).forEach(item => lines.push(`- 予定: ${item.title || ''}${item.scheduledTime ? ' ' + item.scheduledTime : ''}`));
+    lines.push('');
+  });
+  return lines.join('\n').trimEnd();
 };
 const MILESTONE_LINES = {
   5: '今日5件終了。いい流れです。',
@@ -4310,6 +4347,121 @@ function LastDoneSection({
     }
   }, "追加"))));
 }
+function EndDayLogSection({
+  logs,
+  open,
+  onToggleOpen,
+  onCopy
+}) {
+  const weekly = pruneEndDayLogs(logs);
+  const { start, end } = currentWeekRange();
+  const total = weekly.reduce((sum, log) => sum + (log.count || 0), 0);
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #6366F1'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(99,102,241,.07)'
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 15
+  }) : React.createElement(ChevronRight, {
+    size: 15
+  }), React.createElement("strong", {
+    style: {
+      fontSize: 14,
+      color: 'var(--text)'
+    }
+  }, "今週のおしまいログ"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(99,102,241,.14)',
+      color: '#4338CA'
+    }
+  }, weekly.length, "日 / ", total, "件")), open && React.createElement("div", {
+    style: {
+      padding: '12px 16px 16px',
+      borderTop: '1px solid var(--border)',
+      display: 'grid',
+      gap: 10
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      justifyContent: 'space-between',
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: 'var(--text-3)',
+      fontWeight: 800
+    }
+  }, start, "(", weekdayLabel(start), ") - ", end, "(", weekdayLabel(end), ")"), React.createElement("button", {
+    className: "btn-dark",
+    onClick: onCopy,
+    disabled: weekly.length === 0,
+    style: {
+      padding: '6px 12px',
+      fontSize: 12,
+      opacity: weekly.length === 0 ? .45 : 1
+    }
+  }, "今週分をコピー")), weekly.length === 0 ? React.createElement("p", {
+    style: {
+      margin: 0,
+      color: 'var(--text-3)',
+      fontSize: 12
+    }
+  }, "今週のおしまいログはまだありません。") : weekly.map(log => React.createElement("div", {
+    key: log.date,
+    style: {
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      padding: '9px 11px'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 8,
+      marginBottom: 6,
+      alignItems: 'center'
+    }
+  }, React.createElement("strong", {
+    style: {
+      fontSize: 13,
+      color: 'var(--text)'
+    }
+  }, log.date, "(", weekdayLabel(log.date), ")"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(22,163,74,.12)',
+      color: 'var(--done)'
+    }
+  }, log.count || 0, "件")), React.createElement("pre", {
+    style: {
+      margin: 0,
+      whiteSpace: 'pre-wrap',
+      color: 'var(--text-2)',
+      fontSize: 11,
+      lineHeight: 1.55,
+      fontFamily: 'var(--font-sans)'
+    }
+  }, formatEndDayLogs([log]).split('\n').slice(3).join('\n'))))));
+}
 function RewardSection({
   rewards,
   open,
@@ -4901,10 +5053,12 @@ function PatientTriage() {
   const [importDialog, setImportDialog] = useState(false);
   const [importText, setImportText] = useState('');
   const [dataToolsOpen, setDataToolsOpen] = useState(false);
+  const [endDayLogsOpen, setEndDayLogsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [quickPresetsOpen, setQuickPresetsOpen] = useState(false);
   const [dailyQuickPresetsOpen, setDailyQuickPresetsOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
+  const [routinePromptOpen, setRoutinePromptOpen] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [quickPatientPresets, setQuickPatientPresets] = useState(QUICK_PATIENT_TASKS);
   const [quickGeneralPresets, setQuickGeneralPresets] = useState(QUICK_GENERAL_TASKS);
@@ -4920,6 +5074,7 @@ function PatientTriage() {
   const [lastDoneItems, setLastDoneItems] = useState(DEFAULT_LAST_DONE_ITEMS);
   const [lastDoneOpen, setLastDoneOpen] = useState(false);
   const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr() });
+  const [endDayLogs, setEndDayLogs] = useState([]);
   const [rewards, setRewards] = useState([]);
   const [rewardsOpen, setRewardsOpen] = useState(false);
   const [rewardForm, setRewardForm] = useState({
@@ -5187,6 +5342,7 @@ function PatientTriage() {
       setDailyLinks(Array.isArray(parsed.dailyLinks) ? parsed.dailyLinks : []);
       setPatientLinks(Array.isArray(parsed.patientLinks) ? parsed.patientLinks : []);
       setLastDoneItems(Array.isArray(parsed.lastDoneItems) ? parsed.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
+      setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
       setRewards(Array.isArray(parsed.rewards) ? parsed.rewards : []);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
@@ -5210,13 +5366,26 @@ function PatientTriage() {
       dailyLinks,
       patientLinks,
       lastDoneItems,
+      endDayLogs: pruneEndDayLogs(endDayLogs),
       rewards,
       generalTasks,
       dailyPatients,
       dailyGeneralTasks,
       scheduledEvents
     });
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    const stamp = todayStr();
+    if (loadLocal(ROUTINE_PROMPT_STORAGE_KEY) === stamp) return;
+    const day = currentWorkday().getDay();
+    const hasTodayRoutine = routinePresets.some(item => (item.weekdays || []).includes(day) && item.title?.trim());
+    if (!hasTodayRoutine) {
+      saveLocal(ROUTINE_PROMPT_STORAGE_KEY, stamp);
+      return;
+    }
+    setRoutinePromptOpen(true);
+  }, [loaded, routinePresets]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -5279,6 +5448,7 @@ function PatientTriage() {
     dailyLinks: cloneForUndo(dailyLinks),
     patientLinks: cloneForUndo(patientLinks),
     lastDoneItems: cloneForUndo(lastDoneItems),
+    endDayLogs: cloneForUndo(endDayLogs),
     rewards: cloneForUndo(rewards),
     generalTasks: cloneForUndo(activeGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
@@ -5302,6 +5472,7 @@ function PatientTriage() {
     setDailyLinks(Array.isArray(undoEntry.dailyLinks) ? undoEntry.dailyLinks : []);
     setPatientLinks(Array.isArray(undoEntry.patientLinks) ? undoEntry.patientLinks : []);
     setLastDoneItems(Array.isArray(undoEntry.lastDoneItems) ? undoEntry.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
+    setEndDayLogs(pruneEndDayLogs(undoEntry.endDayLogs));
     setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
@@ -5562,6 +5733,49 @@ function PatientTriage() {
       return;
     }
     rememberUndo('今日はおしまい');
+    const stamp = todayStr();
+    const patientTasks = activePatients.flatMap(p => (p.tasks || []).filter(t => t.status === 'done').map(t => ({
+      patientName: p.name,
+      title: t.title,
+      type: t.type,
+      estimate: t.estimate,
+      completedAt: t.completedAt || null
+    })));
+    const generalTasksDone = activeGeneralTasks.filter(t => t.status === 'done').map(t => ({
+      title: t.title,
+      type: t.type,
+      estimate: t.estimate,
+      mode: isDailyMode ? 'daily' : 'patient',
+      completedAt: t.completedAt || null
+    }));
+    const eventsDone = scheduledEvents.filter(e => e.status === 'done' && (!e.scheduledDate || e.scheduledDate === stamp)).map(e => ({
+      title: e.title,
+      scheduledTime: e.scheduledTime || '',
+      completedAt: e.completedAt || null
+    }));
+    const entry = {
+      id: stamp,
+      date: stamp,
+      weekStart: currentWeekRange().start,
+      createdAt: Date.now(),
+      mode: isDailyMode ? 'daily' : 'patient',
+      count: patientTasks.length + generalTasksDone.length + eventsDone.length,
+      patientTasks,
+      generalTasks: generalTasksDone,
+      events: eventsDone
+    };
+    setEndDayLogs(prev => {
+      const existing = (prev || []).find(log => log.date === stamp);
+      const merged = existing ? {
+        ...entry,
+        patientTasks: [...(existing.patientTasks || []), ...patientTasks],
+        generalTasks: [...(existing.generalTasks || []), ...generalTasksDone],
+        events: [...(existing.events || []), ...eventsDone]
+      } : entry;
+      merged.count = (merged.patientTasks || []).length + (merged.generalTasks || []).length + (merged.events || []).length;
+      return pruneEndDayLogs([...(prev || []).filter(log => log.date !== stamp), merged], stamp);
+    });
+    setEndDayLogsOpen(true);
     setActivePatients(prev => prev.map(p => ({
       ...p,
       tasks: p.tasks.filter(t => t.status !== 'done')
@@ -6133,7 +6347,7 @@ function PatientTriage() {
     setRoutinePresets(prev => prev.filter(item => item.id !== id));
   };
   const applyTodayRoutines = () => {
-    const day = new Date().getDay();
+    const day = currentWorkday().getDay();
     const matched = routinePresets.filter(item => (item.weekdays || []).includes(day) && item.title?.trim());
     if (!matched.length) {
       showToast('今日に該当する固定項目はありません');
@@ -6195,12 +6409,13 @@ function PatientTriage() {
     dailyLinks,
     patientLinks,
     lastDoneItems,
+    endDayLogs: pruneEndDayLogs(endDayLogs),
     rewards,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 8
+    version: 9
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
@@ -6215,6 +6430,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
+    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
@@ -6276,7 +6492,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -6289,12 +6505,13 @@ function PatientTriage() {
     dailyLinks,
     patientLinks,
     lastDoneItems,
+    endDayLogs: pruneEndDayLogs(endDayLogs),
     rewards,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 8,
+    version: 9,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -6310,6 +6527,16 @@ function PatientTriage() {
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
     showToast('ファイル保存しました');
+  };
+  const copyEndDayLogs = async () => {
+    const text = formatEndDayLogs(endDayLogs);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('今週のおしまいログをコピーしました');
+    } catch {
+      setImportText(text);
+      setImportDialog(true);
+    }
   };
   const exportToClipboard = async () => {
     const json = buildExportJSON();
@@ -6347,6 +6574,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
+    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
@@ -7171,7 +7399,12 @@ function PatientTriage() {
     style: {
       color: 'var(--text-2)'
     }
-  }, "\u623B\u3059")))))), React.createElement("div", {
+  }, "\u623B\u3059")))))), React.createElement(EndDayLogSection, {
+    logs: endDayLogs,
+    open: endDayLogsOpen,
+    onToggleOpen: () => setEndDayLogsOpen(v => !v),
+    onCopy: copyEndDayLogs
+  }), React.createElement("div", {
     style: {
       marginTop: 28
     }
@@ -7375,7 +7608,74 @@ function PatientTriage() {
     onAdd: addRoutinePreset,
     onRemove: removeRoutinePreset,
     onApplyToday: applyTodayRoutines
-  })), gasDialog && React.createElement(GasConfigDialog, {
+  }), routinePromptOpen && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => {
+      saveLocal(ROUTINE_PROMPT_STORAGE_KEY, todayStr());
+      setRoutinePromptOpen(false);
+    }
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 400
+    }
+  }, React.createElement("h3", {
+    style: {
+      fontFamily: 'var(--font-serif)',
+      fontSize: 18,
+      fontWeight: 800,
+      color: 'var(--text)',
+      margin: '0 0 8px'
+    }
+  }, "\u4ECA\u65E5\u306E\u56FA\u5B9A\u4E88\u5B9A\u3092\u5165\u308C\u307E\u3059\u304B?"), React.createElement("p", {
+    style: {
+      margin: '0 0 18px',
+      color: 'var(--text-2)',
+      fontSize: 13,
+      lineHeight: 1.7,
+      fontWeight: 600
+    }
+  }, "\u4F5C\u696D\u65E5\u304C\u5207\u308A\u66FF\u308F\u3063\u3066\u304B\u3089\u6700\u521D\u306E\u8D77\u52D5\u3067\u3059\u3002\u4ECA\u65E5\u306E\u66DC\u65E5\u306B\u5F53\u3066\u306F\u307E\u308B\u56FA\u5B9A\u4E88\u5B9A\u30FB\u56FA\u5B9A\u3059\u304D\u307E\u3092\u4E00\u62EC\u3067\u5165\u529B\u3067\u304D\u307E\u3059\u3002"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 8,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => {
+      saveLocal(ROUTINE_PROMPT_STORAGE_KEY, todayStr());
+      setRoutinePromptOpen(false);
+      setRoutineOpen(true);
+    },
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "\u7DE8\u96C6\u3059\u308B"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => {
+      saveLocal(ROUTINE_PROMPT_STORAGE_KEY, todayStr());
+      setRoutinePromptOpen(false);
+    },
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "\u4ECA\u65E5\u306F\u8868\u793A\u3057\u306A\u3044"), React.createElement("button", {
+    className: "btn-green",
+    onClick: () => {
+      saveLocal(ROUTINE_PROMPT_STORAGE_KEY, todayStr());
+      setRoutinePromptOpen(false);
+      applyTodayRoutines();
+    },
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "\u5165\u529B\u3059\u308B"))))), gasDialog && React.createElement(GasConfigDialog, {
     config: gasConfig,
     onSave: cfg => {
       setGasConfig(cfg);
