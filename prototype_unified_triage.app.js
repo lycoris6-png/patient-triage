@@ -444,8 +444,11 @@ const WARDS = [{
   id: '',
   label: '\uFF08\u306A\u3057\uFF09'
 }, {
-  id: '3E',
-  label: '3E'
+  id: '5E',
+  label: '5E'
+}, {
+  id: '5S',
+  label: '5S'
 }, {
   id: '4E',
   label: '4E'
@@ -453,11 +456,8 @@ const WARDS = [{
   id: '4S',
   label: '4S'
 }, {
-  id: '5E',
-  label: '5E'
-}, {
-  id: '5S',
-  label: '5S'
+  id: '3E',
+  label: '3E'
 }];
 const WARD_ORDER = WARDS.reduce((acc, ward, index) => {
   acc[ward.id] = index;
@@ -5032,7 +5032,7 @@ function PatientTriage() {
   const [dailyPatients, setDailyPatients] = useState([]);
   const [dailyGeneralTasks, setDailyGeneralTasks] = useState([]);
   const [dailyExpandedPatients, setDailyExpandedPatients] = useState({});
-  const [patientSortMode, setPatientSortMode] = useState('priority');
+  const [patientSortMode, setPatientSortMode] = useState('ward');
   const [adding, setAdding] = useState({});
   const [addForm, setAddForm] = useState({});
   const [suggestion, setSuggestion] = useState(null);
@@ -7159,6 +7159,11 @@ function PatientTriage() {
     onAdd: addReward,
     onUpdate: updateReward,
     onRemove: removeReward
+  }), React.createElement(EndDayLogSection, {
+    logs: endDayLogs,
+    open: endDayLogsOpen,
+    onToggleOpen: () => setEndDayLogsOpen(v => !v),
+    onCopy: copyEndDayLogs
   }), React.createElement("div", {
     style: {
       marginTop: 10
@@ -7399,7 +7404,7 @@ function PatientTriage() {
     style: {
       color: 'var(--text-2)'
     }
-  }, "\u623B\u3059")))))), React.createElement(EndDayLogSection, {
+  }, "\u623B\u3059")))))), !isDailyMode && React.createElement(EndDayLogSection, {
     logs: endDayLogs,
     open: endDayLogsOpen,
     onToggleOpen: () => setEndDayLogsOpen(v => !v),
