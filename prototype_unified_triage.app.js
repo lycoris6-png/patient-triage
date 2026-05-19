@@ -467,6 +467,31 @@ const WARD_ORDER = WARDS.reduce((acc, ward, index) => {
   acc[ward.id] = index;
   return acc;
 }, {});
+const PATIENT_KINDS = [{
+  id: 'referral',
+  label: '紹介外来',
+  color: '#0EA5E9'
+}, {
+  id: 'admission',
+  label: '予定入院',
+  color: '#8B5CF6'
+}, {
+  id: 'cath',
+  label: '心カテ',
+  color: '#EC4899'
+}, {
+  id: 'other',
+  label: 'その他',
+  color: '#64748B'
+}];
+const PENDING_PATIENT_ALERT_DAYS = 3;
+const daysUntilDateStr = dateStr => {
+  if (!dateStr) return null;
+  const target = new Date(dateStr + 'T00:00:00').getTime();
+  const today = new Date(todayStr() + 'T00:00:00').getTime();
+  if (Number.isNaN(target)) return null;
+  return Math.round((target - today) / (24 * 60 * 60 * 1000));
+};
 const DEFAULT_TEMPLATES = [{
   id: 'tpl-admission',
   name: '入院時セット',
@@ -5021,6 +5046,288 @@ function FloatingTimerBar({
     title: "閉じる"
   }, "✕"))));
 }
+function kindMeta(id) {
+  return PATIENT_KINDS.find(k => k.id === id) || PATIENT_KINDS[3];
+}
+function PendingPatientSection({
+  pending,
+  open,
+  onToggleOpen,
+  form,
+  setForm,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onPromote
+}) {
+  const sorted = [...pending].sort((a, b) => (a.scheduledDate || '9999').localeCompare(b.scheduledDate || '9999'));
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #8B5CF6'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(139,92,246,.08)'
+    }
+  }, open ? React.createElement(ChevronDown, { size: 15 }) : React.createElement(ChevronRight, { size: 15 }), React.createElement("strong", {
+    style: { fontSize: 14, color: 'var(--text)' }
+  }, "予兆患者"), React.createElement("span", {
+    className: "tag",
+    style: { background: 'rgba(139,92,246,.18)', color: '#5B21B6' }
+  }, pending.length, "件"), React.createElement("span", {
+    style: { marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }
+  }, "予定日が近づくと通知")), open && React.createElement("div", {
+    style: { padding: '0 16px 16px', borderTop: '1px solid var(--border)' }
+  }, sorted.length === 0 ? React.createElement("p", {
+    style: { margin: '12px 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.7 }
+  }, "10日後の心カテ、5日後の紹介外来など、まだ受け持ちにしないけど忘れたくない患者を置いておけます。") : React.createElement("div", {
+    style: { display: 'grid', gap: 7, marginTop: 12 }
+  }, sorted.map(item => {
+    const km = kindMeta(item.kind);
+    const days = daysUntilDateStr(item.scheduledDate);
+    const dayLabel = days == null ? '日付なし' : days < 0 ? `${-days}日経過` : days === 0 ? '今日' : `あと${days}日`;
+    const dayColor = days == null ? 'var(--text-3)' : days < 0 ? '#DC2626' : days <= PENDING_PATIENT_ALERT_DAYS ? '#B45309' : 'var(--text-2)';
+    return React.createElement("div", {
+      key: item.id,
+      style: {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        gap: 6,
+        padding: 8,
+        background: 'var(--surface-2)',
+        borderRadius: 10,
+        border: '1px solid var(--border)'
+      }
+    }, React.createElement("div", {
+      style: { display: 'grid', gap: 4 }
+    }, React.createElement("div", {
+      style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }
+    }, React.createElement("input", {
+      value: item.name || '',
+      onChange: e => onUpdate(item.id, { name: e.target.value }),
+      className: "inp",
+      placeholder: "患者名",
+      style: { padding: '5px 8px', fontSize: 12, flex: '1 1 110px', minWidth: 0 }
+    }), React.createElement("select", {
+      value: item.kind || 'other',
+      onChange: e => onUpdate(item.id, { kind: e.target.value }),
+      className: "inp",
+      style: { padding: '5px 6px', fontSize: 11, background: km.color + '18', color: km.color, fontWeight: 700 }
+    }, PATIENT_KINDS.map(k => React.createElement("option", { key: k.id, value: k.id }, k.label))), React.createElement("input", {
+      type: "date",
+      value: item.scheduledDate || '',
+      onChange: e => onUpdate(item.id, { scheduledDate: e.target.value }),
+      className: "inp",
+      style: { padding: '5px 6px', fontSize: 11 }
+    }), React.createElement("span", {
+      style: { fontSize: 11, color: dayColor, fontWeight: 700 }
+    }, dayLabel)), React.createElement("div", {
+      style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }
+    }, React.createElement("select", {
+      value: item.ward || '',
+      onChange: e => onUpdate(item.id, { ward: e.target.value }),
+      className: "inp",
+      style: { padding: '4px 6px', fontSize: 11 }
+    }, WARDS.map(w => React.createElement("option", { key: w.id, value: w.id }, "病棟:", w.label))), React.createElement("input", {
+      value: item.memo || '',
+      onChange: e => onUpdate(item.id, { memo: e.target.value }),
+      className: "inp",
+      placeholder: "メモ（任意）",
+      style: { padding: '4px 8px', fontSize: 11, flex: 1, minWidth: 80 }
+    }))), React.createElement("div", {
+      style: { display: 'flex', flexDirection: 'column', gap: 4 }
+    }, React.createElement("button", {
+      className: "btn-dark",
+      onClick: () => onPromote(item),
+      style: { fontSize: 11, padding: '5px 8px' },
+      title: "受け持ちに登録"
+    }, "→受持"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onRemove(item.id),
+      style: { fontSize: 11, padding: '4px 6px', opacity: .65 }
+    }, "削除")));
+  })), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1fr) auto auto auto',
+      gap: 6,
+      marginTop: 12
+    }
+  }, React.createElement("input", {
+    value: form.name,
+    onChange: e => setForm(prev => ({ ...prev, name: e.target.value })),
+    onKeyDown: e => { if (e.key === 'Enter') onAdd(); },
+    className: "inp",
+    placeholder: "患者名",
+    "aria-label": "予兆患者名"
+  }), React.createElement("select", {
+    value: form.kind || 'cath',
+    onChange: e => setForm(prev => ({ ...prev, kind: e.target.value })),
+    className: "inp",
+    style: { padding: '6px', fontSize: 12 }
+  }, PATIENT_KINDS.map(k => React.createElement("option", { key: k.id, value: k.id }, k.label))), React.createElement("input", {
+    type: "date",
+    value: form.scheduledDate || '',
+    onChange: e => setForm(prev => ({ ...prev, scheduledDate: e.target.value })),
+    className: "inp",
+    style: { padding: '6px', fontSize: 12 }
+  }), React.createElement("button", {
+    className: "btn-dark",
+    onClick: onAdd,
+    disabled: !form.name.trim(),
+    style: { opacity: !form.name.trim() ? .45 : 1 }
+  }, "追加"))));
+}
+function PromotePendingDialog({
+  pending,
+  templates,
+  onClose,
+  onConfirm
+}) {
+  const { useState, useMemo } = React;
+  const [name, setName] = useState(pending.name || '');
+  const [ward, setWard] = useState(pending.ward || '');
+  const [priority, setPriority] = useState(pending.priority || 'normal');
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
+  const km = kindMeta(pending.kind);
+  const toggle = id => setSelectedTemplateIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const previewTasks = useMemo(() => {
+    const out = [];
+    selectedTemplateIds.forEach(tid => {
+      const tpl = templates.find(t => t.id === tid);
+      if (!tpl) return;
+      (tpl.items || []).forEach(it => {
+        if (it.title?.trim()) out.push(it);
+      });
+    });
+    return out;
+  }, [selectedTemplateIds, templates]);
+  return React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 160,
+      background: 'rgba(24,15,62,.55)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16
+    },
+    onClick: e => { if (e.target === e.currentTarget) onClose(); }
+  }, React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      borderRadius: 14,
+      maxWidth: 520,
+      width: '100%',
+      maxHeight: '90vh',
+      overflow: 'auto',
+      padding: 20,
+      boxShadow: 'var(--shadow-lg)'
+    }
+  }, React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }
+  }, React.createElement("span", {
+    className: "tag",
+    style: { background: km.color + '22', color: km.color }
+  }, km.label), React.createElement("strong", {
+    style: { fontSize: 16, fontFamily: 'var(--font-serif)' }
+  }, "受け持ちに登録")), React.createElement("div", {
+    style: { display: 'grid', gap: 10, marginBottom: 14 }
+  }, React.createElement("label", {
+    style: { display: 'grid', gap: 4, fontSize: 11, color: 'var(--text-2)', fontWeight: 700 }
+  }, "名前", React.createElement("input", {
+    value: name,
+    onChange: e => setName(e.target.value),
+    className: "inp",
+    style: { padding: '6px 10px', fontSize: 13 },
+    autoFocus: true
+  })), React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }
+  }, React.createElement("label", {
+    style: { display: 'grid', gap: 4, fontSize: 11, color: 'var(--text-2)', fontWeight: 700 }
+  }, "病棟", React.createElement("select", {
+    value: ward,
+    onChange: e => setWard(e.target.value),
+    className: "inp",
+    style: { padding: '6px', fontSize: 12 }
+  }, WARDS.map(w => React.createElement("option", { key: w.id, value: w.id }, w.label)))), React.createElement("label", {
+    style: { display: 'grid', gap: 4, fontSize: 11, color: 'var(--text-2)', fontWeight: 700 }
+  }, "優先度", React.createElement("select", {
+    value: priority,
+    onChange: e => setPriority(e.target.value),
+    className: "inp",
+    style: { padding: '6px', fontSize: 12 }
+  }, [
+    { id: 'er', label: 'ER' },
+    { id: 'high', label: '注意' },
+    { id: 'normal', label: '通常' },
+    { id: 'low', label: '低' }
+  ].map(p => React.createElement("option", { key: p.id, value: p.id }, p.label)))))), React.createElement("div", {
+    style: { marginBottom: 10 }
+  }, React.createElement("div", {
+    style: { fontSize: 12, color: 'var(--text-2)', fontWeight: 700, marginBottom: 6 }
+  }, "テンプレ適用（任意・複数可）"), templates.length === 0 ? React.createElement("p", {
+    style: { fontSize: 12, color: 'var(--text-3)' }
+  }, "テンプレートが未登録です。空のまま登録できます。") : React.createElement("div", {
+    style: { display: 'grid', gap: 4 }
+  }, templates.map(tpl => React.createElement("label", {
+    key: tpl.id,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      padding: '6px 8px',
+      background: selectedTemplateIds.includes(tpl.id) ? 'var(--surface-3)' : 'var(--surface-2)',
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      cursor: 'pointer',
+      fontSize: 12
+    }
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: selectedTemplateIds.includes(tpl.id),
+    onChange: () => toggle(tpl.id)
+  }), React.createElement("span", { style: { fontWeight: 700 } }, tpl.name), React.createElement("span", {
+    style: { marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)' }
+  }, (tpl.items || []).length, "項目"))))), previewTasks.length > 0 && React.createElement("div", {
+    style: {
+      marginBottom: 14,
+      padding: 10,
+      background: 'var(--surface-2)',
+      borderRadius: 8,
+      border: '1px solid var(--border)'
+    }
+  }, React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--text-2)', fontWeight: 700, marginBottom: 6 }
+  }, "適用されるタスク (", previewTasks.length, "件)"), React.createElement("ul", {
+    style: { margin: 0, padding: '0 0 0 16px', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }
+  }, previewTasks.slice(0, 12).map((it, i) => React.createElement("li", { key: i }, it.title, " ", React.createElement("span", { style: { color: 'var(--text-3)', fontSize: 11 } }, it.estimate || '5', "分"))), previewTasks.length > 12 && React.createElement("li", { style: { color: 'var(--text-3)' } }, "…ほか ", previewTasks.length - 12, " 件"))), React.createElement("div", {
+    style: { display: 'flex', justifyContent: 'flex-end', gap: 8 }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: onClose,
+    style: { fontSize: 12 }
+  }, "キャンセル"), React.createElement("button", {
+    className: "btn-dark",
+    onClick: () => onConfirm({
+      name: name.trim(),
+      ward,
+      priority,
+      templateIds: selectedTemplateIds
+    }),
+    disabled: !name.trim()
+  }, "登録する"))));
+}
 function PatientTriage() {
   const {
     useState,
@@ -5083,6 +5390,14 @@ function PatientTriage() {
   const [endDayLogs, setEndDayLogs] = useState([]);
   const [rewards, setRewards] = useState([]);
   const [rewardsOpen, setRewardsOpen] = useState(false);
+  const [pendingPatients, setPendingPatients] = useState([]);
+  const [pendingPatientsOpen, setPendingPatientsOpen] = useState(false);
+  const [pendingPatientForm, setPendingPatientForm] = useState({
+    name: '',
+    kind: 'cath',
+    scheduledDate: ''
+  });
+  const [promoteTarget, setPromoteTarget] = useState(null);
   const [rewardForm, setRewardForm] = useState({
     text: '',
     when: ''
@@ -5350,6 +5665,7 @@ function PatientTriage() {
       setLastDoneItems(Array.isArray(parsed.lastDoneItems) ? parsed.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
       setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
       setRewards(Array.isArray(parsed.rewards) ? parsed.rewards : []);
+      setPendingPatients(Array.isArray(parsed.pendingPatients) ? parsed.pendingPatients : []);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
       setScheduledEvents(Array.isArray(parsed.scheduledEvents) ? parsed.scheduledEvents : []);
@@ -5374,12 +5690,13 @@ function PatientTriage() {
       lastDoneItems,
       endDayLogs: pruneEndDayLogs(endDayLogs),
       rewards,
+      pendingPatients,
       generalTasks,
       dailyPatients,
       dailyGeneralTasks,
       scheduledEvents
     });
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -5438,8 +5755,23 @@ function PatientTriage() {
       scheduledEvent: true,
       ts: dateTimeStatus(e.scheduledDate, e.scheduledTime, now)
     })).filter(e => e.ts && (timedAlertMode === 'all' || e.ts === 'past' || e.ts === 'now' || e.ts === 'soon'));
-    return [...patientAlerts, ...eventAlerts].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
-  }, [flatTasks, scheduledEvents, now, timedAlertMode]);
+    const pendingAlerts = pendingPatients.filter(p => p.scheduledDate).map(p => {
+      const days = daysUntilDateStr(p.scheduledDate);
+      return { ...p, days };
+    }).filter(p => p.days != null && p.days <= PENDING_PATIENT_ALERT_DAYS).map(p => {
+      const km = kindMeta(p.kind);
+      return {
+        id: 'pending-' + p.id,
+        title: `${km.label}: ${p.name}${p.days < 0 ? `（${-p.days}日経過）` : p.days === 0 ? '（今日）' : `（あと${p.days}日）`}`,
+        patientName: '予兆',
+        pendingEntry: p,
+        scheduledDate: p.scheduledDate,
+        scheduledTime: '',
+        ts: p.days < 0 ? 'past' : p.days === 0 ? 'now' : 'soon'
+      };
+    });
+    return [...patientAlerts, ...eventAlerts, ...pendingAlerts].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+  }, [flatTasks, scheduledEvents, now, timedAlertMode, pendingPatients]);
   const cloneForUndo = value => JSON.parse(JSON.stringify(value));
   const rememberUndo = label => setUndoEntry({
     label,
@@ -5456,6 +5788,7 @@ function PatientTriage() {
     lastDoneItems: cloneForUndo(lastDoneItems),
     endDayLogs: cloneForUndo(endDayLogs),
     rewards: cloneForUndo(rewards),
+    pendingPatients: cloneForUndo(pendingPatients),
     generalTasks: cloneForUndo(activeGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
     expandedPatients: cloneForUndo(activeExpandedPatients),
@@ -5480,6 +5813,7 @@ function PatientTriage() {
     setLastDoneItems(Array.isArray(undoEntry.lastDoneItems) ? undoEntry.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
     setEndDayLogs(pruneEndDayLogs(undoEntry.endDayLogs));
     setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
+    setPendingPatients(Array.isArray(undoEntry.pendingPatients) ? undoEntry.pendingPatients : []);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
     setActiveExpandedPatients(undoEntry.expandedPatients || {});
@@ -6039,6 +6373,76 @@ function PatientTriage() {
     rememberUndo('ご褒美削除');
     setRewards(prev => prev.filter(r => r.id !== id));
   };
+  const addPendingPatient = () => {
+    const name = (pendingPatientForm.name || '').trim();
+    if (!name) return;
+    rememberUndo('予兆患者追加');
+    setPendingPatients(prev => [...prev, {
+      id: uid(),
+      name,
+      kind: pendingPatientForm.kind || 'cath',
+      scheduledDate: pendingPatientForm.scheduledDate || '',
+      ward: '',
+      priority: 'normal',
+      memo: '',
+      createdAt: Date.now()
+    }]);
+    setPendingPatientForm({
+      name: '',
+      kind: pendingPatientForm.kind || 'cath',
+      scheduledDate: ''
+    });
+    setPendingPatientsOpen(true);
+  };
+  const updatePendingPatient = (id, updates) => {
+    setPendingPatients(prev => prev.map(item => item.id === id ? {
+      ...item,
+      ...updates
+    } : item));
+  };
+  const removePendingPatient = id => {
+    rememberUndo('予兆患者削除');
+    setPendingPatients(prev => prev.filter(item => item.id !== id));
+  };
+  const confirmPromote = (pending, fields) => {
+    if (!pending || !fields.name) return;
+    const newPatient = {
+      id: uid(),
+      name: fields.name,
+      priority: fields.priority || 'normal',
+      ward: fields.ward || '',
+      memo: pending.memo ? `(元: ${kindMeta(pending.kind).label}${pending.scheduledDate ? ' ' + pending.scheduledDate : ''}) ${pending.memo}` : '',
+      tasks: [],
+      createdAt: Date.now()
+    };
+    (fields.templateIds || []).forEach(tid => {
+      const tpl = templates.find(t => t.id === tid);
+      if (!tpl) return;
+      (tpl.items || []).forEach(it => {
+        if (!it.title?.trim()) return;
+        newPatient.tasks.push({
+          id: uid(),
+          title: it.title.trim(),
+          type: it.type || 'other',
+          estimate: it.estimate || '5',
+          scheduledTime: null,
+          status: 'todo',
+          stuckReason: '',
+          tinyStep: '',
+          createdAt: Date.now()
+        });
+      });
+    });
+    rememberUndo('予兆患者を受け持ちに登録');
+    setPatients(prev => [...prev, newPatient]);
+    setExpandedPatients(prev => ({
+      ...prev,
+      [newPatient.id]: true
+    }));
+    setPendingPatients(prev => prev.filter(item => item.id !== pending.id));
+    setPromoteTarget(null);
+    showToast(`${newPatient.name} を受け持ちに登録しました`);
+  };
   const suggestNext = () => {
     let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');
     if (erOnly) {
@@ -6422,6 +6826,7 @@ function PatientTriage() {
     lastDoneItems,
     endDayLogs: pruneEndDayLogs(endDayLogs),
     rewards,
+    pendingPatients,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
@@ -6443,6 +6848,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
     if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
+    if (Array.isArray(parsed.pendingPatients)) setPendingPatients(parsed.pendingPatients);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -6503,7 +6909,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -6518,6 +6924,7 @@ function PatientTriage() {
     lastDoneItems,
     endDayLogs: pruneEndDayLogs(endDayLogs),
     rewards,
+    pendingPatients,
     generalTasks,
     dailyPatients,
     dailyGeneralTasks,
@@ -6587,6 +6994,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
     if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
+    if (Array.isArray(parsed.pendingPatients)) setPendingPatients(parsed.pendingPatients);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
@@ -7331,6 +7739,16 @@ function PatientTriage() {
     onAdd: addPatientLink,
     onUpdate: updatePatientLink,
     onRemove: removePatientLink
+  }), React.createElement(PendingPatientSection, {
+    pending: pendingPatients,
+    open: pendingPatientsOpen,
+    onToggleOpen: () => setPendingPatientsOpen(v => !v),
+    form: pendingPatientForm,
+    setForm: setPendingPatientForm,
+    onAdd: addPendingPatient,
+    onUpdate: updatePendingPatient,
+    onRemove: removePendingPatient,
+    onPromote: item => setPromoteTarget(item)
   }))), !focusMode && stuckTasks.length > 0 && React.createElement("div", {
     className: "stuck-bar",
     style: {
@@ -7807,6 +8225,11 @@ function PatientTriage() {
     setForm: setStuckForm,
     onSave: saveStuck,
     onCancel: () => setStuckDialog(null)
+  }), promoteTarget && React.createElement(PromotePendingDialog, {
+    pending: promoteTarget,
+    templates: templates,
+    onClose: () => setPromoteTarget(null),
+    onConfirm: fields => confirmPromote(promoteTarget, fields)
   }), importDialog && React.createElement(ImportDialog, {
     text: importText,
     setText: setImportText,
