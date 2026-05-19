@@ -5108,14 +5108,14 @@ function PendingPatientSection({
         border: '1px solid var(--border)'
       }
     }, React.createElement("div", {
-      style: { display: 'grid', gap: 4 }
+      style: { display: 'grid', gap: 6 }
     }, React.createElement("div", {
       style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }
     }, React.createElement("input", {
       value: item.name || '',
       onChange: e => onUpdate(item.id, { name: e.target.value }),
       className: "inp",
-      placeholder: "患者名",
+      placeholder: "患者名（符丁可）",
       style: { padding: '5px 8px', fontSize: 12, flex: '1 1 110px', minWidth: 0 }
     }), React.createElement("select", {
       value: item.kind || 'other',
@@ -5131,19 +5131,22 @@ function PendingPatientSection({
     }), React.createElement("span", {
       style: { fontSize: 11, color: dayColor, fontWeight: 700 }
     }, dayLabel)), React.createElement("div", {
-      style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }
-    }, React.createElement("select", {
+      style: { display: 'flex', gap: 4, alignItems: 'center' }
+    }, React.createElement("span", {
+      style: { fontSize: 10, color: 'var(--text-3)', fontWeight: 700, minWidth: 30 }
+    }, "病棟"), React.createElement("select", {
       value: item.ward || '',
       onChange: e => onUpdate(item.id, { ward: e.target.value }),
       className: "inp",
-      style: { padding: '4px 6px', fontSize: 11 }
-    }, WARDS.map(w => React.createElement("option", { key: w.id, value: w.id }, "病棟:", w.label))), React.createElement("input", {
+      style: { padding: '4px 6px', fontSize: 11, flex: '0 0 auto' }
+    }, WARDS.map(w => React.createElement("option", { key: w.id, value: w.id }, w.label || '（なし）')))), React.createElement("textarea", {
       value: item.memo || '',
       onChange: e => onUpdate(item.id, { memo: e.target.value }),
       className: "inp",
-      placeholder: "メモ（任意）",
-      style: { padding: '4px 8px', fontSize: 11, flex: 1, minWidth: 80 }
-    }))), React.createElement("div", {
+      placeholder: "メモ（症状・経緯・連絡事項・主治医など）",
+      rows: 2,
+      style: { padding: '6px 8px', fontSize: 12, width: '100%', resize: 'vertical', lineHeight: 1.5, fontFamily: 'var(--font-sans)' }
+    })), React.createElement("div", {
       style: { display: 'flex', flexDirection: 'column', gap: 4 }
     }, React.createElement("button", {
       className: "btn-dark",
