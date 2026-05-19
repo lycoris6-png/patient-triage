@@ -767,6 +767,12 @@ function applyTheme(theme) {
   window.__headerGrad = theme.headerGrad;
 }
 const uid = () => Math.random().toString(36).slice(2, 10);
+const formatHHMM = ms => {
+  if (!ms) return '';
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 const WORKDAY_START_HOUR = 6;
 const todayStr = () => {
   const d = new Date();
@@ -1416,11 +1422,22 @@ function TaskRow({
     now: now,
     editable: !isDone && !!onClearTime,
     onClear: onClearTime
-  }), React.createElement("span", {
+  }), isDone && task.completedAt && React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: 'var(--done)',
+      fontWeight: 700,
+      background: 'rgba(22,163,74,.10)',
+      borderRadius: 6,
+      padding: '1px 6px',
+      marginLeft: 'auto'
+    },
+    title: '\u5B8C\u4E86\u6642\u523B'
+  }, "\u2713 ", formatHHMM(task.completedAt)), React.createElement("span", {
     style: {
       fontSize: 11,
       color: 'var(--text-3)',
-      marginLeft: 'auto',
+      marginLeft: isDone && task.completedAt ? 0 : 'auto',
       flexShrink: 0,
       fontWeight: 600
     }
@@ -2617,12 +2634,23 @@ function GeneralTaskSection({
         background: due.bg,
         color: due.fg
       }
-    }, due.text), React.createElement("span", {
+    }, due.text), isDone && task.completedAt && React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: 'var(--done)',
+        fontWeight: 700,
+        background: 'rgba(22,163,74,.10)',
+        borderRadius: 6,
+        padding: '1px 6px',
+        marginLeft: 'auto'
+      },
+      title: '\u5B8C\u4E86\u6642\u523B'
+    }, "\u2713 ", formatHHMM(task.completedAt)), React.createElement("span", {
       style: {
         fontSize: 11,
       color: 'var(--text-3)',
       fontWeight: 600,
-      marginLeft: 'auto'
+      marginLeft: isDone && task.completedAt ? 0 : 'auto'
     }
     }, est.label)), editingTaskId === task.id && React.createElement("div", {
       style: {
