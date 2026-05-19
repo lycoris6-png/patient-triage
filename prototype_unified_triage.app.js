@@ -90,6 +90,10 @@ const TASK_TYPES = [{
   label: '診察',
   dot: '#10B981'
 }, {
+  id: 'test',
+  label: '検査',
+  dot: '#14B8A6'
+}, {
   id: 'chart',
   label: 'カルテ',
   dot: '#F59E0B'
@@ -6608,7 +6612,7 @@ function PatientTriage() {
       showToast('インポート完了');
     }
   };
-  const typeMeta = id => TASK_TYPES.find(t => t.id === id) || TASK_TYPES[7];
+  const typeMeta = id => TASK_TYPES.find(t => t.id === id) || TASK_TYPES.find(t => t.id === 'docs') || TASK_TYPES[0];
   const generalTypeMeta = id => (isDailyMode ? DAILY_TASK_TYPES.find(t => t.id === id) || DAILY_TASK_TYPES[0] : GENERAL_TASK_TYPES.find(t => t.id === id) || GENERAL_TASK_TYPES[2]);
   const estMeta = id => ESTIMATES.find(e => e.id === id) || ESTIMATES[1];
   const gasStatusLabel = {
