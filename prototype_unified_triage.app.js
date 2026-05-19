@@ -3715,8 +3715,10 @@ function QuickPresetManager({
   showGeneral = false,
   showDaily = true
 }) {
-  const renderList = (label, presets, dailyMode, onUpdate, onAdd, onRemove) => {
-    const taskTypes = dailyMode ? DAILY_TASK_TYPES : GENERAL_TASK_TYPES;
+  const renderList = (label, presets, kind, onUpdate, onAdd, onRemove) => {
+    const dailyMode = kind === 'daily';
+    const taskTypes = kind === 'daily' ? DAILY_TASK_TYPES : kind === 'patient' ? TASK_TYPES : GENERAL_TASK_TYPES;
+    const defaultType = kind === 'daily' ? 'home' : kind === 'patient' ? 'chart' : 'docs';
     return React.createElement("div", {
       style: {
         background: 'var(--surface-2)',
@@ -3759,7 +3761,7 @@ function QuickPresetManager({
         fontSize: 12
       }
     }), React.createElement("select", {
-      value: preset.type || (dailyMode ? 'home' : 'docs'),
+      value: preset.type || defaultType,
       onChange: e => onUpdate(idx, {
         type: e.target.value
       }),
@@ -3811,7 +3813,7 @@ function QuickPresetManager({
       display: 'grid',
       gap: 10
     }
-  }, showPatient && renderList("ぺいとり: 患者タスク", patientPresets, false, onUpdatePatient, onAddPatient, onRemovePatient), showGeneral && renderList("ぺいとり: すきまタスク", generalPresets, false, onUpdateGeneral, onAddGeneral, onRemoveGeneral), showDaily && renderList("でいとり: よく使う", dailyPresets, true, onUpdateDaily, onAddDaily, onRemoveDaily));
+  }, showPatient && renderList("ぺいとり: 患者タスク", patientPresets, 'patient', onUpdatePatient, onAddPatient, onRemovePatient), showGeneral && renderList("ぺいとり: すきまタスク", generalPresets, 'general', onUpdateGeneral, onAddGeneral, onRemoveGeneral), showDaily && renderList("でいとり: よく使う", dailyPresets, 'daily', onUpdateDaily, onAddDaily, onRemoveDaily));
 }
 function DailyTaskSetManager({
   sets,
@@ -5431,7 +5433,7 @@ function PatientTriage() {
       patientName: '予定',
       scheduledEvent: true,
       ts: dateTimeStatus(e.scheduledDate, e.scheduledTime, now)
-    })).filter(e => e.ts === 'past' || e.ts === 'now' || e.ts === 'soon');
+    })).filter(e => e.ts && (timedAlertMode === 'all' || e.ts === 'past' || e.ts === 'now' || e.ts === 'soon'));
     return [...patientAlerts, ...eventAlerts].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
   }, [flatTasks, scheduledEvents, now, timedAlertMode]);
   const cloneForUndo = value => JSON.parse(JSON.stringify(value));
@@ -6265,6 +6267,11 @@ function PatientTriage() {
       type: 'home',
       estimate: '5',
       dailyPriority: 'normal'
+    } : mode === 'patient' ? {
+      id: uid(),
+      title: '新しい項目',
+      type: 'chart',
+      estimate: '5'
     } : {
       id: uid(),
       title: '新しい項目',
