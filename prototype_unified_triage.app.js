@@ -823,6 +823,8 @@ const MILESTONE_LINES = {
   30: '今日30件終了。ここまで来たら十分すごいです。'
 };
 const milestoneForDone = count => count <= 30 && count % 5 === 0 ? count : null;
+const PATIENT_ALERTS = [{ id: 'medHold', icon: '💊', label: '中断薬あり' }, { id: 'fasting', icon: '🍙', label: '欠食あり' }, { id: 'rehabMissing', icon: '🏃‍♀️', label: 'リハビリ未介入' }];
+const getPatientAlerts = patient => PATIENT_ALERTS.filter(alert => patient?.alerts?.[alert.id]);
 const getPri = p => p?.priority || 'normal';
 const priMeta = id => PRIORITIES.find(p => p.id === id) || PRIORITIES.find(p => p.id === 'normal') || PRIORITIES[1];
 const getWard = p => WARDS.some(w => w.id === (p?.ward || '')) ? p?.ward || '' : '';
@@ -1529,6 +1531,8 @@ function PatientCard({
   onRemove,
   onSetPriority,
   onSetWard,
+  onToggleAlert,
+  showAlerts = true,
   onRename,
   onMemoChange,
   templates,
@@ -1561,6 +1565,7 @@ function PatientCard({
   const ward = getWard(patient);
   const open = patient.tasks.filter(t => t.status !== 'done');
   const done = patient.tasks.filter(t => t.status === 'done');
+  const activeAlerts = showAlerts ? getPatientAlerts(patient) : [];
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(patient.name);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -1673,7 +1678,24 @@ function PatientCard({
   }, React.createElement(Pencil, {
     size: 11,
     color: "var(--text-2)"
-  }))), React.createElement("span", {
+  }))), activeAlerts.length > 0 && React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      flex: '0 0 auto',
+      maxWidth: 52,
+      overflow: 'hidden'
+    },
+    title: activeAlerts.map(alert => alert.label).join(' / ')
+  }, activeAlerts.map(alert => React.createElement("span", {
+    key: alert.id,
+    style: {
+      fontSize: 12,
+      lineHeight: 1,
+      filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.12))'
+    }
+  }, alert.icon))), React.createElement("span", {
     style: {
       fontSize: 11,
       fontWeight: 700,
@@ -1792,7 +1814,38 @@ function PatientCard({
   }, WARDS.map(w => React.createElement("option", {
     key: w.id || 'none',
     value: w.id
-  }, w.label))))), React.createElement("textarea", {
+  }, w.label))), showAlerts && React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      flexWrap: 'wrap'
+    }
+  }, PATIENT_ALERTS.map(alert => {
+    const active = !!patient.alerts?.[alert.id];
+    return React.createElement("button", {
+      key: alert.id,
+      type: "button",
+      onClick: () => onToggleAlert && onToggleAlert(alert.id),
+      title: alert.label,
+      "aria-pressed": active,
+      style: {
+        width: 28,
+        height: 26,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 8,
+        border: active ? '1.5px solid rgba(220,38,38,.45)' : '1.5px solid var(--border)',
+        background: active ? 'rgba(254,226,226,.95)' : 'var(--surface)',
+        cursor: 'pointer',
+        fontSize: 14,
+        lineHeight: 1,
+        opacity: active ? 1 : .42,
+        boxShadow: active ? '0 2px 8px rgba(220,38,38,.12)' : 'none'
+      }
+    }, alert.icon);
+  })))), React.createElement("textarea", {
     value: patient.memo || '',
     onChange: e => onMemoChange(e.target.value),
     onClick: e => e.stopPropagation(),
@@ -5863,6 +5916,7 @@ function PatientTriage() {
       priority: newPatientPri,
       ward: newPatientWard,
       memo: '',
+      alerts: {},
       tasks: [],
       createdAt: Date.now()
     };
@@ -5898,6 +5952,15 @@ function PatientTriage() {
     ...p,
     ward
   } : p));
+  const togglePatientAlert = (id, alertId) => {
+    rememberUndo('患者アラート変更');
+    setActivePatients(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const alerts = { ...(p.alerts || {}) };
+      if (alerts[alertId]) delete alerts[alertId];else alerts[alertId] = true;
+      return { ...p, alerts };
+    }));
+  };
   const renamePatient = (id, name) => {
     const t = name.trim();
     if (t) setActivePatients(prev => prev.map(p => p.id === id ? {
@@ -6862,7 +6925,7 @@ function PatientTriage() {
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 9
+    version: 10
   });
   const applyPayload = parsed => {
     if (!parsed || !Array.isArray(parsed.patients)) return false;
@@ -6960,7 +7023,7 @@ function PatientTriage() {
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
-    version: 9,
+    version: 10,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -7701,6 +7764,8 @@ function PatientTriage() {
     },
     onSetPriority: pri => setPatientPriority(p.id, pri),
     onSetWard: ward => setPatientWard(p.id, ward),
+    onToggleAlert: alertId => togglePatientAlert(p.id, alertId),
+    showAlerts: !isDailyMode,
     onRename: name => renamePatient(p.id, name),
     onMemoChange: memo => updatePatientMemo(p.id, memo),
     templates: templates,
