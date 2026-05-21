@@ -5141,7 +5141,32 @@ function PendingPatientSection({
   onRemove,
   onPromote
 }) {
+  const { useState, useEffect } = React;
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState({ name: '', kind: 'other', scheduledDate: '', ward: '', memo: '' });
   const sorted = [...pending].sort((a, b) => (a.scheduledDate || '9999').localeCompare(b.scheduledDate || '9999'));
+  useEffect(() => {
+    if (open && pending.length === 0) setAdding(true);
+  }, [open, pending.length]);
+  const startEdit = item => {
+    setEditingId(item.id);
+    setDraft({
+      name: item.name || '',
+      kind: item.kind || 'other',
+      scheduledDate: item.scheduledDate || '',
+      ward: item.ward || '',
+      memo: item.memo || ''
+    });
+  };
+  const saveEdit = id => {
+    onUpdate(id, draft);
+    setEditingId(null);
+  };
+  const addAndClose = () => {
+    onAdd();
+    if ((form.name || '').trim()) setAdding(false);
+  };
   return React.createElement("div", {
     className: "card",
     style: {
@@ -5168,66 +5193,93 @@ function PendingPatientSection({
     style: { marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }
   }, "予定日が近づくと通知")), open && React.createElement("div", {
     style: { padding: '0 16px 16px', borderTop: '1px solid var(--border)' }
-  }, sorted.length === 0 ? React.createElement("p", {
+  }, sorted.length === 0 && !adding ? React.createElement("p", {
     style: { margin: '12px 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.7 }
-  }, "10日後の心カテ、5日後の紹介外来など、まだ受け持ちにしないけど忘れたくない患者を置いておけます。") : React.createElement("div", {
+  }, "10日後の心カテ、5日後の紹介外来など、まだ受け持ちにしないけど忘れたくない患者を置いておけます。") : sorted.length > 0 && React.createElement("div", {
     style: { display: 'grid', gap: 7, marginTop: 12 }
   }, sorted.map(item => {
     const km = kindMeta(item.kind);
     const days = daysUntilDateStr(item.scheduledDate);
     const dayLabel = days == null ? '日付なし' : days < 0 ? `${-days}日経過` : days === 0 ? '今日' : `あと${days}日`;
     const dayColor = days == null ? 'var(--text-3)' : days < 0 ? '#DC2626' : days <= PENDING_PATIENT_ALERT_DAYS ? '#B45309' : 'var(--text-2)';
+    const editing = editingId === item.id;
     return React.createElement("div", {
       key: item.id,
       style: {
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        gridTemplateColumns: editing ? 'minmax(0,1fr)' : 'minmax(0,1fr) auto',
         gap: 6,
         padding: 8,
         background: 'var(--surface-2)',
         borderRadius: 10,
         border: '1px solid var(--border)'
       }
-    }, React.createElement("div", {
+    }, editing ? React.createElement("div", {
       style: { display: 'grid', gap: 6 }
     }, React.createElement("div", {
-      style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }
+      style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto auto', gap: 6 }
     }, React.createElement("input", {
-      value: item.name || '',
-      onChange: e => onUpdate(item.id, { name: e.target.value }),
+      value: draft.name,
+      onChange: e => setDraft(prev => ({ ...prev, name: e.target.value })),
       className: "inp",
       placeholder: "患者名（符丁可）",
-      style: { padding: '5px 8px', fontSize: 12, flex: '1 1 110px', minWidth: 0 }
+      style: { padding: '5px 8px', fontSize: 12, minWidth: 0 }
     }), React.createElement("select", {
-      value: item.kind || 'other',
-      onChange: e => onUpdate(item.id, { kind: e.target.value }),
-      className: "inp",
-      style: { padding: '5px 6px', fontSize: 11, background: km.color + '18', color: km.color, fontWeight: 700 }
-    }, PATIENT_KINDS.map(k => React.createElement("option", { key: k.id, value: k.id }, k.label))), React.createElement("input", {
-      type: "date",
-      value: item.scheduledDate || '',
-      onChange: e => onUpdate(item.id, { scheduledDate: e.target.value }),
+      value: draft.kind || 'other',
+      onChange: e => setDraft(prev => ({ ...prev, kind: e.target.value })),
       className: "inp",
       style: { padding: '5px 6px', fontSize: 11 }
-    }), React.createElement("span", {
-      style: { fontSize: 11, color: dayColor, fontWeight: 700 }
-    }, dayLabel)), React.createElement("div", {
+    }, PATIENT_KINDS.map(k => React.createElement("option", { key: k.id, value: k.id }, k.label))), React.createElement("input", {
+      type: "date",
+      value: draft.scheduledDate || '',
+      onChange: e => setDraft(prev => ({ ...prev, scheduledDate: e.target.value })),
+      className: "inp",
+      style: { padding: '5px 6px', fontSize: 11 }
+    })), React.createElement("div", {
       style: { display: 'flex', gap: 4, alignItems: 'center' }
     }, React.createElement("span", {
       style: { fontSize: 10, color: 'var(--text-3)', fontWeight: 700, minWidth: 30 }
     }, "病棟"), React.createElement("select", {
-      value: item.ward || '',
-      onChange: e => onUpdate(item.id, { ward: e.target.value }),
+      value: draft.ward || '',
+      onChange: e => setDraft(prev => ({ ...prev, ward: e.target.value })),
       className: "inp",
       style: { padding: '4px 6px', fontSize: 11, flex: '0 0 auto' }
     }, WARDS.map(w => React.createElement("option", { key: w.id, value: w.id }, w.label || '（なし）')))), React.createElement("textarea", {
-      value: item.memo || '',
-      onChange: e => onUpdate(item.id, { memo: e.target.value }),
+      value: draft.memo || '',
+      onChange: e => setDraft(prev => ({ ...prev, memo: e.target.value })),
       className: "inp",
       placeholder: "メモ（症状・経緯・連絡事項・主治医など）",
       rows: 2,
       style: { padding: '6px 8px', fontSize: 12, width: '100%', resize: 'vertical', lineHeight: 1.5, fontFamily: 'var(--font-sans)' }
-    })), React.createElement("div", {
+    }), React.createElement("div", {
+      style: { display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }
+    }, React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => saveEdit(item.id),
+      style: { color: 'var(--accent)' }
+    }, "保存"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setEditingId(null)
+    }, "戻す"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onRemove(item.id),
+      style: { color: 'var(--stuck-fg)' }
+    }, "削除"))) : React.createElement(React.Fragment, null, React.createElement("div", {
+      style: { minWidth: 0 }
+    }, React.createElement("div", {
+      style: { display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }
+    }, React.createElement("strong", {
+      style: { fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }
+    }, item.name || '無名'), React.createElement("span", {
+      className: "tag",
+      style: { background: km.color + '18', color: km.color, border: '1px solid ' + km.color + '35' }
+    }, km.label), React.createElement("span", {
+      style: { fontSize: 11, color: dayColor, fontWeight: 800 }
+    }, dayLabel), item.ward && React.createElement("span", {
+      style: { fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
+    }, wardLabel(item.ward))), item.memo && React.createElement("div", {
+      style: { marginTop: 4, fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }
+    }, item.memo)), React.createElement("div", {
       style: { display: 'flex', flexDirection: 'column', gap: 4 }
     }, React.createElement("button", {
       className: "btn-dark",
@@ -5236,20 +5288,22 @@ function PendingPatientSection({
       title: "受け持ちに登録"
     }, "→受持"), React.createElement("button", {
       className: "btn-sm",
-      onClick: () => onRemove(item.id),
-      style: { fontSize: 11, padding: '4px 6px', opacity: .65 }
-    }, "削除")));
-  })), React.createElement("div", {
+      onClick: () => startEdit(item),
+      style: { fontSize: 10, padding: '3px 7px', color: 'var(--text-3)' }
+    }, "編集"))));
+  })), adding ? React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'minmax(0,1fr) auto auto auto',
       gap: 6,
-      marginTop: 12
+      marginTop: 12,
+      paddingTop: 10,
+      borderTop: '1px dashed var(--border)'
     }
   }, React.createElement("input", {
     value: form.name,
     onChange: e => setForm(prev => ({ ...prev, name: e.target.value })),
-    onKeyDown: e => { if (e.key === 'Enter') onAdd(); },
+    onKeyDown: e => { if (e.key === 'Enter') addAndClose(); if (e.key === 'Escape') setAdding(false); },
     className: "inp",
     placeholder: "患者名",
     "aria-label": "予兆患者名"
@@ -5266,12 +5320,30 @@ function PendingPatientSection({
     style: { padding: '6px', fontSize: 12 }
   }), React.createElement("button", {
     className: "btn-dark",
-    onClick: onAdd,
+    onClick: addAndClose,
     disabled: !form.name.trim(),
     style: { opacity: !form.name.trim() ? .45 : 1 }
-  }, "追加"))));
-}
-function PromotePendingDialog({
+  }, "追加"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setAdding(false),
+    style: { gridColumn: '1 / -1', justifySelf: 'end' }
+  }, "閉じる")) : React.createElement("button", {
+    onClick: () => setAdding(true),
+    style: {
+      marginTop: 10,
+      width: '100%',
+      padding: '8px',
+      fontSize: 12,
+      background: 'transparent',
+      border: '1.5px dashed var(--border-2)',
+      borderRadius: 10,
+      cursor: 'pointer',
+      color: 'var(--text-3)',
+      fontFamily: 'var(--font-sans)',
+      fontWeight: 700
+    }
+  }, "+ 予兆患者")));
+}function PromotePendingDialog({
   pending,
   templates,
   onClose,
