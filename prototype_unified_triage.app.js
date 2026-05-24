@@ -780,6 +780,12 @@ const todayStr = () => {
   return d.toLocaleDateString('sv-SE');
 };
 const currentWorkday = () => new Date(todayStr() + 'T00:00:00');
+const workdayStrForTimestamp = timestamp => {
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return '';
+  if (d.getHours() < WORKDAY_START_HOUR) d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString('sv-SE');
+};
 const dateStrFromDate = date => date.toLocaleDateString('sv-SE');
 const weekRangeForDate = dateStr => {
   const d = new Date(dateStr + 'T00:00:00');
@@ -796,9 +802,9 @@ const pruneEndDayLogs = (logs, baseDate = todayStr()) => {
   return (Array.isArray(logs) ? logs : []).filter(log => log && log.date >= start && log.date <= end).sort((a, b) => a.date.localeCompare(b.date));
 };
 const weekdayLabel = dateStr => ['日', '月', '火', '水', '木', '金', '土'][new Date(dateStr + 'T00:00:00').getDay()] || '';
-const formatEndDayLogs = logs => {
-  const weekly = pruneEndDayLogs(logs);
-  const { start, end } = currentWeekRange();
+const formatEndDayLogs = (logs, baseDate = todayStr()) => {
+  const weekly = pruneEndDayLogs(logs, baseDate);
+  const { start, end } = weekRangeForDate(baseDate);
   const lines = [`# おしまいログ ${start}(${weekdayLabel(start)}) - ${end}(${weekdayLabel(end)})`, ''];
   if (!weekly.length) {
     lines.push('今週のおしまいログはまだありません。');
@@ -5544,6 +5550,10 @@ function PatientTriage() {
   const [lastDoneOpen, setLastDoneOpen] = useState(false);
   const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr() });
   const [endDayLogs, setEndDayLogs] = useState([]);
+  const [missedEndDayPrompt, setMissedEndDayPrompt] = useState(null);
+  const [rolloverLogsPromptOpen, setRolloverLogsPromptOpen] = useState(false);
+  const endDayPromptShownRef = React.useRef(false);
+  const rolloverPromptShownRef = React.useRef(false);
   const [rewards, setRewards] = useState([]);
   const [rewardsOpen, setRewardsOpen] = useState(false);
   const [pendingPatients, setPendingPatients] = useState([]);
@@ -5819,7 +5829,7 @@ function PatientTriage() {
       setDailyLinks(Array.isArray(parsed.dailyLinks) ? parsed.dailyLinks : []);
       setPatientLinks(Array.isArray(parsed.patientLinks) ? parsed.patientLinks : []);
       setLastDoneItems(Array.isArray(parsed.lastDoneItems) ? parsed.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
-      setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
+      setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
       setRewards(Array.isArray(parsed.rewards) ? parsed.rewards : []);
       setPendingPatients(Array.isArray(parsed.pendingPatients) ? parsed.pendingPatients : []);
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
@@ -5844,7 +5854,7 @@ function PatientTriage() {
       dailyLinks,
       patientLinks,
       lastDoneItems,
-      endDayLogs: pruneEndDayLogs(endDayLogs),
+      endDayLogs,
       rewards,
       pendingPatients,
       generalTasks,
@@ -5865,6 +5875,25 @@ function PatientTriage() {
     }
     setRoutinePromptOpen(true);
   }, [loaded, routinePresets]);
+  useEffect(() => {
+    if (!loaded || endDayPromptShownRef.current) return;
+    const stamp = todayStr();
+    const isMissed = item => item && item.status === 'done' && item.completedAt && workdayStrForTimestamp(item.completedAt) < stamp;
+    const patientCount = [...patients, ...dailyPatients].reduce((sum, patient) => sum + (patient.tasks || []).filter(isMissed).length, 0);
+    const generalCount = [...generalTasks, ...dailyGeneralTasks].filter(isMissed).length;
+    const count = patientCount + generalCount;
+    if (!count) return;
+    endDayPromptShownRef.current = true;
+    setMissedEndDayPrompt({ count });
+  }, [loaded, patients, dailyPatients, generalTasks, dailyGeneralTasks]);
+  useEffect(() => {
+    if (!loaded || rolloverPromptShownRef.current) return;
+    const { start, end } = currentWeekRange();
+    const hasPriorWeek = endDayLogs.some(log => log && (log.date < start || log.date > end));
+    if (!hasPriorWeek) return;
+    rolloverPromptShownRef.current = true;
+    setRolloverLogsPromptOpen(true);
+  }, [loaded, endDayLogs]);
   const sortedPatients = useMemo(() => {
     const order = {
       er: 0,
@@ -5967,7 +5996,7 @@ function PatientTriage() {
     setDailyLinks(Array.isArray(undoEntry.dailyLinks) ? undoEntry.dailyLinks : []);
     setPatientLinks(Array.isArray(undoEntry.patientLinks) ? undoEntry.patientLinks : []);
     setLastDoneItems(Array.isArray(undoEntry.lastDoneItems) ? undoEntry.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
-    setEndDayLogs(pruneEndDayLogs(undoEntry.endDayLogs));
+    setEndDayLogs(Array.isArray(undoEntry.endDayLogs) ? undoEntry.endDayLogs : []);
     setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
     setPendingPatients(Array.isArray(undoEntry.pendingPatients) ? undoEntry.pendingPatients : []);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
@@ -6220,6 +6249,98 @@ function PatientTriage() {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   };
+  const mergeEndDayEntries = entries => setEndDayLogs(prev => {
+    let next = [...(prev || [])];
+    entries.forEach(entry => {
+      const existing = next.find(log => log.date === entry.date);
+      const merged = existing ? {
+        ...existing,
+        patientTasks: [...(existing.patientTasks || []), ...(entry.patientTasks || [])],
+        generalTasks: [...(existing.generalTasks || []), ...(entry.generalTasks || [])],
+        events: [...(existing.events || []), ...(entry.events || [])]
+      } : entry;
+      merged.count = (merged.patientTasks || []).length + (merged.generalTasks || []).length + (merged.events || []).length;
+      next = [...next.filter(log => log.date !== entry.date), merged];
+    });
+    return next.sort((a, b) => a.date.localeCompare(b.date));
+  });
+  const sendMissedTasksToLogs = () => {
+    const stamp = todayStr();
+    const isMissed = item => item && item.status === 'done' && item.completedAt && workdayStrForTimestamp(item.completedAt) < stamp;
+    const entries = {};
+    const entryFor = date => entries[date] || (entries[date] = {
+      id: date,
+      date,
+      weekStart: weekRangeForDate(date).start,
+      createdAt: Date.now(),
+      mode: 'mixed',
+      count: 0,
+      patientTasks: [],
+      generalTasks: [],
+      events: []
+    });
+    const collectPatients = source => source.forEach(patient => (patient.tasks || []).filter(isMissed).forEach(task => {
+      entryFor(workdayStrForTimestamp(task.completedAt)).patientTasks.push({
+        patientName: patient.name,
+        title: task.title,
+        type: task.type,
+        estimate: task.estimate,
+        completedAt: task.completedAt
+      });
+    }));
+    const collectGeneral = (source, mode) => source.filter(isMissed).forEach(task => {
+      entryFor(workdayStrForTimestamp(task.completedAt)).generalTasks.push({
+        title: task.title,
+        type: task.type,
+        estimate: task.estimate,
+        mode,
+        completedAt: task.completedAt
+      });
+    });
+    collectPatients(patients);
+    collectPatients(dailyPatients);
+    collectGeneral(generalTasks, 'patient');
+    collectGeneral(dailyGeneralTasks, 'daily');
+
+    const logs = Object.values(entries);
+    if (!logs.length) {
+      setMissedEndDayPrompt(null);
+      return;
+    }
+    mergeEndDayEntries(logs);
+    setPatients(prev => prev.map(patient => ({ ...patient, tasks: (patient.tasks || []).filter(task => !isMissed(task)) })));
+    setDailyPatients(prev => prev.map(patient => ({ ...patient, tasks: (patient.tasks || []).filter(task => !isMissed(task)) })));
+    setGeneralTasks(prev => prev.filter(task => !isMissed(task)));
+    setDailyGeneralTasks(prev => prev.filter(task => !isMissed(task)));
+    setMissedEndDayPrompt(null);
+    setEndDayLogsOpen(true);
+    showToast(`前日までの完了タスク ${logs.reduce((sum, log) => sum + log.patientTasks.length + log.generalTasks.length + log.events.length, 0)}件をログへ送りました`);
+  };
+  const priorWeekLogs = () => {
+    const { start, end } = currentWeekRange();
+    return endDayLogs.filter(log => log && (log.date < start || log.date > end));
+  };
+  const discardPriorWeekLogs = () => {
+    setEndDayLogs(prev => pruneEndDayLogs(prev));
+    setRolloverLogsPromptOpen(false);
+    showToast('先週までのおしまいログを削除しました');
+  };
+  const copyAndDiscardPriorWeekLogs = async () => {
+    const previous = priorWeekLogs();
+    const weekStarts = [...new Set(previous.map(log => weekRangeForDate(log.date).start))].sort();
+    const text = weekStarts.map(start => formatEndDayLogs(previous, start)).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setEndDayLogs(prev => pruneEndDayLogs(prev));
+      setRolloverLogsPromptOpen(false);
+      showToast('先週のおしまいログをコピーして削除しました');
+    } catch {
+      setImportText(text);
+      setImportDialog(true);
+      setRolloverLogsPromptOpen(false);
+      showToast('先週ログを表示しました。確認後に削除してください');
+    }
+  };
   const requestEndDay = () => {
     if (!doneTaskCount) {
       endDay();
@@ -6279,7 +6400,7 @@ function PatientTriage() {
         events: [...(existing.events || []), ...eventsDone]
       } : entry;
       merged.count = (merged.patientTasks || []).length + (merged.generalTasks || []).length + (merged.events || []).length;
-      return pruneEndDayLogs([...(prev || []).filter(log => log.date !== stamp), merged], stamp);
+      return [...(prev || []).filter(log => log.date !== stamp), merged].sort((a, b) => a.date.localeCompare(b.date));
     });
     setEndDayLogsOpen(true);
     setActivePatients(prev => prev.map(p => ({
@@ -6990,7 +7111,7 @@ function PatientTriage() {
     dailyLinks,
     patientLinks,
     lastDoneItems,
-    endDayLogs: pruneEndDayLogs(endDayLogs),
+    endDayLogs,
     rewards,
     pendingPatients,
     generalTasks,
@@ -7012,7 +7133,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
-    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
+    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.pendingPatients)) setPendingPatients(parsed.pendingPatients);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
@@ -7088,7 +7209,7 @@ function PatientTriage() {
     dailyLinks,
     patientLinks,
     lastDoneItems,
-    endDayLogs: pruneEndDayLogs(endDayLogs),
+    endDayLogs,
     rewards,
     pendingPatients,
     generalTasks,
@@ -7158,7 +7279,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
-    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(pruneEndDayLogs(parsed.endDayLogs));
+    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
     if (Array.isArray(parsed.pendingPatients)) setPendingPatients(parsed.pendingPatients);
     if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
@@ -8210,7 +8331,106 @@ function PatientTriage() {
     onAdd: addRoutinePreset,
     onRemove: removeRoutinePreset,
     onApplyToday: applyTodayRoutines
-  }), routinePromptOpen && React.createElement("div", {
+  }), missedEndDayPrompt && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => setMissedEndDayPrompt(null)
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 420
+    }
+  }, React.createElement("h3", {
+    style: {
+      fontFamily: 'var(--font-serif)',
+      fontSize: 18,
+      fontWeight: 800,
+      color: 'var(--text)',
+      margin: '0 0 8px'
+    }
+  }, "前日分の完了タスクが残っています"), React.createElement("p", {
+    style: {
+      margin: '0 0 18px',
+      color: 'var(--text-2)',
+      fontSize: 13,
+      lineHeight: 1.7,
+      fontWeight: 600
+    }
+  }, "前日までに完了したタスク ", missedEndDayPrompt.count, " 件があります。該当日の「おしまいログ」へ送って、一覧から片づけますか?"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 8,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setMissedEndDayPrompt(null),
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "あとで"), React.createElement("button", {
+    className: "btn-green",
+    onClick: sendMissedTasksToLogs,
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, "ログ送りして片づける")))), rolloverLogsPromptOpen && !missedEndDayPrompt && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => setRolloverLogsPromptOpen(false)
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 440
+    }
+  }, React.createElement("h3", {
+    style: {
+      fontFamily: 'var(--font-serif)',
+      fontSize: 18,
+      fontWeight: 800,
+      color: 'var(--text)',
+      margin: '0 0 8px'
+    }
+  }, "先週のおしまいログがあります"), React.createElement("p", {
+    style: {
+      margin: '0 0 18px',
+      color: 'var(--text-2)',
+      fontSize: 13,
+      lineHeight: 1.7,
+      fontWeight: 600
+    }
+  }, "新しい週が始まりました。先週分はコピーしてから削除できます。あとでを選ぶと、次の起動まで保持します。"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 8,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setRolloverLogsPromptOpen(false),
+    style: {
+      fontSize: 13,
+      padding: '8px 14px'
+    }
+  }, "あとで"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: discardPriorWeekLogs,
+    style: {
+      fontSize: 13,
+      padding: '8px 14px'
+    }
+  }, "削除"), React.createElement("button", {
+    className: "btn-green",
+    onClick: copyAndDiscardPriorWeekLogs,
+    style: {
+      fontSize: 13,
+      padding: '8px 14px'
+    }
+  }, "コピーして削除")))), routinePromptOpen && !missedEndDayPrompt && !rolloverLogsPromptOpen && React.createElement("div", {
     className: "dialog-bg",
     onClick: () => {
       saveLocal(ROUTINE_PROMPT_STORAGE_KEY, todayStr());
