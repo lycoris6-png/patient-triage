@@ -1210,7 +1210,24 @@ function SuggestionCard({
       margin: '0 0 16px',
       lineHeight: 1.55
     }
-  }, t.title), suggestion.fromStuck && t.tinyStep && React.createElement("div", {
+  }, t.title), !suggestion.fromGeneral && Array.isArray(t.patientAlerts) && t.patientAlerts.length > 0 && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      margin: '-7px 0 14px'
+    }
+  }, t.patientAlerts.map(alert => React.createElement("span", {
+    key: alert.id,
+    className: "tag",
+    title: alert.label,
+    style: {
+      background: '#FEF2F2',
+      color: '#B91C1C',
+      border: '1px solid #FECACA',
+      fontSize: 12
+    }
+  }, alert.icon, " ", alert.label))), suggestion.fromStuck && t.tinyStep && React.createElement("div", {
     style: {
       background: '#FFF7ED',
       borderRadius: 10,
@@ -5512,6 +5529,7 @@ function PatientTriage() {
   const [addForm, setAddForm] = useState({});
   const [suggestion, setSuggestion] = useState(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [lowEnergyNeedsNext, setLowEnergyNeedsNext] = useState(false);
   const [quickOnly, setQuickOnly] = useState(false);
   const [erOnly, setErOnly] = useState(false);
   const [stuckDialog, setStuckDialog] = useState(null);
@@ -5918,7 +5936,8 @@ function PatientTriage() {
     ...t,
     patientId: p.id,
     patientName: p.name,
-    patientPriority: getPri(p)
+    patientPriority: getPri(p),
+    patientAlerts: getPatientAlerts(p)
   }))), [activePatients]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
   const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done').length, [flatTasks]);
@@ -6730,7 +6749,7 @@ function PatientTriage() {
     setPromoteTarget(null);
     showToast(`${newPatient.name} を受け持ちに登録しました`);
   };
-  const suggestNext = () => {
+  const suggestNext = (lowEnergy = focusMode) => {
     let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');
     if (erOnly) {
       pool = pool.filter(t => t.patientPriority === 'er');
@@ -6738,6 +6757,10 @@ function PatientTriage() {
     if (quickOnly) {
       const quick = pool.filter(t => t.estimate === '2');
       pool = quick.length > 0 ? quick : pool;
+    }
+    if (lowEnergy) {
+      const urgent = pool.filter(t => t.status === 'doing' || t.patientPriority === 'er' || ['past', 'now'].includes(timeStatus(t.scheduledTime, now)));
+      if (urgent.length) pool = urgent;
     }
     if (!suggestion?.fromGeneral && suggestion?.task?.id && pool.length > 1) {
       const alternatePool = pool.filter(t => t.id !== suggestion.task.id);
@@ -6748,6 +6771,10 @@ function PatientTriage() {
       if (quickOnly) {
         const quick = generalPool.filter(t => t.estimate === '2');
         generalPool = quick.length > 0 ? quick : generalPool;
+      }
+      if (lowEnergy) {
+        const urgent = generalPool.filter(t => t.status === 'doing' || t.dueDate && t.dueDate <= todayStr() || ['past', 'now'].includes(timeStatus(t.scheduledTime, now)));
+        if (urgent.length) generalPool = urgent;
       }
       if (suggestion?.fromGeneral && suggestion?.task?.id && generalPool.length > 1) {
         const alternateGeneralPool = generalPool.filter(t => t.id !== suggestion.task.id);
@@ -6827,6 +6854,42 @@ function PatientTriage() {
       fromStuck: true
     });
   };
+  const toggleLowEnergyMode = () => {
+    if (focusMode) {
+      setFocusMode(false);
+      setLowEnergyNeedsNext(false);
+      return;
+    }
+    setFocusMode(true);
+    suggestNext(true);
+  };
+  const completeSuggestedStep = () => {
+    if (!suggestion?.task) return;
+    if (suggestion.fromStuck) advanceStuckStep(suggestion.task.patientId, suggestion.task.id);else if (suggestion.fromGeneral) completeGeneralTask(suggestion.task.id);else completeTask(suggestion.task.patientId, suggestion.task.id);
+    if (focusMode) setLowEnergyNeedsNext(true);
+  };
+  const completeSuggestedTask = () => {
+    if (!suggestion?.task) return;
+    if (suggestion.fromGeneral) completeGeneralTask(suggestion.task.id);else completeTask(suggestion.task.patientId, suggestion.task.id);
+    if (focusMode) setLowEnergyNeedsNext(true);
+  };
+  const dismissSuggestion = () => {
+    if (!focusMode) {
+      setSuggestion(null);
+      return;
+    }
+    if (suggestion?.empty) {
+      setFocusMode(false);
+      setSuggestion(null);
+      return;
+    }
+    suggestNext();
+  };
+  useEffect(() => {
+    if (!focusMode || !lowEnergyNeedsNext) return;
+    setLowEnergyNeedsNext(false);
+    suggestNext();
+  }, [focusMode, lowEnergyNeedsNext, flatTasks, activeGeneralTasks]);
   const showFinishEstimate = () => {
     const remaining = [...remainingPatientTasks, ...remainingGeneralTasks];
     const count = remaining.length;
@@ -7694,7 +7757,7 @@ function PatientTriage() {
     className: "action-cluster action-cluster-primary"
   }, React.createElement("button", {
     className: "btn-dark",
-    onClick: suggestNext
+    onClick: () => suggestNext()
   }, React.createElement(Zap, {
     size: 14
   }), "\u6B21\u306E\u4E00\u624B"), React.createElement("button", {
@@ -7715,11 +7778,10 @@ function PatientTriage() {
     className: "action-cluster"
   }, React.createElement("button", {
     className: `btn-ghost${focusMode ? ' btn-ghost-active' : ''}`,
-    onClick: () => setFocusMode(f => !f),
-    "aria-pressed": focusMode
-  }, React.createElement(Focus, {
-    size: 14
-  }), "\u96C6\u4E2D\u30E2\u30FC\u30C9")), React.createElement("div", {
+    onClick: toggleLowEnergyMode,
+    "aria-pressed": focusMode,
+    title: focusMode ? "\u4E00\u89A7\u306B\u623B\u308B" : "\u4E00\u4EF6\u305A\u3064\u9032\u3081\u308B"
+  }, "\uD83D\uDD0B ", focusMode ? "\u4F4E\u71C3\u8CBB\u4E2D" : "\u4F4E\u71C3\u8CBB")), !focusMode && React.createElement("div", {
     className: "action-cluster action-cluster-tools"
   }, !isDailyMode && React.createElement("button", {
     className: "btn-dark",
@@ -7749,7 +7811,7 @@ function PatientTriage() {
     onClick: suggestFromStuck
   }, React.createElement(AlertCircle, {
     size: 13
-  }), "\u8A70\u307E\u308A\u304B\u30891\u3064")), React.createElement(ScheduledEventSection, {
+  }), "\u8A70\u307E\u308A\u304B\u30891\u3064")), !focusMode && React.createElement(ScheduledEventSection, {
     events: scheduledEvents,
     open: scheduledOpen,
     onToggleOpen: () => setScheduledOpen(o => !o),
@@ -7760,12 +7822,43 @@ function PatientTriage() {
     onRemove: removeScheduledEvent,
     onClearDone: clearDoneScheduledEvents,
     now: now
-  }), suggestion && React.createElement(SuggestionCard, {
+  }), focusMode && React.createElement("div", {
+    className: "focus-card",
+    style: {
+      padding: '12px 16px',
+      marginBottom: 12,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: 'var(--accent)'
+    }
+  }, "\uD83D\uDD0B \u4F4E\u71C3\u8CBB\u4E2D"), React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--text-2)',
+      marginLeft: 'auto'
+    }
+  }, "\u4ECA\u65E5 ", stats.doneToday, "\u4EF6"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: toggleLowEnergyMode,
+    style: {
+      fontSize: 12,
+      padding: '6px 12px'
+    }
+  }, "\u4E00\u89A7\u3078")), suggestion && React.createElement(SuggestionCard, {
     suggestion: suggestion,
     typeMeta: typeMeta,
     estMeta: estMeta,
     now: now,
-    onDone: () => suggestion.task && (suggestion.fromStuck ? advanceStuckStep(suggestion.task.patientId, suggestion.task.id) : suggestion.fromGeneral ? completeGeneralTask(suggestion.task.id) : completeTask(suggestion.task.patientId, suggestion.task.id)),
+    onDone: completeSuggestedStep,
     onDoing: () => suggestion.task && (suggestion.fromGeneral ? updateGeneralTask(suggestion.task.id, {
       status: 'doing'
     }) : updateTask(suggestion.task.patientId, suggestion.task.id, {
@@ -7774,43 +7867,13 @@ function PatientTriage() {
     onStuck: () => suggestion.task && (suggestion.fromGeneral ? updateGeneralTask(suggestion.task.id, {
       status: 'hold'
     }) : markStuck(suggestion.task.patientId, suggestion.task.id)),
-    onCompleteTask: () => suggestion.task && (suggestion.fromGeneral ? completeGeneralTask(suggestion.task.id) : completeTask(suggestion.task.patientId, suggestion.task.id)),
-    onReroll: suggestNext,
-    onDismiss: () => setSuggestion(null),
+    onCompleteTask: completeSuggestedTask,
+    onReroll: () => suggestNext(),
+    onDismiss: dismissSuggestion,
     onStartTimer: startTimer,
     onStartTally: startTally,
     running: runningTask
-  }), focusMode && isDailyMode ? React.createElement(DailyFocusView, {
-    tasks: activeGeneralTasks,
-    typeMeta: generalTypeMeta,
-    estMeta: estMeta,
-    now: now,
-    onComplete: completeGeneralTask,
-    onDoing: taskId => updateGeneralTask(taskId, {
-      status: 'doing'
-    }),
-    onHold: taskId => updateGeneralTask(taskId, {
-      status: 'hold'
-    }),
-    onExit: () => setFocusMode(false),
-    onStartTimer: startTimer,
-    onStartTally: startTally,
-    running: runningTask
-  }) : focusMode ? React.createElement(FocusView, {
-    patients: sortedPatients,
-    typeMeta: typeMeta,
-    estMeta: estMeta,
-    now: now,
-    onComplete: completeTask,
-    onStuck: markStuck,
-    onDoing: (pid, tid) => updateTask(pid, tid, {
-      status: 'doing'
-    }),
-    onUnstick: unstick,
-    onStartTimer: startTimer,
-    onStartTally: startTally,
-    running: runningTask
-  }) : React.createElement("div", {
+  }), !focusMode && React.createElement("div", {
     className: `desktop-main-grid${isDailyMode ? ' desktop-main-grid-daily' : ''}`
   }, React.createElement("section", {
     className: "desktop-patient-column"
