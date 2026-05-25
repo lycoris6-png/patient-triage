@@ -5959,19 +5959,22 @@ function PatientTriage() {
       scheduledEvent: true,
       ts: dateTimeStatus(e.scheduledDate, e.scheduledTime, now)
     })).filter(e => e.ts && (timedAlertMode === 'all' || e.ts === 'past' || e.ts === 'now' || e.ts === 'soon'));
+    const pendingAlertDays = [3, 1, 0];
     const pendingAlerts = pendingPatients.filter(p => p.scheduledDate).map(p => {
       const days = daysUntilDateStr(p.scheduledDate);
-      return { ...p, days };
-    }).filter(p => p.days != null && p.days <= PENDING_PATIENT_ALERT_DAYS).map(p => {
+      const alertKey = `${p.scheduledDate}:${days}`;
+      return { ...p, days, alertKey };
+    }).filter(p => pendingAlertDays.includes(p.days) && !(p.alertAcknowledgements || []).includes(p.alertKey)).map(p => {
       const km = kindMeta(p.kind);
       return {
-        id: 'pending-' + p.id,
-        title: `${km.label}: ${p.name}${p.days < 0 ? `（${-p.days}日経過）` : p.days === 0 ? '（今日）' : `（あと${p.days}日）`}`,
+        id: 'pending-' + p.id + '-' + p.days,
+        title: `${km.label}: ${p.name}${p.days === 0 ? '（今日）' : `（あと${p.days}日）`}`,
         patientName: '予兆',
         pendingEntry: p,
+        pendingAlertKey: p.alertKey,
         scheduledDate: p.scheduledDate,
         scheduledTime: '',
-        ts: p.days < 0 ? 'past' : p.days === 0 ? 'now' : 'soon'
+        ts: p.days === 0 ? 'now' : 'soon'
       };
     });
     return [...patientAlerts, ...eventAlerts, ...pendingAlerts].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
@@ -6863,14 +6866,32 @@ function PatientTriage() {
     setFocusMode(true);
     suggestNext(true);
   };
+  const willClearSuggestedTasks = () => {
+    if (!suggestion?.task) return false;
+    const remainingPatients = flatTasks.filter(task => task.status !== 'done' && !(task.id === suggestion.task.id && task.patientId === suggestion.task.patientId)).length;
+    const remainingGeneral = activeGeneralTasks.filter(task => task.status !== 'done' && !(suggestion.fromGeneral && task.id === suggestion.task.id)).length;
+    return remainingPatients + remainingGeneral === 0;
+  };
+  const celebrateSuggestedClear = clear => {
+    if (!clear) return;
+    setTimeout(() => window.dispatchEvent(new CustomEvent('chibi-coach', {
+      detail: {
+        kind: 'allclear'
+      }
+    })), 280);
+  };
   const completeSuggestedStep = () => {
     if (!suggestion?.task) return;
+    const clear = !suggestion.fromStuck && willClearSuggestedTasks();
     if (suggestion.fromStuck) advanceStuckStep(suggestion.task.patientId, suggestion.task.id);else if (suggestion.fromGeneral) completeGeneralTask(suggestion.task.id);else completeTask(suggestion.task.patientId, suggestion.task.id);
+    celebrateSuggestedClear(clear);
     if (focusMode) setLowEnergyNeedsNext(true);
   };
   const completeSuggestedTask = () => {
     if (!suggestion?.task) return;
+    const clear = willClearSuggestedTasks();
     if (suggestion.fromGeneral) completeGeneralTask(suggestion.task.id);else completeTask(suggestion.task.patientId, suggestion.task.id);
+    celebrateSuggestedClear(clear);
     if (focusMode) setLowEnergyNeedsNext(true);
   };
   const dismissSuggestion = () => {
@@ -7740,7 +7761,9 @@ function PatientTriage() {
       }
     }, t.title), React.createElement("button", {
       className: "btn-green",
-      onClick: () => t.scheduledEvent ? updateScheduledEvent(t.id, {
+      onClick: () => t.pendingEntry ? updatePendingPatient(t.pendingEntry.id, {
+        alertAcknowledgements: [...new Set([...(t.pendingEntry.alertAcknowledgements || []), t.pendingAlertKey])]
+      }) : t.scheduledEvent ? updateScheduledEvent(t.id, {
         status: 'done',
         completedAt: Date.now()
       }) : completeTask(t.patientId, t.id),
