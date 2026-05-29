@@ -5150,6 +5150,65 @@ function FloatingTimerBar({
     title: "閉じる"
   }, "✕"))));
 }
+function TimerQuickLauncher({
+  running,
+  onStartTimer,
+  onStartTally
+}) {
+  if (running) return null;
+  return React.createElement("div", {
+    style: {
+      position: 'fixed',
+      right: 'max(12px, env(safe-area-inset-right))',
+      bottom: 'max(112px, calc(env(safe-area-inset-bottom) + 112px))',
+      zIndex: 9040,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6,
+      padding: 6,
+      borderRadius: 999,
+      background: 'color-mix(in srgb, var(--surface) 88%, transparent)',
+      border: '1px solid var(--border)',
+      boxShadow: '0 8px 24px rgba(24,15,62,.18)',
+      backdropFilter: 'blur(8px)'
+    },
+    "aria-label": "タイマーと件数クリッカー"
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-ghost dock-icon",
+    onClick: onStartTimer,
+    title: "自由タイマーを起動",
+    "aria-label": "自由タイマーを起動",
+    style: {
+      width: 38,
+      height: 38,
+      padding: 0,
+      borderRadius: 999,
+      fontSize: 17,
+      lineHeight: 1,
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, "⏱"), React.createElement("button", {
+    type: "button",
+    className: "btn-ghost dock-icon",
+    onClick: onStartTally,
+    title: "件数クリッカーを起動",
+    "aria-label": "件数クリッカーを起動",
+    style: {
+      width: 38,
+      height: 38,
+      padding: 0,
+      borderRadius: 999,
+      fontSize: 17,
+      lineHeight: 1,
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  }, "🔢"));
+}
 function kindMeta(id) {
   return PATIENT_KINDS.find(k => k.id === id) || PATIENT_KINDS[3];
 }
@@ -5699,6 +5758,57 @@ function PatientTriage() {
       patientId: task.patientId || null,
       isGeneral: !!task.general,
       title: task.title || '',
+      startedAt: Date.now(),
+      pausedAt: null,
+      accumulatedPaused: 0,
+      targetCount: target,
+      currentCount: 0
+    });
+    setRunningTick(Date.now());
+  };
+  const startManualTimer = () => {
+    const titleInput = window.prompt('何のタイマーにしますか？', '自由タイマー');
+    if (titleInput === null) return;
+    const title = titleInput.trim() || '自由タイマー';
+    const minsInput = window.prompt('何分で測りますか？', generalForm.estimate || '5');
+    if (minsInput === null) return;
+    const mins = Number.parseFloat(minsInput);
+    if (!Number.isFinite(mins) || mins <= 0) {
+      showToast('1分以上の数字で指定してください');
+      return;
+    }
+    timerFiredRef.current = false;
+    setRunningTask({
+      mode: 'timer',
+      taskId: null,
+      patientId: null,
+      isGeneral: false,
+      title,
+      startedAt: Date.now(),
+      pausedAt: null,
+      accumulatedPaused: 0,
+      durationMs: mins * 60 * 1000
+    });
+    setRunningTick(Date.now());
+  };
+  const startManualTally = () => {
+    const titleInput = window.prompt('何を数えますか？', '件数クリッカー');
+    if (titleInput === null) return;
+    const title = titleInput.trim() || '件数クリッカー';
+    const input = window.prompt('何件で区切りますか？', '');
+    if (input === null) return;
+    const target = Number.parseInt(input, 10);
+    if (!Number.isFinite(target) || target <= 0) {
+      showToast('1以上の整数で指定してください');
+      return;
+    }
+    timerFiredRef.current = false;
+    setRunningTask({
+      mode: 'tally',
+      taskId: null,
+      patientId: null,
+      isGeneral: false,
+      title,
       startedAt: Date.now(),
       pausedAt: null,
       accumulatedPaused: 0,
@@ -8931,7 +9041,11 @@ function PatientTriage() {
     }
   }, "\u4ECA\u65E5\u306E\u4F5C\u696D\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
-  }, toast), React.createElement(FloatingTimerBar, {
+  }, toast), React.createElement(TimerQuickLauncher, {
+    running: runningTask,
+    onStartTimer: startManualTimer,
+    onStartTally: startManualTally
+  }), React.createElement(FloatingTimerBar, {
     running: runningTask,
     now: runningTick,
     onIncrement: incrementRunning,
