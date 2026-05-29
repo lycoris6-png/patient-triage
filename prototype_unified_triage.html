@@ -450,9 +450,11 @@ body {
 .time-tag.past { animation:pulse-glow 1.8s ease infinite; }
 
 /* ── 優先度バー ── */
+.pri-er     { border-left:5px solid #FF1493; background:linear-gradient(90deg, rgba(255,20,147,.10), var(--surface) 34%); }
 .pri-high   { border-left:4px solid #EF4444; }
 .pri-normal { border-left:4px solid #D4930A; }
 .pri-low    { border-left:4px solid #22C55E; }
+.pri-planned { border-left:4px solid #CBD5E1; }
 
 /* ── セクション区切り ── */
 .task-list > li { border-bottom:1px solid #F0ECFF; }
@@ -906,6 +908,11 @@ body.rpg-mode .card:hover {
 body.rpg-mode .card.pri-high   { border-left: 7px solid #EF4444 !important; }
 body.rpg-mode .card.pri-normal { border-left: 7px solid #D4930A !important; }
 body.rpg-mode .card.pri-low    { border-left: 7px solid #22C55E !important; }
+body.rpg-mode .card.pri-planned { border-left: 7px solid #CBD5E1 !important; }
+body.rpg-mode .card.pri-er {
+  border-left: 8px solid #FF1493 !important;
+  background: linear-gradient(90deg, rgba(255,20,147,.18), rgba(2,6,23,.92) 36%) !important;
+}
 
 body.rpg-mode .command-dock {
   background: rgba(2, 6, 23, .72) !important;
@@ -1009,7 +1016,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="prototype_unified_triage.app.js?v=20260529-manual-timer-launcher"></script>
+<script src="prototype_unified_triage.app.js?v=20260529-planned-patient-hold"></script>
 
 
 

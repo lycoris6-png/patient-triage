@@ -443,6 +443,12 @@ const PRIORITIES = [{
   color: '#22C55E',
   bar: '#22C55E',
   cls: 'pri-low'
+}, {
+  id: 'planned',
+  label: '予',
+  color: '#94A3B8',
+  bar: '#CBD5E1',
+  cls: 'pri-planned'
 }];
 const WARDS = [{
   id: '',
@@ -1077,6 +1083,7 @@ function SuggestionCard({
   now,
   onDone,
   onDoing,
+  onHold,
   onStuck,
   onCompleteTask,
   onReroll,
@@ -1267,6 +1274,10 @@ function SuggestionCard({
   }, React.createElement(Play, {
     size: 13
   }), "\u3084\u3063\u3066\u308B"), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onHold,
+    title: "患者さんがまだ来ていない、リハビリ中など今は進められない時に候補から外す"
+  }, "今は無理"), React.createElement("button", {
     className: "btn-rose",
     onClick: onStuck
   }, React.createElement(AlertCircle, {
@@ -1337,6 +1348,7 @@ function TaskRow({
   const type = typeMeta(task.type);
   const est = estMeta(task.estimate);
   const isStuck = task.status === 'stuck';
+  const isHold = task.status === 'hold';
   const isDoing = task.status === 'doing';
   const isDone = task.status === 'done';
   const [editingTime, setEditingTime] = useState(false);
@@ -1368,7 +1380,7 @@ function TaskRow({
     onMouseLeave: () => setHovered(false)
   }, React.createElement("button", {
     onClick: isDone ? onTodo : onDone,
-    className: `check-circle${isDone ? ' done' : isStuck ? ' stuck' : ''}`,
+    className: `check-circle${isDone ? ' done' : isStuck || isHold ? ' stuck' : ''}`,
     style: {
       marginTop: 1
     },
@@ -1428,7 +1440,7 @@ function TaskRow({
       fontSize: 13,
       fontWeight: isDone ? 400 : 600,
       textDecoration: isDone ? 'line-through' : 'none',
-      color: muted ? 'var(--text-3)' : isStuck ? 'var(--stuck-fg)' : 'var(--text)',
+      color: muted || isHold ? 'var(--text-3)' : isStuck ? 'var(--stuck-fg)' : 'var(--text)',
       textDecorationColor: 'var(--text-3)',
       lineHeight: 1.4
     },
@@ -1466,7 +1478,15 @@ function TaskRow({
       flexShrink: 0,
       fontWeight: 600
     }
-  }, est.label)), editingTime && onSetTime && React.createElement("div", {
+  }, est.label), isHold && React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(148,163,184,.14)',
+      color: 'var(--text-3)',
+      border: '1px solid var(--border)',
+      fontSize: 10
+    }
+  }, "今はできない")), editingTime && onSetTime && React.createElement("div", {
     style: {
       marginTop: 4
     }
@@ -1514,13 +1534,21 @@ function TaskRow({
       marginTop: 5,
       flexWrap: 'wrap'
     }
-  }, !isStuck && !isDoing && React.createElement("button", {
+  }, !isStuck && !isHold && !isDoing && React.createElement("button", {
     className: "btn-sm",
     onClick: onDoing
   }, "\u7740\u624B"), isDoing && React.createElement("button", {
     className: "btn-sm",
     onClick: onTodo
-  }, "\u4E2D\u65AD"), !isStuck ? React.createElement("button", {
+  }, "\u4E2D\u65AD"), isHold ? React.createElement("button", {
+    className: "btn-sm",
+    onClick: onTodo
+  }, "再開") : React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onUpdate && onUpdate({
+      status: 'hold'
+    })
+  }, "今は無理"), !isStuck ? React.createElement("button", {
     className: "btn-sm",
     onClick: onStuck
   }, "\u8A70\u307E\u3063\u305F") : React.createElement(React.Fragment, null, React.createElement("button", {
@@ -1586,6 +1614,7 @@ function PatientCard({
   } = React;
   const pri = priMeta(getPri(patient));
   const ward = getWard(patient);
+  const isPlannedPatient = getPri(patient) === 'planned';
   const open = patient.tasks.filter(t => t.status !== 'done');
   const done = patient.tasks.filter(t => t.status === 'done');
   const activeAlerts = showAlerts ? getPatientAlerts(patient) : [];
@@ -1676,7 +1705,8 @@ function PatientCard({
       fontFamily: 'monospace',
       fontWeight: 800,
       fontSize: 15,
-      color: 'var(--text)',
+      color: isPlannedPatient ? 'var(--text-3)' : 'var(--text)',
+      opacity: isPlannedPatient ? .82 : 1,
       letterSpacing: '.02em',
       overflow: 'hidden',
       textOverflow: 'ellipsis',
@@ -6030,7 +6060,8 @@ function PatientTriage() {
       er: 0,
       high: 1,
       normal: 2,
-      low: 3
+      low: 3,
+      planned: 4
     };
     return [...activePatients].sort((a, b) => {
       const pa = order[getPri(a)],
@@ -6050,6 +6081,7 @@ function PatientTriage() {
     patientId: p.id,
     patientName: p.name,
     patientPriority: getPri(p),
+    patientPlanned: getPri(p) === 'planned',
     patientAlerts: getPatientAlerts(p)
   }))), [activePatients]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
@@ -6866,7 +6898,7 @@ function PatientTriage() {
     showToast(`${newPatient.name} を受け持ちに登録しました`);
   };
   const suggestNext = (lowEnergy = focusMode) => {
-    let pool = flatTasks.filter(t => t.status === 'todo' || t.status === 'doing');
+    let pool = flatTasks.filter(t => (t.status === 'todo' || t.status === 'doing') && !t.patientPlanned);
     if (erOnly) {
       pool = pool.filter(t => t.patientPriority === 'er');
     }
@@ -6944,7 +6976,7 @@ function PatientTriage() {
         '30': 0.7
       }[t.estimate] || 1;
       const stateW = t.status === 'doing' ? 1.8 : 1.0;
-      const priW = t.patientPriority === 'er' ? 3.0 : t.patientPriority === 'high' ? 2.2 : t.patientPriority === 'low' ? 0.55 : 1.0;
+      const priW = t.patientPriority === 'er' ? 3.0 : t.patientPriority === 'high' ? 2.2 : t.patientPriority === 'low' ? 0.55 : t.patientPriority === 'planned' ? 0.15 : 1.0;
       const ts = timeStatus(t.scheduledTime, now);
       const schedW = ts === 'past' ? 3.5 : ts === 'now' ? 3.0 : ts === 'soon' ? 2.2 : ts === 'upcoming' ? 1.4 : 1.0;
       return estW * stateW * priW * schedW;
@@ -8000,6 +8032,16 @@ function PatientTriage() {
     }) : updateTask(suggestion.task.patientId, suggestion.task.id, {
       status: 'doing'
     })),
+    onHold: () => {
+      if (!suggestion.task) return;
+      if (suggestion.fromGeneral) updateGeneralTask(suggestion.task.id, {
+        status: 'hold'
+      });else updateTask(suggestion.task.patientId, suggestion.task.id, {
+        status: 'hold'
+      });
+      setSuggestion(null);
+      if (focusMode) setLowEnergyNeedsNext(true);
+    },
     onStuck: () => suggestion.task && (suggestion.fromGeneral ? updateGeneralTask(suggestion.task.id, {
       status: 'hold'
     }) : markStuck(suggestion.task.patientId, suggestion.task.id)),
