@@ -5770,11 +5770,14 @@ function PatientTriage() {
   const completeRunning = () => {
     const r = runningTask;
     if (!r) return;
+    const clear = focusMode && suggestion?.task && (r.isGeneral ? suggestion.fromGeneral && suggestion.task.id === r.taskId : suggestion.task.id === r.taskId && suggestion.task.patientId === r.patientId) ? willClearSuggestedTasks() : false;
     if (r.isGeneral) {
       completeGeneralTask(r.taskId);
     } else if (r.patientId) {
       completeTask(r.patientId, r.taskId);
     }
+    celebrateSuggestedClear(clear);
+    if (focusMode) setLowEnergyNeedsNext(true);
     setRunningTask(null);
     timerFiredRef.current = false;
   };
