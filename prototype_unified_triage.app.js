@@ -805,11 +805,30 @@ const weekRangeForDate = dateStr => {
 const currentWeekRange = () => weekRangeForDate(todayStr());
 const pruneEndDayLogs = (logs, baseDate = todayStr()) => {
   const { start, end } = weekRangeForDate(baseDate);
-  return (Array.isArray(logs) ? logs : []).filter(log => log && log.date >= start && log.date <= end).sort((a, b) => a.date.localeCompare(b.date));
+  return (Array.isArray(logs) ? logs : []).filter(log => log && log.date >= start && log.date <= end).map(normalizeEndDayLog).sort((a, b) => a.date.localeCompare(b.date));
 };
 const weekdayLabel = dateStr => ['日', '月', '火', '水', '木', '金', '土'][new Date(dateStr + 'T00:00:00').getDay()] || '';
+const uniqueLogItems = (items, keyFor) => {
+  const seen = new Set();
+  return (Array.isArray(items) ? items : []).filter(item => {
+    const key = keyFor(item || {});
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+const normalizeEndDayLog = log => {
+  const normalized = {
+    ...log,
+    patientTasks: uniqueLogItems(log?.patientTasks, item => [item.patientName || '', item.title || '', item.completedAt || ''].join('|')),
+    generalTasks: uniqueLogItems(log?.generalTasks, item => [item.mode || '', item.title || '', item.completedAt || ''].join('|')),
+    events: uniqueLogItems(log?.events, item => [item.title || '', item.scheduledDate || '', item.scheduledTime || '', item.completedAt || ''].join('|'))
+  };
+  normalized.count = (normalized.patientTasks || []).length + (normalized.generalTasks || []).length + (normalized.events || []).length;
+  return normalized;
+};
 const formatEndDayLogs = (logs, baseDate = todayStr()) => {
-  const weekly = pruneEndDayLogs(logs, baseDate);
+  const weekly = pruneEndDayLogs(logs, baseDate).map(normalizeEndDayLog);
   const { start, end } = weekRangeForDate(baseDate);
   const lines = [`# おしまいログ ${start}(${weekdayLabel(start)}) - ${end}(${weekdayLabel(end)})`, ''];
   if (!weekly.length) {
@@ -6420,13 +6439,12 @@ function PatientTriage() {
     let next = [...(prev || [])];
     entries.forEach(entry => {
       const existing = next.find(log => log.date === entry.date);
-      const merged = existing ? {
+      const merged = normalizeEndDayLog(existing ? {
         ...existing,
         patientTasks: [...(existing.patientTasks || []), ...(entry.patientTasks || [])],
         generalTasks: [...(existing.generalTasks || []), ...(entry.generalTasks || [])],
         events: [...(existing.events || []), ...(entry.events || [])]
-      } : entry;
-      merged.count = (merged.patientTasks || []).length + (merged.generalTasks || []).length + (merged.events || []).length;
+      } : entry);
       next = [...next.filter(log => log.date !== entry.date), merged];
     });
     return next.sort((a, b) => a.date.localeCompare(b.date));
@@ -6543,7 +6561,9 @@ function PatientTriage() {
       completedAt: t.completedAt || null
     }));
     const eventsDone = scheduledEvents.filter(e => e.status === 'done' && (!e.scheduledDate || e.scheduledDate === stamp)).map(e => ({
+      id: e.id,
       title: e.title,
+      scheduledDate: e.scheduledDate || stamp,
       scheduledTime: e.scheduledTime || '',
       completedAt: e.completedAt || null
     }));
@@ -6560,13 +6580,12 @@ function PatientTriage() {
     };
     setEndDayLogs(prev => {
       const existing = (prev || []).find(log => log.date === stamp);
-      const merged = existing ? {
+      const merged = normalizeEndDayLog(existing ? {
         ...entry,
         patientTasks: [...(existing.patientTasks || []), ...patientTasks],
         generalTasks: [...(existing.generalTasks || []), ...generalTasksDone],
         events: [...(existing.events || []), ...eventsDone]
-      } : entry;
-      merged.count = (merged.patientTasks || []).length + (merged.generalTasks || []).length + (merged.events || []).length;
+      } : entry);
       return [...(prev || []).filter(log => log.date !== stamp), merged].sort((a, b) => a.date.localeCompare(b.date));
     });
     setEndDayLogsOpen(true);
@@ -6575,6 +6594,7 @@ function PatientTriage() {
       tasks: p.tasks.filter(t => t.status !== 'done')
     })));
     setActiveGeneralTasks(prev => prev.filter(t => t.status !== 'done'));
+    setScheduledEvents(prev => prev.filter(e => !(e.status === 'done' && (!e.scheduledDate || e.scheduledDate === stamp))));
     if (suggestion?.task?.status === 'done') setSuggestion(null);
     showToast(`今日の完了タスク ${total}件を片づけました。おつかれさまでした!`);
     setEndDayCelebrate({
