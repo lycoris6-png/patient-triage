@@ -56,3 +56,61 @@ The repository may contain local backup or experimental files. They are not prod
 If GitHub Pages is enabled from the repository root on `master`, the public URL should be:
 
 https://lycoris6-png.github.io/patient-triage/
+
+## GAS AI Coach Line
+
+The unified prototype can ask the existing GAS endpoint for a generated chibi coach line on app startup and when `今日はおしまい！` runs. The browser sends only coarse context: trigger, app mode, season, time band, fixed location label, and Open-Meteo weather summary. It does not send patient names, wards, task titles, or clinical details.
+
+Store the Gemini API key in Apps Script **Script properties** as `GEMINI_API_KEY`; do not commit it to this repo. Extend the GAS `doGet(e)` handler so `action=coachLine` returns JSONP:
+
+```js
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+function jsonp_(callback, obj) {
+  const body = `${callback}(${JSON.stringify(obj)})`;
+  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
+
+function doGet(e) {
+  const p = e.parameter || {};
+  const callback = p.callback || 'callback';
+  if (p.secret !== SECRET) return jsonp_(callback, { ok: false, error: 'bad secret' });
+  if (p.action === 'coachLine') return coachLine_(callback, p.payload || '{}');
+
+  // Existing data-sync JSONP response goes here.
+}
+
+function coachLine_(callback, payloadText) {
+  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (!key) return jsonp_(callback, { ok: false, error: 'missing GEMINI_API_KEY' });
+
+  const ctx = JSON.parse(payloadText || '{}');
+  const weather = ctx.weather
+    ? `${ctx.weather.label}、${ctx.weather.temperature}${ctx.weather.temperatureUnit}、降水${ctx.weather.precipitation}${ctx.weather.precipitationUnit}`
+    : '天気情報なし';
+  const triggerLabel = ctx.trigger === 'endday' ? '今日はおしまい時' : '起動時';
+  const modeLabel = ctx.mode === 'daily' ? 'でいとり' : 'ぺいとり';
+  const prompt = [
+    'あなたはタスク整理アプリの小さなキャラクターです。',
+    '医療判断、診療助言、患者情報への言及は禁止。',
+    'ユーザーを軽く励ます日本語の一言だけを返してください。80字以内。',
+    `場面: ${triggerLabel}`,
+    `モード: ${modeLabel}`,
+    `場所: ${ctx.locationLabel || '職場'}`,
+    `季節: ${ctx.season || ''}`,
+    `時間帯: ${ctx.timeBand || ''}`,
+    `天気: ${weather}`
+  ].join('\n');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    muteHttpExceptions: true,
+    payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
+  const data = JSON.parse(res.getContentText() || '{}');
+  const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120);
+  return jsonp_(callback, { ok: !!text, text });
+}
+```

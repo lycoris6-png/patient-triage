@@ -619,6 +619,7 @@ const TIME_STATES = {
 };
 const STORAGE_KEY = 'patient-triage-v1';
 const GAS_CONFIG_KEY = 'patient-triage-gas-config';
+const AI_COACH_START_STORAGE_KEY = 'patient-triage-ai-coach-start-date';
 const ROUTINE_PROMPT_STORAGE_KEY = 'patient-triage-routine-prompt-date';
 const THEMES = [{
   id: 'lavender',
@@ -974,11 +975,28 @@ const saveLocal = (key, val) => {
     localStorage.setItem(key, JSON.stringify(val));
   } catch {}
 };
-const loadGasConfig = () => loadLocal(GAS_CONFIG_KEY) || {
+const DEFAULT_GAS_CONFIG = {
   url: '',
-  secret: ''
+  secret: '',
+  aiCoach: {
+    enabled: false,
+    onStart: true,
+    onEndDay: true,
+    locationLabel: '職場',
+    latitude: '',
+    longitude: ''
+  }
 };
-const saveGasConfig = cfg => saveLocal(GAS_CONFIG_KEY, cfg);
+const normalizeGasConfig = cfg => ({
+  ...DEFAULT_GAS_CONFIG,
+  ...(cfg || {}),
+  aiCoach: {
+    ...DEFAULT_GAS_CONFIG.aiCoach,
+    ...((cfg || {}).aiCoach || {})
+  }
+});
+const loadGasConfig = () => normalizeGasConfig(loadLocal(GAS_CONFIG_KEY));
+const saveGasConfig = cfg => saveLocal(GAS_CONFIG_KEY, normalizeGasConfig(cfg));
 function timeStatus(scheduledTime, nowMs) {
   if (!scheduledTime) return null;
   const [h, m] = scheduledTime.split(':').map(Number);
@@ -1034,9 +1052,9 @@ async function gasFetch(cfg, payload) {
     ok: true
   };
 }
-function gasGet(cfg) {
+function gasJsonp(cfg, params = {}) {
   return new Promise((resolve, reject) => {
-    const cbName = 'gasJsonpCb_' + Date.now();
+    const cbName = 'gasJsonpCb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     const script = document.createElement('script');
     const cleanup = () => {
       try {
@@ -1058,10 +1076,75 @@ function gasGet(cfg) {
       cleanup();
       reject(new Error('スクリプト読み込み失敗'));
     };
-    script.src = `${cfg.url}?secret=${encodeURIComponent(cfg.secret)}&callback=${cbName}`;
+    const q = new URLSearchParams({
+      secret: cfg.secret || '',
+      callback: cbName,
+      ...params
+    });
+    script.src = `${cfg.url}?${q.toString()}`;
     document.head.appendChild(script);
   });
 }
+function gasGet(cfg) {
+  return gasJsonp(cfg);
+}
+function gasCoachLine(cfg, context) {
+  return gasJsonp(cfg, {
+    action: 'coachLine',
+    payload: JSON.stringify(context || {})
+  });
+}
+const weatherLabel = code => {
+  if (code === 0) return '快晴';
+  if ([1, 2].includes(code)) return '晴れ時々くもり';
+  if (code === 3) return 'くもり';
+  if ([45, 48].includes(code)) return '霧';
+  if ([51, 53, 55, 56, 57].includes(code)) return '霧雨';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '雨';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return '雪';
+  if ([95, 96, 99].includes(code)) return '雷雨';
+  return '不明';
+};
+async function fetchWeatherSummary(aiConfig) {
+  const lat = Number(aiConfig?.latitude);
+  const lon = Number(aiConfig?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const q = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    current: 'temperature_2m,precipitation,weather_code,wind_speed_10m',
+    timezone: 'auto'
+  });
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?${q.toString()}`);
+  if (!r.ok) throw new Error('天気取得失敗');
+  const data = await r.json();
+  const current = data.current || {};
+  const units = data.current_units || {};
+  return {
+    label: weatherLabel(current.weather_code),
+    temperature: current.temperature_2m,
+    temperatureUnit: units.temperature_2m || '°C',
+    precipitation: current.precipitation,
+    precipitationUnit: units.precipitation || 'mm',
+    windSpeed: current.wind_speed_10m,
+    windUnit: units.wind_speed_10m || 'km/h'
+  };
+}
+const seasonLabel = (date = new Date()) => {
+  const m = date.getMonth() + 1;
+  if (m >= 3 && m <= 5) return '春';
+  if (m >= 6 && m <= 8) return '夏';
+  if (m >= 9 && m <= 11) return '秋';
+  return '冬';
+};
+const timeBandLabel = (date = new Date()) => {
+  const h = date.getHours();
+  if (h < 6) return '未明';
+  if (h < 11) return '朝';
+  if (h < 15) return '昼';
+  if (h < 18) return '夕方';
+  return '夜';
+};
 function TimeBadge({
   scheduledTime,
   now,
@@ -3224,8 +3307,11 @@ function GasConfigDialog({
   const {
     useState
   } = React;
-  const [url, setUrl] = useState(config.url || '');
-  const [secret, setSecret] = useState(config.secret || '');
+  const cfg = normalizeGasConfig(config);
+  const [url, setUrl] = useState(cfg.url || '');
+  const [secret, setSecret] = useState(cfg.secret || '');
+  const [aiCoach, setAiCoach] = useState(cfg.aiCoach || DEFAULT_GAS_CONFIG.aiCoach);
+  const updateAiCoach = updates => setAiCoach(prev => ({ ...prev, ...updates }));
   return React.createElement("div", {
     className: "dialog-bg",
     onClick: onCancel
@@ -3285,6 +3371,82 @@ function GasConfigDialog({
   }), React.createElement("div", {
     style: {
       background: 'var(--surface-2)',
+      borderRadius: 12,
+      padding: '12px 14px',
+      marginBottom: 14,
+      border: '1px solid var(--border)'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 10
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: 'var(--text)',
+      fontSize: 13
+    }
+  }, "AI一言"), React.createElement("button", {
+    className: `btn-sm${aiCoach.enabled ? ' btn-ghost-active' : ''}`,
+    onClick: () => updateAiCoach({ enabled: !aiCoach.enabled }),
+    style: {
+      fontSize: 12,
+      color: aiCoach.enabled ? 'var(--accent)' : 'var(--text-3)'
+    }
+  }, aiCoach.enabled ? "ON" : "OFF")), React.createElement("p", {
+    style: {
+      margin: '0 0 10px',
+      color: 'var(--text-3)',
+      fontSize: 11,
+      lineHeight: 1.6
+    }
+  }, "起動時と今日はおしまい時に、職場周辺の天気・季節だけをGASへ送り、患者情報やタスク名は送りません。"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    }
+  }, React.createElement("button", {
+    className: `btn-sm${aiCoach.onStart ? ' btn-ghost-active' : ''}`,
+    onClick: () => updateAiCoach({ onStart: !aiCoach.onStart }),
+    style: { fontSize: 11 }
+  }, "起動時", aiCoach.onStart ? " ON" : " OFF"), React.createElement("button", {
+    className: `btn-sm${aiCoach.onEndDay ? ' btn-ghost-active' : ''}`,
+    onClick: () => updateAiCoach({ onEndDay: !aiCoach.onEndDay }),
+    style: { fontSize: 11 }
+  }, "おしまい時", aiCoach.onEndDay ? " ON" : " OFF")), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,.9fr) minmax(0,.9fr)',
+      gap: 6
+    }
+  }, React.createElement("input", {
+    value: aiCoach.locationLabel || '',
+    onChange: e => updateAiCoach({ locationLabel: e.target.value }),
+    className: "inp",
+    placeholder: "地点名（例: 職場）",
+    style: { padding: '6px 8px', fontSize: 12 }
+  }), React.createElement("input", {
+    value: aiCoach.latitude || '',
+    onChange: e => updateAiCoach({ latitude: e.target.value }),
+    className: "inp",
+    placeholder: "緯度",
+    inputMode: "decimal",
+    style: { padding: '6px 8px', fontSize: 12 }
+  }), React.createElement("input", {
+    value: aiCoach.longitude || '',
+    onChange: e => updateAiCoach({ longitude: e.target.value }),
+    className: "inp",
+    placeholder: "経度",
+    inputMode: "decimal",
+    style: { padding: '6px 8px', fontSize: 12 }
+  }))), React.createElement("div", {
+    style: {
+      background: 'var(--surface-2)',
       borderRadius: 10,
       padding: '10px 14px',
       marginBottom: 18,
@@ -3308,7 +3470,13 @@ function GasConfigDialog({
     className: "btn-dark",
     onClick: () => onSave({
       url: url.trim(),
-      secret: secret.trim()
+      secret: secret.trim(),
+      aiCoach: {
+        ...aiCoach,
+        locationLabel: (aiCoach.locationLabel || '').trim() || '職場',
+        latitude: (aiCoach.latitude || '').trim(),
+        longitude: (aiCoach.longitude || '').trim()
+      }
     }),
     disabled: !url.trim() || !secret.trim(),
     style: {
@@ -5919,6 +6087,16 @@ function PatientTriage() {
             text: `🎉 ${prev.title} ${prev.targetCount}件達成！`
           }
         }));
+      } else {
+        window.dispatchEvent(new CustomEvent('chibi-coach', {
+          detail: {
+            kind: 'tally',
+            estimate: {
+              count: next,
+              target: prev.targetCount || 0
+            }
+          }
+        }));
       }
       return {
         ...prev,
@@ -6435,6 +6613,57 @@ function PatientTriage() {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   };
+  const aiCoachReady = () => {
+    const cfg = normalizeGasConfig(gasConfig);
+    return !!(cfg.url && cfg.secret && cfg.aiCoach?.enabled);
+  };
+  const buildAiCoachContext = async trigger => {
+    const cfg = normalizeGasConfig(gasConfig);
+    let weather = null;
+    try {
+      weather = await fetchWeatherSummary(cfg.aiCoach);
+    } catch {}
+    return {
+      trigger,
+      mode: isDailyMode ? 'daily' : 'patient',
+      locationLabel: cfg.aiCoach.locationLabel || '職場',
+      season: seasonLabel(),
+      timeBand: timeBandLabel(),
+      workday: todayStr(),
+      weather,
+      safety: '患者名、病棟、タスク名、医療判断は送らない。80字以内の短い励ましだけ。'
+    };
+  };
+  const requestAiCoachLine = async trigger => {
+    const cfg = normalizeGasConfig(gasConfig);
+    if (!aiCoachReady()) return false;
+    if (trigger === 'start' && !cfg.aiCoach.onStart) return false;
+    if (trigger === 'endday' && !cfg.aiCoach.onEndDay) return false;
+    try {
+      const response = await gasCoachLine(cfg, await buildAiCoachContext(trigger));
+      const text = String(response?.text || response?.line || '').trim().slice(0, 140);
+      if (!text) return false;
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: trigger === 'endday' ? 'endday' : 'start',
+          text
+        }
+      }));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  useEffect(() => {
+    if (!loaded || !aiCoachReady()) return;
+    const cfg = normalizeGasConfig(gasConfig);
+    if (!cfg.aiCoach.onStart) return;
+    const stamp = todayStr();
+    if (loadLocal(AI_COACH_START_STORAGE_KEY) === stamp) return;
+    saveLocal(AI_COACH_START_STORAGE_KEY, stamp);
+    const t = setTimeout(() => requestAiCoachLine('start'), 2300);
+    return () => clearTimeout(t);
+  }, [loaded, gasConfig, isDailyMode]);
   const mergeEndDayEntries = entries => setEndDayLogs(prev => {
     let next = [...(prev || [])];
     entries.forEach(entry => {
@@ -6606,6 +6835,7 @@ function PatientTriage() {
         kind: 'endday'
       }
     }));
+    if (normalizeGasConfig(gasConfig).aiCoach.onEndDay) setTimeout(() => requestAiCoachLine('endday'), 900);
     setTimeout(() => setEndDayCelebrate(null), 3800);
   };
   const addGeneralTask = () => {
