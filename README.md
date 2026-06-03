@@ -59,7 +59,7 @@ https://lycoris6-png.github.io/patient-triage/
 
 ## GAS AI Coach Line
 
-The unified prototype can ask the existing GAS endpoint for a generated chibi coach line on app startup and when `今日はおしまい！` runs. The browser sends only coarse context: trigger, app mode, season, time band, fixed location label, and Open-Meteo weather summary. It does not send patient names, wards, task titles, or clinical details.
+The unified prototype can ask the existing GAS endpoint for a generated chibi coach line on app startup and when `今日はおしまい！` runs. The browser sends only coarse context: trigger, app mode, season, time band, fixed location label, rounded end-time label / whether the end time is after 20:00, and Open-Meteo weather summary. It does not send patient names, wards, task titles, or clinical details.
 
 Store the Gemini API key in Apps Script **Script properties** as `GEMINI_API_KEY`; do not commit it to this repo. Extend the GAS `doGet(e)` handler so `action=coachLine` returns JSONP:
 
@@ -90,17 +90,23 @@ function coachLine_(callback, payloadText) {
     : '天気情報なし';
   const triggerLabel = ctx.trigger === 'endday' ? '今日はおしまい時' : '起動時';
   const modeLabel = ctx.mode === 'daily' ? 'でいとり' : 'ぺいとり';
+  const lateEndNote = ctx.isLateEnd
+    ? '20時を過ぎた遅いおしまいです。具体的な時刻は言わず、「夜遅く」「20時過ぎ」程度に丸めて、帰りが遅くなったことを労い、早く休む方向に短く寄り添ってください。'
+    : '';
   const prompt = [
     'あなたはタスク整理アプリの小さなキャラクターです。',
     '医療判断、診療助言、患者情報への言及は禁止。',
     'ユーザーを軽く励ます日本語の一言だけを返してください。80字以内。',
+    '不自然な比喩や硬い言い回しは避け、普通に人へ声をかける口調にしてください。',
     `場面: ${triggerLabel}`,
     `モード: ${modeLabel}`,
     `場所: ${ctx.locationLabel || '職場'}`,
     `季節: ${ctx.season || ''}`,
     `時間帯: ${ctx.timeBand || ''}`,
+    `おしまい時刻区分: ${ctx.lateEndLabel || (ctx.isLateEnd ? '20時過ぎ' : '')}`,
+    lateEndNote,
     `天気: ${weather}`
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
   const res = UrlFetchApp.fetch(url, {

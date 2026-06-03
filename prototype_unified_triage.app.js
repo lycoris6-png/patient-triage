@@ -826,6 +826,8 @@ const normalizeEndDayLog = log => {
     events: uniqueLogItems(log?.events, item => [item.title || '', item.scheduledDate || '', item.scheduledTime || '', item.completedAt || ''].join('|'))
   };
   normalized.count = (normalized.patientTasks || []).length + (normalized.generalTasks || []).length + (normalized.events || []).length;
+  normalized.endedAt = normalized.endedAt || normalized.createdAt || null;
+  normalized.endedTime = normalized.endedTime || formatHHMM(normalized.endedAt) || '';
   return normalized;
 };
 const formatEndDayLogs = (logs, baseDate = todayStr()) => {
@@ -838,7 +840,7 @@ const formatEndDayLogs = (logs, baseDate = todayStr()) => {
   }
   weekly.forEach(log => {
     lines.push(`## ${log.date}(${weekdayLabel(log.date)})`);
-    lines.push(`完了 ${log.count || 0}件`);
+    lines.push(`終了 ${log.endedTime || '--:--'} / 完了 ${log.count || 0}件`);
     (log.patientTasks || []).forEach(item => lines.push(`- 患者: ${item.patientName || ''} / ${item.title || ''}`));
     (log.generalTasks || []).forEach(item => lines.push(`- ${item.mode === 'daily' ? 'でいとり' : 'すきま'}: ${item.title || ''}`));
     (log.events || []).forEach(item => lines.push(`- 予定: ${item.title || ''}${item.scheduledTime ? ' ' + item.scheduledTime : ''}`));
@@ -4708,6 +4710,7 @@ function EndDayLogSection({
   const weekly = pruneEndDayLogs(logs);
   const { start, end } = currentWeekRange();
   const total = weekly.reduce((sum, log) => sum + (log.count || 0), 0);
+  const lastEnd = weekly.map(log => log.endedTime || '').filter(Boolean).at(-1);
   return React.createElement("div", {
     className: "card",
     style: {
@@ -4740,7 +4743,7 @@ function EndDayLogSection({
       background: 'rgba(99,102,241,.14)',
       color: '#4338CA'
     }
-  }, weekly.length, "日 / ", total, "件")), open && React.createElement("div", {
+  }, weekly.length, "日 / ", total, "件", lastEnd ? ` / ${lastEnd}` : '')), open && React.createElement("div", {
     style: {
       padding: '12px 16px 16px',
       borderTop: '1px solid var(--border)',
@@ -4797,7 +4800,7 @@ function EndDayLogSection({
       fontSize: 13,
       color: 'var(--text)'
     }
-  }, log.date, "(", weekdayLabel(log.date), ")"), React.createElement("span", {
+  }, log.date, "(", weekdayLabel(log.date), ")", log.endedTime ? ` ${log.endedTime}` : ''), React.createElement("span", {
     className: "tag",
     style: {
       background: 'rgba(22,163,74,.12)',
@@ -6617,8 +6620,10 @@ function PatientTriage() {
     const cfg = normalizeGasConfig(gasConfig);
     return !!(cfg.url && cfg.secret && cfg.aiCoach?.enabled);
   };
-  const buildAiCoachContext = async trigger => {
+  const buildAiCoachContext = async (trigger, extra = {}) => {
     const cfg = normalizeGasConfig(gasConfig);
+    const endedDate = extra.endedAt ? new Date(extra.endedAt) : new Date();
+    const isLateEnd = trigger === 'endday' && endedDate.getHours() >= 20;
     let weather = null;
     try {
       weather = await fetchWeatherSummary(cfg.aiCoach);
@@ -6627,20 +6632,24 @@ function PatientTriage() {
       trigger,
       mode: isDailyMode ? 'daily' : 'patient',
       locationLabel: cfg.aiCoach.locationLabel || '職場',
-      season: seasonLabel(),
-      timeBand: timeBandLabel(),
+      season: seasonLabel(endedDate),
+      timeBand: timeBandLabel(endedDate),
       workday: todayStr(),
+      endedTime: trigger === 'endday' ? extra.endedTime || formatHHMM(endedDate.getTime()) : '',
+      isLateEnd,
+      lateEndThreshold: '20:00',
+      lateEndLabel: isLateEnd ? '20時過ぎ' : '',
       weather,
-      safety: '患者名、病棟、タスク名、医療判断は送らない。80字以内の短い励ましだけ。'
+      safety: '患者名、病棟、タスク名、医療判断は送らない。80字以内の短い励ましだけ。20時以降のおしまい時は遅くまで残ったことを労う。具体的な終了時刻はセリフに出さない。'
     };
   };
-  const requestAiCoachLine = async trigger => {
+  const requestAiCoachLine = async (trigger, extra = {}) => {
     const cfg = normalizeGasConfig(gasConfig);
     if (!aiCoachReady()) return false;
     if (trigger === 'start' && !cfg.aiCoach.onStart) return false;
     if (trigger === 'endday' && !cfg.aiCoach.onEndDay) return false;
     try {
-      const response = await gasCoachLine(cfg, await buildAiCoachContext(trigger));
+      const response = await gasCoachLine(cfg, await buildAiCoachContext(trigger, extra));
       const text = String(response?.text || response?.line || '').trim().slice(0, 140);
       if (!text) return false;
       window.dispatchEvent(new CustomEvent('chibi-coach', {
@@ -6764,6 +6773,8 @@ function PatientTriage() {
   };
   const endDay = () => {
     const total = doneTaskCount;
+    const endedAt = Date.now();
+    const endedTime = formatHHMM(endedAt);
     if (!total) {
       showToast('完了済みタスクはまだありません。ここまでの整理だけでも十分です。');
       window.dispatchEvent(new CustomEvent('chibi-coach', {
@@ -6800,7 +6811,9 @@ function PatientTriage() {
       id: stamp,
       date: stamp,
       weekStart: currentWeekRange().start,
-      createdAt: Date.now(),
+      createdAt: endedAt,
+      endedAt,
+      endedTime,
       mode: isDailyMode ? 'daily' : 'patient',
       count: patientTasks.length + generalTasksDone.length + eventsDone.length,
       patientTasks,
@@ -6813,6 +6826,9 @@ function PatientTriage() {
         ...entry,
         patientTasks: [...(existing.patientTasks || []), ...patientTasks],
         generalTasks: [...(existing.generalTasks || []), ...generalTasksDone],
+        createdAt: existing.createdAt || entry.createdAt,
+        endedAt,
+        endedTime,
         events: [...(existing.events || []), ...eventsDone]
       } : entry);
       return [...(prev || []).filter(log => log.date !== stamp), merged].sort((a, b) => a.date.localeCompare(b.date));
@@ -6825,17 +6841,18 @@ function PatientTriage() {
     setActiveGeneralTasks(prev => prev.filter(t => t.status !== 'done'));
     setScheduledEvents(prev => prev.filter(e => !(e.status === 'done' && (!e.scheduledDate || e.scheduledDate === stamp))));
     if (suggestion?.task?.status === 'done') setSuggestion(null);
-    showToast(`今日の完了タスク ${total}件を片づけました。おつかれさまでした!`);
+    showToast(isDailyMode ? `今日の完了タスク ${total}件を片づけました。おつかれさまでした!` : `${endedTime}におしまい。今日の完了タスク ${total}件を片づけました。`);
     setEndDayCelebrate({
       count: total,
-      id: Date.now()
+      endedTime,
+      id: endedAt
     });
     window.dispatchEvent(new CustomEvent('chibi-coach', {
       detail: {
         kind: 'endday'
       }
     }));
-    if (normalizeGasConfig(gasConfig).aiCoach.onEndDay) setTimeout(() => requestAiCoachLine('endday'), 900);
+    if (normalizeGasConfig(gasConfig).aiCoach.onEndDay) setTimeout(() => requestAiCoachLine('endday', { endedAt, endedTime }), 900);
     setTimeout(() => setEndDayCelebrate(null), 3800);
   };
   const addGeneralTask = () => {
@@ -9323,7 +9340,7 @@ function PatientTriage() {
       color: 'var(--done)',
       fontSize: 22
     }
-  }, endDayCelebrate.count), " \u4EF6\u3092\u7247\u3065\u3051\u307E\u3057\u305F"), React.createElement("div", {
+  }, endDayCelebrate.count), " \u4EF6\u3092\u7247\u3065\u3051\u307E\u3057\u305F", !isDailyMode && endDayCelebrate.endedTime ? React.createElement("span", null, "（", endDayCelebrate.endedTime, "）") : null), React.createElement("div", {
     style: {
       position: 'relative',
       marginTop: 12,
