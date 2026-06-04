@@ -5914,6 +5914,20 @@ function PatientTriage() {
   const [runningTask, setRunningTask] = useState(null);
   const [runningTick, setRunningTick] = useState(Date.now());
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent('triage-running-change', {
+      detail: {
+        active: !!runningTask,
+        mode: runningTask?.mode || '',
+        paused: !!runningTask?.pausedAt
+      }
+    }));
+    return () => window.dispatchEvent(new CustomEvent('triage-running-change', {
+      detail: {
+        active: false
+      }
+    }));
+  }, [runningTask]);
+  useEffect(() => {
     if (!runningTask || runningTask.pausedAt) return;
     const id = setInterval(() => setRunningTick(Date.now()), 1000);
     return () => clearInterval(id);
