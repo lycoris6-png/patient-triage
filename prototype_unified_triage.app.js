@@ -985,18 +985,23 @@ const DEFAULT_GAS_CONFIG = {
     onStart: true,
     onEndDay: true,
     locationLabel: '職場',
-    latitude: '',
-    longitude: ''
+    latitude: '35.291712',
+    longitude: '136.011850'
   }
 };
-const normalizeGasConfig = cfg => ({
-  ...DEFAULT_GAS_CONFIG,
-  ...(cfg || {}),
-  aiCoach: {
+const normalizeGasConfig = cfg => {
+  const aiCoach = {
     ...DEFAULT_GAS_CONFIG.aiCoach,
     ...((cfg || {}).aiCoach || {})
-  }
-});
+  };
+  if (!String(aiCoach.latitude || '').trim()) aiCoach.latitude = DEFAULT_GAS_CONFIG.aiCoach.latitude;
+  if (!String(aiCoach.longitude || '').trim()) aiCoach.longitude = DEFAULT_GAS_CONFIG.aiCoach.longitude;
+  return {
+    ...DEFAULT_GAS_CONFIG,
+    ...(cfg || {}),
+    aiCoach
+  };
+};
 const loadGasConfig = () => normalizeGasConfig(loadLocal(GAS_CONFIG_KEY));
 const saveGasConfig = cfg => saveLocal(GAS_CONFIG_KEY, normalizeGasConfig(cfg));
 function timeStatus(scheduledTime, nowMs) {
@@ -7830,6 +7835,7 @@ function PatientTriage() {
     }
   };
   const gasC = gasStatusColor[gasStatus] || gasStatusColor.idle;
+  const gasAiCoach = normalizeGasConfig(gasConfig).aiCoach;
   const filterButtonStyle = active => active ? {
     background: 'var(--accent)',
     borderColor: 'var(--accent)',
@@ -8692,7 +8698,42 @@ function PatientTriage() {
       color: 'var(--accent)',
       fontWeight: 700
     }
-  }, gasConfig.url ? 'URL変更' : '設定する')), gasConfig.url ? React.createElement("div", {
+  }, gasConfig.url ? '設定を開く' : '設定する')), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: gasConfig.url ? 10 : 0
+    }
+  }, React.createElement("span", {
+    className: "tag",
+    style: {
+      background: gasAiCoach.enabled ? 'rgba(22,163,74,.13)' : 'var(--surface)',
+      color: gasAiCoach.enabled ? 'var(--done)' : 'var(--text-3)',
+      border: '1px solid var(--border)'
+    }
+  }, "AI一言 ", gasAiCoach.enabled ? "ON" : "OFF"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: gasAiCoach.onStart ? 'rgba(108,62,248,.10)' : 'var(--surface)',
+      color: gasAiCoach.onStart ? 'var(--accent)' : 'var(--text-3)',
+      border: '1px solid var(--border)'
+    }
+  }, "起動時 ", gasAiCoach.onStart ? "ON" : "OFF"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: gasAiCoach.onEndDay ? 'rgba(108,62,248,.10)' : 'var(--surface)',
+      color: gasAiCoach.onEndDay ? 'var(--accent)' : 'var(--text-3)',
+      border: '1px solid var(--border)'
+    }
+  }, "おしまい時 ", gasAiCoach.onEndDay ? "ON" : "OFF"), React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 700
+    }
+  }, gasAiCoach.locationLabel || '職場')), gasConfig.url ? React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
