@@ -1071,8 +1071,8 @@ function gasJsonp(cfg, params = {}) {
     };
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error('タイムアウト(10秒)'));
-    }, 10000);
+      reject(new Error('タイムアウト(30秒)'));
+    }, 30000);
     window[cbName] = data => {
       clearTimeout(timer);
       cleanup();
@@ -6866,12 +6866,26 @@ function PatientTriage() {
       endedTime,
       id: endedAt
     });
+    const aiEndDayEnabled = aiCoachReady() && normalizeGasConfig(gasConfig).aiCoach.onEndDay;
     window.dispatchEvent(new CustomEvent('chibi-coach', {
-      detail: {
+      detail: aiEndDayEnabled ? {
+        kind: 'endday',
+        text: '今日の一言を考えています…'
+      } : {
         kind: 'endday'
       }
     }));
-    if (normalizeGasConfig(gasConfig).aiCoach.onEndDay) setTimeout(() => requestAiCoachLine('endday', { endedAt, endedTime }), 900);
+    if (aiEndDayEnabled) setTimeout(async () => {
+      const ok = await requestAiCoachLine('endday', { endedAt, endedTime });
+      if (!ok) {
+        window.dispatchEvent(new CustomEvent('chibi-coach', {
+          detail: {
+            kind: 'endday',
+            text: 'AI一言が返ってきませんでした。GAS設定を確認してください。'
+          }
+        }));
+      }
+    }, 900);
     setTimeout(() => setEndDayCelebrate(null), 3800);
   };
   const addGeneralTask = () => {
@@ -8747,7 +8761,21 @@ function PatientTriage() {
       fontSize: 11,
       fontWeight: 700
     }
-  }, gasAiCoach.locationLabel || '職場')), gasConfig.url ? React.createElement("div", {
+  }, gasAiCoach.locationLabel || '職場'), React.createElement("button", {
+    className: "btn-sm",
+    onClick: async e => {
+      e.stopPropagation();
+      showToast('AI一言を取得中…');
+      const ok = await requestAiCoachLine('start');
+      showToast(ok ? 'AI一言を表示しました' : 'AI一言が返ってきませんでした');
+    },
+    disabled: !gasConfig.url || !gasConfig.secret || !gasAiCoach.enabled,
+    style: {
+      fontSize: 11,
+      padding: '4px 8px',
+      opacity: !gasConfig.url || !gasConfig.secret || !gasAiCoach.enabled ? .45 : 1
+    }
+  }, "テスト")), gasConfig.url ? React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,
