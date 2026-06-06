@@ -999,6 +999,7 @@ const normalizeWorkItem = (item = {}) => {
     category: item.category || '',
     priority,
     status,
+    startDate: item.startDate || '',
     deadline: item.deadline || '',
     outcome: item.outcome || item.victoryCondition || '',
     memo: String(item.memo || '').trim(),
@@ -5996,10 +5997,10 @@ function WorkingTriageView({
   const [form, setForm] = React.useState({
     title: '',
     priority: 'normal',
+    startDate: '',
     deadline: '',
     outcome: '',
-    currentFocus: '',
-    nextAction: ''
+    currentFocus: ''
   });
   const [jsonText, setJsonText] = React.useState('');
   const [preview, setPreview] = React.useState(null);
@@ -6019,12 +6020,13 @@ function WorkingTriageView({
   const [workDraft, setWorkDraft] = React.useState({
     title: '',
     priority: 'normal',
+    startDate: '',
     deadline: '',
     outcome: '',
     memo: '',
-    currentFocus: '',
-    nextAction: ''
+    currentFocus: ''
   });
+  const [blockedOpen, setBlockedOpen] = React.useState(false);
   const activeItems = sortWorkItems(items.filter(item => item.status !== 'done' && item.status !== 'abandoned'));
   const doneItems = sortWorkItems(items.filter(item => item.status === 'done' || item.status === 'abandoned'));
   const openSteps = activeItems.flatMap(item => openWorkSteps(item).map(step => ({
@@ -6060,16 +6062,10 @@ function WorkingTriageView({
   const addManual = () => {
     const title = form.title.trim();
     if (!title) return;
-    const nextAction = form.nextAction.trim();
     const item = normalizeWorkItem({
       ...form,
       title,
-      nextAction,
-      steps: nextAction ? [{
-        title: nextAction,
-        estimate: '10',
-        priority: form.priority
-      }] : [],
+      steps: [],
       logs: [workLog('作成')]
     });
     setItems(prev => [...prev, item]);
@@ -6080,10 +6076,10 @@ function WorkingTriageView({
     setForm({
       title: '',
       priority: 'normal',
+      startDate: '',
       deadline: '',
       outcome: '',
-      currentFocus: '',
-      nextAction: ''
+      currentFocus: ''
     });
     showToast('わーとりに追加しました');
     setAddOpen(false);
@@ -6202,7 +6198,7 @@ function WorkingTriageView({
     logs: [...(item.logs || []), workLog(status === 'done' ? '仕事を完了' : status === 'abandoned' ? '撤退' : `${workStatusLabel(status)}に変更`)]
   }));
   const addStep = (itemId, parentId = null) => {
-    const title = window.prompt('追加する一手');
+    const title = window.prompt(parentId ? '追加する子タスク' : '追加するタスク');
     if (!title || !title.trim()) return;
     updateItem(itemId, item => ({
       ...item,
@@ -6283,11 +6279,11 @@ function WorkingTriageView({
     setWorkDraft({
       title: item.title || '',
       priority: item.priority || 'normal',
+      startDate: item.startDate || '',
       deadline: item.deadline || '',
       outcome: item.outcome || '',
       memo: item.memo || '',
-      currentFocus: item.currentFocus || '',
-      nextAction: item.nextAction || ''
+      currentFocus: item.currentFocus || ''
     });
   };
   const saveWorkEdit = () => {
@@ -6296,11 +6292,11 @@ function WorkingTriageView({
       ...item,
       title: workDraft.title.trim(),
       priority: normalizeWorkPriority(workDraft.priority),
+      startDate: workDraft.startDate || '',
       deadline: workDraft.deadline || '',
       outcome: workDraft.outcome.trim(),
       memo: (workDraft.memo || '').trim(),
       currentFocus: workDraft.currentFocus.trim(),
-      nextAction: workDraft.nextAction.trim() || item.nextAction,
       updatedAt: Date.now(),
       logs: [...(item.logs || []), workLog(`仕事編集: ${workDraft.title.trim()}`)]
     }));
@@ -6603,12 +6599,17 @@ function WorkingTriageView({
       }
     }, pri.label), React.createElement("span", {
       className: "tag"
-    }, workStatusLabel(item.status)), item.deadline && React.createElement("span", {
+    }, workStatusLabel(item.status)), item.startDate && React.createElement("span", {
+      className: "tag",
+      style: { color: 'var(--text-2)' },
+      title: "着手日"
+    }, "着手 ", formatDateShort(item.startDate)), item.deadline && React.createElement("span", {
       className: "tag",
       style: {
         color: days !== null && days <= 3 ? '#DC2626' : 'var(--text-2)'
-      }
-    }, formatDateShort(item.deadline), days !== null ? ` / あと${days}日` : '')), isWorkEditing ? React.createElement("div", {
+      },
+      title: "リミット"
+    }, "〆 ", formatDateShort(item.deadline), days !== null ? ` / あと${days}日` : '')), isWorkEditing ? React.createElement("div", {
       style: {
         display: 'grid',
         gap: 8
@@ -6629,7 +6630,7 @@ function WorkingTriageView({
     }), React.createElement("div", {
       style: {
         display: 'grid',
-        gridTemplateColumns: '120px 150px',
+        gridTemplateColumns: '120px 1fr 1fr',
         gap: 8
       }
     }, React.createElement("select", {
@@ -6646,7 +6647,23 @@ function WorkingTriageView({
     }, WORK_PRIORITIES.map(p => React.createElement("option", {
       key: p.id,
       value: p.id
-    }, p.label))), React.createElement("input", {
+    }, p.label))), React.createElement("label", {
+      style: { display: 'grid', gap: 2, fontSize: 10, color: 'var(--text-3)', fontWeight: 700 }
+    }, "着手日", React.createElement("input", {
+      className: "inp",
+      type: "date",
+      value: workDraft.startDate || '',
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        startDate: e.target.value
+      })),
+      style: {
+        padding: '7px 8px',
+        fontSize: 12
+      }
+    })), React.createElement("label", {
+      style: { display: 'grid', gap: 2, fontSize: 10, color: 'var(--text-3)', fontWeight: 700 }
+    }, "リミット", React.createElement("input", {
       className: "inp",
       type: "date",
       value: workDraft.deadline,
@@ -6658,7 +6675,7 @@ function WorkingTriageView({
         padding: '7px 8px',
         fontSize: 12
       }
-    })), React.createElement("textarea", {
+    }))), React.createElement("textarea", {
       className: "inp",
       value: workDraft.outcome,
       onChange: e => setWorkDraft(prev => ({
@@ -6696,18 +6713,6 @@ function WorkingTriageView({
         currentFocus: e.target.value
       })),
       placeholder: "現在の焦点",
-      style: {
-        padding: '7px 8px',
-        fontSize: 12
-      }
-    }), React.createElement("input", {
-      className: "inp",
-      value: workDraft.nextAction,
-      onChange: e => setWorkDraft(prev => ({
-        ...prev,
-        nextAction: e.target.value
-      })),
-      placeholder: "次の一手",
       style: {
         padding: '7px 8px',
         fontSize: 12
@@ -6755,17 +6760,37 @@ function WorkingTriageView({
         fontWeight: 500
       },
       title: "メモ"
-    }, item.memo))), React.createElement("button", {
+    }, item.memo))), React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        flexShrink: 0
+      }
+    }, React.createElement("div", {
+      style: { display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }
+    }, React.createElement("button", {
+      className: isWorkEditing ? "btn-dark" : "btn-sm",
+      onClick: () => isWorkEditing ? setEditingWorkId(null) : startEditWork(item),
+      style: { fontSize: 11, padding: '4px 9px' }
+    }, isWorkEditing ? '閉' : '編集'), item.status !== 'done' && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => {
+        if (window.confirm(`「${item.title}」を終了にしますか？`)) setItemStatus(item.id, 'done');
+      },
+      style: { fontSize: 11, padding: '4px 9px', color: 'var(--done)' }
+    }, "終了")), React.createElement("button", {
       className: "btn-sm",
       onClick: () => setExpanded(prev => ({
         ...prev,
         [item.id]: !prev[item.id]
-      }))
+      })),
+      style: { fontSize: 11, padding: '4px 9px' }
     }, open ? React.createElement(ChevronDown, {
-      size: 13
+      size: 12
     }) : React.createElement(ChevronRight, {
-      size: 13
-    }), "詳細")), React.createElement("div", {
+      size: 12
+    }), "詳細"))), React.createElement("div", {
       style: {
         marginTop: 12
       }
@@ -6819,25 +6844,25 @@ function WorkingTriageView({
       style: {
         display: 'flex',
         gap: 8,
-        flexWrap: 'wrap'
+        flexWrap: 'wrap',
+        alignItems: 'center'
       }
     }, React.createElement("button", {
-      className: "btn-ghost",
-      onClick: () => addStep(item.id)
+      className: "btn-dark",
+      onClick: () => addStep(item.id),
+      style: { fontSize: 13, padding: '8px 14px', fontWeight: 800 }
     }, React.createElement(Plus, {
-      size: 13
-    }), "一手追加"), React.createElement("button", {
-      className: "btn-ghost",
-      onClick: () => reSplitItem(item.id)
-    }, "再分割JSON"), React.createElement("button", {
-      className: isWorkEditing ? "btn-dark" : "btn-ghost",
-      onClick: () => isWorkEditing ? setEditingWorkId(null) : startEditWork(item)
-    }, isWorkEditing ? "編集を閉じる" : "仕事編集"), item.status !== 'done' && React.createElement("button", {
-      className: "btn-green",
-      onClick: () => setItemStatus(item.id, 'done')
-    }, "完了"), item.status !== 'abandoned' && React.createElement("button", {
+      size: 14
+    }), "タスク追加"), React.createElement("button", {
       className: "btn-sm",
-      onClick: () => setItemStatus(item.id, 'abandoned')
+      onClick: () => reSplitItem(item.id),
+      style: { fontSize: 11, padding: '5px 10px', opacity: .75, marginLeft: 'auto' }
+    }, "再分割JSON"), item.status !== 'abandoned' && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => {
+        if (window.confirm(`「${item.title}」を撤退としますか？`)) setItemStatus(item.id, 'abandoned');
+      },
+      style: { fontSize: 11, padding: '5px 10px', color: 'var(--text-3)' }
     }, "撤退")), workStepChildren(item, null).map(step => renderStep(item, step)), (item.logs || []).length > 0 && React.createElement("ul", {
       style: {
         borderTop: '1px solid var(--border)',
@@ -6973,7 +6998,7 @@ function WorkingTriageView({
     className: "work-form-grid",
     style: {
       display: 'grid',
-      gridTemplateColumns: 'minmax(0,1fr) 110px 140px',
+      gridTemplateColumns: 'minmax(0,1fr) 110px',
       gap: 8
     }
   }, React.createElement("input", {
@@ -6994,7 +7019,26 @@ function WorkingTriageView({
   }, WORK_PRIORITIES.map(p => React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.label))), React.createElement("input", {
+  }, p.label)))), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 8,
+      marginTop: 8
+    }
+  }, React.createElement("label", {
+    style: { display: 'grid', gap: 4, fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
+  }, "着手日", React.createElement("input", {
+    className: "inp",
+    type: "date",
+    value: form.startDate,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      startDate: e.target.value
+    }))
+  })), React.createElement("label", {
+    style: { display: 'grid', gap: 4, fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
+  }, "リミット", React.createElement("input", {
     className: "inp",
     type: "date",
     value: form.deadline,
@@ -7002,7 +7046,7 @@ function WorkingTriageView({
       ...prev,
       deadline: e.target.value
     }))
-  })), React.createElement("textarea", {
+  }))), React.createElement("textarea", {
     className: "inp",
     rows: 2,
     value: form.outcome,
@@ -7019,7 +7063,7 @@ function WorkingTriageView({
     className: "work-form-grid-bottom",
     style: {
       display: 'grid',
-      gridTemplateColumns: '1fr 1fr auto',
+      gridTemplateColumns: '1fr auto',
       gap: 8,
       marginTop: 8
     }
@@ -7031,14 +7075,6 @@ function WorkingTriageView({
       currentFocus: e.target.value
     })),
     placeholder: "現在の焦点"
-  }), React.createElement("input", {
-    className: "inp",
-    value: form.nextAction,
-    onChange: e => setForm(prev => ({
-      ...prev,
-      nextAction: e.target.value
-    })),
-    placeholder: "最初の一手"
   }), React.createElement("button", {
     className: "btn-dark",
     onClick: addManual,
@@ -7164,41 +7200,43 @@ function WorkingTriageView({
       fontSize: 12,
       flexShrink: 0
     }
-  }, "別のを")), renderStep(selectedCandidate.item, selectedCandidate.step)), blockedCount > 0 && React.createElement("div", {
-    className: "stuck-bar",
-    style: {
-      padding: 14,
-      color: 'var(--stuck-fg)',
-      fontSize: 12,
-      fontWeight: 800
-    }
-  }, "詰まり/待ち: ", blockedCount, "件。外部要因と自分側の抵抗を分けて残せています。"), blockedSteps.length > 0 && React.createElement("section", {
+  }, "別のを")), renderStep(selectedCandidate.item, selectedCandidate.step)), blockedSteps.length > 0 && React.createElement("section", {
     style: {
       background: 'var(--surface)',
       border: '1.5px solid var(--border)',
       borderRadius: 14,
-      padding: 14,
-      display: 'grid',
-      gap: 10
+      overflow: 'hidden'
     }
-  }, React.createElement("h3", {
+  }, React.createElement("button", {
+    type: "button",
+    onClick: () => setBlockedOpen(v => !v),
     style: {
-      margin: 0,
-      fontSize: 13,
-      fontWeight: 900,
-      color: 'var(--text-2)',
-      letterSpacing: '.04em'
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '10px 14px',
+      background: blockedOpen ? 'rgba(239,68,68,.08)' : 'rgba(239,68,68,.04)',
+      border: 'none',
+      borderBottom: blockedOpen ? '1px solid var(--border)' : 'none',
+      cursor: 'pointer',
+      textAlign: 'left',
+      fontFamily: 'inherit'
     }
-  }, "ブロック中の一手 (", blockedSteps.length, "件)"), React.createElement("p", {
-    style: {
-      margin: 0,
-      fontSize: 11,
-      color: 'var(--text-3)',
-      lineHeight: 1.55
-    }
-  }, "待ち=外部要因、抵抗あり=自分側の引っかかり。5日以上経つと催促候補マーク ⚠ が付きます。"), React.createElement("div", {
-    style: { display: 'grid', gap: 8 }
-  }, blockedSteps.map(renderBlockedRow))), activeItems.length ? activeItems.map(renderWorkCard) : React.createElement("div", {
+  }, React.createElement("span", {
+    style: { fontSize: 13 }
+  }, blockedOpen ? '▾' : '▸'), React.createElement("strong", {
+    style: { fontSize: 13, color: 'var(--text-2)' }
+  }, "ブロック中の一手"), React.createElement("span", {
+    className: "tag",
+    style: { background: 'rgba(239,68,68,.15)', color: '#B91C1C', fontWeight: 800 }
+  }, blockedSteps.length, "件"), blockedSteps.some(b => b.step.blockedAt && Math.floor((Date.now() - b.step.blockedAt) / 86400000) >= 5) && React.createElement("span", {
+    style: { fontSize: 11, color: '#B91C1C', fontWeight: 800, marginLeft: 'auto' }
+  }, "⚠ 催促候補あり")), blockedOpen && React.createElement("div", {
+    style: { padding: 12, display: 'grid', gap: 8 }
+  }, React.createElement("p", {
+    style: { margin: 0, fontSize: 11, color: 'var(--text-3)', lineHeight: 1.55 }
+  }, "待ち=外部要因、抵抗あり=自分側の引っかかり。5日以上経過すると ⚠ 催促候補マークが付きます。"), blockedSteps.map(renderBlockedRow))), activeItems.length ? activeItems.map(renderWorkCard) : React.createElement("div", {
     style: {
       textAlign: 'center',
       padding: '42px 20px',
