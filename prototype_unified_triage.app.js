@@ -1122,6 +1122,10 @@ const aiCoachResponseText = response => {
   ).replace(/[\r\n]+/g, ' ').trim();
 };
 const aiCoachResponseError = response => String(response?.error?.message || response?.error || response?.message || response?.data?.error || '').trim();
+const isGasSyncPayload = response => {
+  const data = response?.data;
+  return !!(data && typeof data === 'object' && (Array.isArray(data.patients) || Array.isArray(data.generalTasks) || Array.isArray(data.dailyPatients)));
+};
 const aiCoachResponseShape = response => {
   try {
     const keys = Object.keys(response || {}).slice(0, 8).join(',');
@@ -6701,6 +6705,7 @@ function PatientTriage() {
       const response = await gasCoachLine(cfg, await buildAiCoachContext(trigger, extra));
       const error = aiCoachResponseError(response);
       if (response?.ok === false) return { ok: false, error: error || 'GASが失敗を返しました' };
+      if (isGasSyncPayload(response)) return { ok: false, error: 'GASが通常同期データを返しています。doGetでaction=coachLineを先に処理してください' };
       const text = aiCoachResponseText(response).slice(0, 140);
       if (!text) return { ok: false, error: error || `GASからセリフ本文が返りませんでした (${aiCoachResponseShape(response)})` };
       window.dispatchEvent(new CustomEvent('chibi-coach', {
