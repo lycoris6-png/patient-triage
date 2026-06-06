@@ -903,6 +903,157 @@ const stuckStepGoal = task => {
   const n = Number.parseInt(task?.stuckStepGoal, 10);
   return STUCK_STEP_GOALS.includes(n) ? n : 3;
 };
+const WORK_PRIORITIES = [{
+  id: 'er',
+  label: '緊急',
+  color: '#EC4899',
+  weight: 4
+}, {
+  id: 'high',
+  label: '高',
+  color: '#EF4444',
+  weight: 3
+}, {
+  id: 'normal',
+  label: '通常',
+  color: '#6C3EF8',
+  weight: 2
+}, {
+  id: 'low',
+  label: '低',
+  color: '#64748B',
+  weight: 1
+}];
+const WORK_PRIORITY_ORDER = {
+  er: 0,
+  high: 1,
+  normal: 2,
+  low: 3
+};
+const workPriorityMeta = id => WORK_PRIORITIES.find(p => p.id === id) || WORK_PRIORITIES[2];
+const normalizeWorkPriority = value => WORK_PRIORITIES.some(p => p.id === value) ? value : 'normal';
+const normalizeWorkEstimate = value => ESTIMATES.some(e => e.id === String(value || '')) ? String(value) : '10';
+const normalizeWorkStatus = value => ['active', 'waiting', 'resistant', 'done', 'abandoned'].includes(value) ? value : ['defeated', 'complete', 'completed'].includes(value) ? 'done' : value === 'stuck' ? 'resistant' : 'active';
+const workStatusLabel = status => ({
+  active: '進行中',
+  waiting: '待ち',
+  resistant: '抵抗あり',
+  done: '完了',
+  abandoned: '撤退'
+})[status] || '進行中';
+const normalizeWorkStepStatus = value => ['open', 'done', 'skipped'].includes(value) ? value : 'open';
+const formatDateShort = dateStr => {
+  if (!dateStr) return '期限なし';
+  const [, m, d] = String(dateStr).split('-');
+  return m && d ? `${Number(m)}/${Number(d)}` : dateStr;
+};
+const formatLogTime = ms => {
+  const d = new Date(ms || Date.now());
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })} ${formatClock(d)}`;
+};
+const workLog = text => ({
+  id: uid(),
+  at: Date.now(),
+  text
+});
+const normalizeWorkStep = (step = {}, parent = {}) => ({
+  id: step.id || uid(),
+  title: String(step.title || step.name || parent.nextAction || '次の一手').trim() || '次の一手',
+  type: step.type || 'work',
+  estimate: normalizeWorkEstimate(step.estimate),
+  priority: normalizeWorkPriority(step.priority || parent.priority),
+  status: normalizeWorkStepStatus(step.status),
+  blockType: ['waiting', 'resistant'].includes(step.blockType) ? step.blockType : '',
+  phase: step.phase || step.category || '',
+  parentId: step.parentId || step.parentStepId || null,
+  isGroup: step.isGroup === true,
+  createdAt: Number(step.createdAt) || Date.now(),
+  completedAt: step.completedAt || null
+});
+const normalizeWorkItem = (item = {}) => {
+  const now = Date.now();
+  const priority = normalizeWorkPriority(item.priority);
+  const title = String(item.title || item.name || '大きな仕事').trim() || '大きな仕事';
+  const rawSteps = Array.isArray(item.steps) ? item.steps : Array.isArray(item.attacks) ? item.attacks : [];
+  const nextAction = String(item.nextAction || rawSteps.find(s => s?.status !== 'done')?.title || '').trim();
+  const steps = rawSteps.map(step => normalizeWorkStep(step, { priority, nextAction }));
+  if (!steps.length && nextAction) {
+    steps.push(normalizeWorkStep({
+      title: nextAction,
+      estimate: '10',
+      priority
+    }, { priority, nextAction }));
+  }
+  const logs = Array.isArray(item.logs) ? item.logs.map(log => ({
+    id: log.id || uid(),
+    at: Number(log.at) || now,
+    text: String(log.text || '').trim()
+  })).filter(log => log.text) : [];
+  const status = normalizeWorkStatus(item.status);
+  return {
+    id: item.id || uid(),
+    title,
+    category: item.category || '',
+    priority,
+    status,
+    deadline: item.deadline || '',
+    outcome: item.outcome || item.victoryCondition || '',
+    currentFocus: item.currentFocus || item.currentPhase || '',
+    nextAction,
+    steps,
+    logs,
+    createdAt: Number(item.createdAt) || now,
+    updatedAt: Number(item.updatedAt) || now,
+    lastWorkedAt: item.lastWorkedAt || item.lastAttackedAt || null
+  };
+};
+const sortWorkItems = items => [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+  const pa = WORK_PRIORITY_ORDER[a.priority] ?? 2;
+  const pb = WORK_PRIORITY_ORDER[b.priority] ?? 2;
+  if (pa !== pb) return pa - pb;
+  if (a.deadline && b.deadline && a.deadline !== b.deadline) return a.deadline.localeCompare(b.deadline);
+  if (a.deadline && !b.deadline) return -1;
+  if (!a.deadline && b.deadline) return 1;
+  return (a.createdAt || 0) - (b.createdAt || 0);
+});
+const workStepChildren = (item, parentId) => (item.steps || []).filter(step => (step.parentId || null) === (parentId || null));
+const workLeafSteps = item => (item.steps || []).filter(step => !workStepChildren(item, step.id).length);
+const workProgress = item => {
+  const leafSteps = workLeafSteps(item);
+  const total = leafSteps.length || 0;
+  const done = leafSteps.filter(step => step.status === 'done').length;
+  return {
+    total,
+    done,
+    pct: total ? Math.round(done / total * 100) : 0
+  };
+};
+const openWorkSteps = item => workLeafSteps(item).filter(step => step.status === 'open');
+const nextWorkStep = item => {
+  const open = openWorkSteps(item);
+  if (!open.length) return null;
+  if (item.nextAction) {
+    const exact = open.find(step => step.title === item.nextAction);
+    if (exact) return exact;
+  }
+  return open[0];
+};
+const extractWorkImportJSON = text => {
+  const raw = String(text || '').trim();
+  const match = raw.match(/BEGIN_BOSS_TRIAGE_JSON\s*([\s\S]*?)\s*END_BOSS_TRIAGE_JSON/);
+  return match ? match[1].trim() : raw;
+};
+const parseWorkImport = text => {
+  const parsed = JSON.parse(extractWorkImportJSON(text));
+  if (parsed.schema !== 'BOSS_TRIAGE_IMPORT_V1' && parsed.schema !== 'WORK_TRIAGE_IMPORT_V1') {
+    throw new Error('schema が BOSS_TRIAGE_IMPORT_V1 / WORK_TRIAGE_IMPORT_V1 ではありません');
+  }
+  if (!Array.isArray(parsed.bosses) && !Array.isArray(parsed.works)) {
+    throw new Error('bosses または works が配列ではありません');
+  }
+  return (parsed.works || parsed.bosses).map(normalizeWorkItem);
+};
 const stuckStepDone = task => Math.min(stuckStepGoal(task), Math.max(0, Number.parseInt(task?.stuckStepDone, 10) || 0));
 function StuckProgress({
   task,
@@ -5834,6 +5985,1102 @@ function PendingPatientSection({
     disabled: !name.trim()
   }, "登録する"))));
 }
+function WorkingTriageView({
+  items,
+  setItems,
+  showToast
+}) {
+  const [form, setForm] = React.useState({
+    title: '',
+    priority: 'normal',
+    deadline: '',
+    outcome: '',
+    currentFocus: '',
+    nextAction: ''
+  });
+  const [jsonText, setJsonText] = React.useState('');
+  const [preview, setPreview] = React.useState(null);
+  const [importError, setImportError] = React.useState('');
+  const [expanded, setExpanded] = React.useState({});
+  const [doneOpen, setDoneOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [candidateIndex, setCandidateIndex] = React.useState(0);
+  const [editingStep, setEditingStep] = React.useState(null);
+  const [stepDraft, setStepDraft] = React.useState({
+    title: '',
+    estimate: '10',
+    priority: 'normal',
+    phase: ''
+  });
+  const [editingWorkId, setEditingWorkId] = React.useState(null);
+  const [workDraft, setWorkDraft] = React.useState({
+    title: '',
+    priority: 'normal',
+    deadline: '',
+    outcome: '',
+    currentFocus: '',
+    nextAction: ''
+  });
+  const activeItems = sortWorkItems(items.filter(item => item.status !== 'done' && item.status !== 'abandoned'));
+  const doneItems = sortWorkItems(items.filter(item => item.status === 'done' || item.status === 'abandoned'));
+  const openSteps = activeItems.flatMap(item => openWorkSteps(item).map(step => ({
+    item,
+    step,
+    matchNext: item.nextAction && step.title === item.nextAction
+  })));
+  const candidates = [...openSteps].sort((a, b) => {
+    if (a.matchNext !== b.matchNext) return a.matchNext ? -1 : 1;
+    const pa = WORK_PRIORITY_ORDER[a.step.priority || a.item.priority] ?? 2;
+    const pb = WORK_PRIORITY_ORDER[b.step.priority || b.item.priority] ?? 2;
+    if (pa !== pb) return pa - pb;
+    if (a.item.deadline && b.item.deadline && a.item.deadline !== b.item.deadline) return a.item.deadline.localeCompare(b.item.deadline);
+    if (a.item.deadline && !b.item.deadline) return -1;
+    if (!a.item.deadline && b.item.deadline) return 1;
+    return (a.step.createdAt || 0) - (b.step.createdAt || 0);
+  });
+  const selectedCandidate = candidates.length ? candidates[candidateIndex % candidates.length] : null;
+  const dueSoon = activeItems.filter(item => {
+    const days = daysUntilDateStr(item.deadline);
+    return days !== null && days <= 3;
+  }).length;
+  const blockedCount = activeItems.filter(item => item.status === 'waiting' || item.status === 'resistant' || (item.steps || []).some(step => step.blockType)).length;
+  const doneToday = items.reduce((sum, item) => sum + (item.steps || []).filter(step => step.status === 'done' && step.completedAt && workdayStrForTimestamp(step.completedAt) === todayStr()).length, 0);
+  const recentLogs = items.flatMap(item => (item.logs || []).map(log => ({
+    ...log,
+    itemTitle: item.title
+  }))).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 8);
+  const updateItem = (itemId, updater) => setItems(prev => prev.map(item => item.id === itemId ? normalizeWorkItem(typeof updater === 'function' ? updater(item) : {
+    ...item,
+    ...updater
+  }) : item));
+  const addManual = () => {
+    const title = form.title.trim();
+    if (!title) return;
+    const nextAction = form.nextAction.trim();
+    const item = normalizeWorkItem({
+      ...form,
+      title,
+      nextAction,
+      steps: nextAction ? [{
+        title: nextAction,
+        estimate: '10',
+        priority: form.priority
+      }] : [],
+      logs: [workLog('作成')]
+    });
+    setItems(prev => [...prev, item]);
+    setExpanded(prev => ({
+      ...prev,
+      [item.id]: true
+    }));
+    setForm({
+      title: '',
+      priority: 'normal',
+      deadline: '',
+      outcome: '',
+      currentFocus: '',
+      nextAction: ''
+    });
+    showToast('わーとりに追加しました');
+    setAddOpen(false);
+  };
+  const completeStep = (itemId, stepId) => {
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      if (!step) return item;
+      const now = Date.now();
+      let steps = (item.steps || []).map(s => s.id === stepId ? {
+        ...s,
+        status: 'done',
+        blockType: '',
+        completedAt: now
+      } : s);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        steps = steps.map(s => {
+          const children = steps.filter(child => child.parentId === s.id);
+          if (children.length && s.status !== 'done' && children.every(child => child.status === 'done' || child.status === 'skipped')) {
+            changed = true;
+            return {
+              ...s,
+              status: 'done',
+              completedAt: now
+            };
+          }
+          return s;
+        });
+      }
+      const nextOpen = workLeafSteps({ steps }).find(s => s.status === 'open');
+      const allDone = steps.length > 0 && !nextOpen;
+      return {
+        ...item,
+        steps,
+        status: allDone ? 'done' : item.status === 'waiting' || item.status === 'resistant' ? 'active' : item.status,
+        nextAction: nextOpen?.title || item.nextAction,
+        lastWorkedAt: now,
+        updatedAt: now,
+        logs: [...(item.logs || []), workLog(`完了: ${step.title}`), ...(allDone ? [workLog('仕事を完了')] : [])]
+      };
+    });
+    window.dispatchEvent(new CustomEvent('chibi-coach', {
+      detail: {
+        kind: 'done',
+        text: '一手進みました。重たい仕事も、分ければ動きます。'
+      }
+    }));
+  };
+  const markBlock = (itemId, stepId, blockType) => {
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      const label = blockType === 'waiting' ? '待ち' : '抵抗あり';
+      return {
+        ...item,
+        status: blockType,
+        steps: (item.steps || []).map(s => s.id === stepId ? {
+          ...s,
+          blockType
+        } : s),
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(`${label}: ${step?.title || item.title}`)]
+      };
+    });
+    showToast(blockType === 'waiting' ? '外部要因の待ちにしました' : '抵抗ありとして残しました');
+  };
+  const setItemStatus = (itemId, status) => updateItem(itemId, item => ({
+    ...item,
+    status,
+    updatedAt: Date.now(),
+    logs: [...(item.logs || []), workLog(status === 'done' ? '仕事を完了' : status === 'abandoned' ? '撤退' : `${workStatusLabel(status)}に変更`)]
+  }));
+  const addStep = (itemId, parentId = null) => {
+    const title = window.prompt('追加する一手');
+    if (!title || !title.trim()) return;
+    updateItem(itemId, item => ({
+      ...item,
+      steps: (item.steps || []).map(step => step.id === parentId ? {
+        ...step,
+        isGroup: true
+      } : step).concat(normalizeWorkStep({
+        title: title.trim(),
+        estimate: '10',
+        priority: item.priority,
+        parentId
+      }, item)),
+      updatedAt: Date.now(),
+      logs: [...(item.logs || []), workLog(parentId ? `子一手追加: ${title.trim()}` : `一手追加: ${title.trim()}`)]
+    }));
+  };
+  const reSplitItem = (itemId, parentStepId = null) => {
+    const text = window.prompt(parentStepId ? 'この一手をさらに分けるJSONを貼り付けてください。子一手として追加します。' : 'この仕事の再分割JSONを貼り付けてください。一手を追加します。');
+    if (!text || !text.trim()) return;
+    try {
+      const imported = parseWorkImport(text)[0];
+      if (!imported) throw new Error('取り込める仕事がありません');
+      const newSteps = (imported.steps || []).map(step => normalizeWorkStep({
+        ...step,
+        parentId: parentStepId,
+        status: 'open',
+        completedAt: null
+      }, imported));
+      if (!newSteps.length) throw new Error('一手がありません');
+      updateItem(itemId, item => ({
+        ...item,
+        outcome: imported.outcome || item.outcome,
+        currentFocus: imported.currentFocus || item.currentFocus,
+        nextAction: imported.nextAction || newSteps[0]?.title || item.nextAction,
+        steps: (item.steps || []).map(step => step.id === parentStepId ? {
+          ...step,
+          isGroup: true
+        } : step).concat(newSteps),
+        status: item.status === 'done' || item.status === 'abandoned' ? 'active' : item.status,
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(parentStepId ? `一手を再分割: ${newSteps.length}手追加` : `再分割: ${newSteps.length}手追加`)]
+      }));
+      showToast(`一手を${newSteps.length}件追加しました`);
+    } catch (e) {
+      showToast('再分割JSONを読めませんでした: ' + (e.message || '形式エラー'));
+    }
+  };
+  const startEditStep = (item, step) => {
+    setEditingStep({
+      itemId: item.id,
+      stepId: step.id
+    });
+    setStepDraft({
+      title: step.title || '',
+      estimate: step.estimate || '10',
+      priority: step.priority || item.priority || 'normal',
+      phase: step.phase || ''
+    });
+  };
+  const saveStepEdit = () => {
+    if (!editingStep || !stepDraft.title.trim()) return;
+    updateItem(editingStep.itemId, item => ({
+      ...item,
+      steps: (item.steps || []).map(step => step.id === editingStep.stepId ? {
+        ...step,
+        title: stepDraft.title.trim(),
+        estimate: normalizeWorkEstimate(stepDraft.estimate),
+        priority: normalizeWorkPriority(stepDraft.priority),
+        phase: stepDraft.phase.trim()
+      } : step),
+      updatedAt: Date.now(),
+      logs: [...(item.logs || []), workLog(`一手編集: ${stepDraft.title.trim()}`)]
+    }));
+    setEditingStep(null);
+  };
+  const startEditWork = item => {
+    setEditingWorkId(item.id);
+    setWorkDraft({
+      title: item.title || '',
+      priority: item.priority || 'normal',
+      deadline: item.deadline || '',
+      outcome: item.outcome || '',
+      currentFocus: item.currentFocus || '',
+      nextAction: item.nextAction || ''
+    });
+  };
+  const saveWorkEdit = () => {
+    if (!editingWorkId || !workDraft.title.trim()) return;
+    updateItem(editingWorkId, item => ({
+      ...item,
+      title: workDraft.title.trim(),
+      priority: normalizeWorkPriority(workDraft.priority),
+      deadline: workDraft.deadline || '',
+      outcome: workDraft.outcome.trim(),
+      currentFocus: workDraft.currentFocus.trim(),
+      nextAction: workDraft.nextAction.trim() || item.nextAction,
+      updatedAt: Date.now(),
+      logs: [...(item.logs || []), workLog(`仕事編集: ${workDraft.title.trim()}`)]
+    }));
+    setEditingWorkId(null);
+  };
+  const removeStep = (itemId, stepId) => {
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      const removeIds = new Set([stepId]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        (item.steps || []).forEach(s => {
+          if (s.parentId && removeIds.has(s.parentId) && !removeIds.has(s.id)) {
+            removeIds.add(s.id);
+            changed = true;
+          }
+        });
+      }
+      return {
+        ...item,
+        steps: (item.steps || []).filter(s => !removeIds.has(s.id)),
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(`一手削除: ${step?.title || ''}${removeIds.size > 1 ? ` ほか${removeIds.size - 1}件` : ''}`)]
+      };
+    });
+  };
+  const previewImport = () => {
+    try {
+      const parsed = parseWorkImport(jsonText);
+      setPreview(parsed);
+      setImportError('');
+    } catch (e) {
+      setPreview(null);
+      setImportError(e.message || 'JSONを読めませんでした');
+    }
+  };
+  const applyImport = () => {
+    if (!preview?.length) return;
+    setItems(prev => [...prev, ...preview]);
+    showToast(`わーとりに${preview.length}件追加しました`);
+    setJsonText('');
+    setPreview(null);
+    setImportError('');
+    setAddOpen(false);
+  };
+  const renderStep = (item, step, depth = 0) => {
+    const pri = workPriorityMeta(step.priority || item.priority);
+    const isEditing = editingStep?.itemId === item.id && editingStep?.stepId === step.id;
+    const children = workStepChildren(item, step.id);
+    const hasChildren = children.length > 0;
+    return React.createElement("div", {
+      key: step.id,
+      style: {
+        border: '1.5px solid var(--border)',
+        borderLeft: hasChildren ? '4px solid var(--accent)' : '1.5px solid var(--border)',
+        borderRadius: 12,
+        padding: 10,
+        marginLeft: depth ? 14 : 0,
+        background: hasChildren ? 'var(--surface-2)' : step.status === 'done' ? 'rgba(22,163,74,.08)' : step.blockType === 'waiting' ? 'rgba(59,130,246,.08)' : step.blockType === 'resistant' ? 'rgba(239,68,68,.08)' : 'var(--surface)'
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 8,
+        alignItems: 'flex-start'
+      }
+    }, React.createElement("span", {
+      className: "tag",
+      style: {
+        color: pri.color,
+        background: pri.color + '18',
+        border: '1px solid ' + pri.color + '35',
+        flexShrink: 0
+      }
+    }, pri.label), React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 900,
+        color: 'var(--text)',
+        lineHeight: 1.45,
+        textDecoration: step.status === 'done' ? 'line-through' : 'none'
+      }
+    }, hasChildren && React.createElement("span", {
+      style: {
+        color: 'var(--accent)',
+        marginRight: 4
+      }
+    }, "▾"), isEditing ? React.createElement("input", {
+      className: "inp",
+      value: stepDraft.title,
+      onChange: e => setStepDraft(prev => ({
+        ...prev,
+        title: e.target.value
+      })),
+      style: {
+        padding: '6px 8px',
+        fontSize: 13
+      }
+    }) : step.title), React.createElement("div", {
+      style: {
+        marginTop: 4,
+        fontSize: 11,
+        color: 'var(--text-3)',
+        fontWeight: 700
+      }
+    }, isEditing ? React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '80px 90px 1fr',
+        gap: 6,
+        marginTop: 6
+      }
+    }, React.createElement("select", {
+      className: "inp",
+      value: stepDraft.estimate,
+      onChange: e => setStepDraft(prev => ({
+        ...prev,
+        estimate: e.target.value
+      })),
+      style: {
+        padding: '5px 6px',
+        fontSize: 12
+      }
+    }, ESTIMATES.map(e => React.createElement("option", {
+      key: e.id,
+      value: e.id
+    }, e.label))), React.createElement("select", {
+      className: "inp",
+      value: stepDraft.priority,
+      onChange: e => setStepDraft(prev => ({
+        ...prev,
+        priority: e.target.value
+      })),
+      style: {
+        padding: '5px 6px',
+        fontSize: 12
+      }
+    }, WORK_PRIORITIES.map(p => React.createElement("option", {
+      key: p.id,
+      value: p.id
+    }, p.label))), React.createElement("input", {
+      className: "inp",
+      value: stepDraft.phase,
+      onChange: e => setStepDraft(prev => ({
+        ...prev,
+        phase: e.target.value
+      })),
+      placeholder: "区分",
+      style: {
+        padding: '5px 6px',
+        fontSize: 12
+      }
+    })) : React.createElement(React.Fragment, null, step.estimate, "分", step.phase ? ` / ${step.phase}` : '', step.blockType ? ` / ${step.blockType === 'waiting' ? '待ち' : '抵抗あり'}` : '')))), isEditing ? React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 6,
+        flexWrap: 'wrap',
+        marginTop: 8
+      }
+    }, React.createElement("button", {
+      className: "btn-dark",
+      onClick: saveStepEdit,
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "保存"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setEditingStep(null),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "閉じる")) : step.status !== 'done' && React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 6,
+        flexWrap: 'wrap',
+        marginTop: 8
+      }
+    }, !hasChildren && React.createElement("button", {
+      className: "btn-green",
+      onClick: () => completeStep(item.id, step.id),
+      style: {
+        padding: '6px 12px',
+        fontSize: 12
+      }
+    }, React.createElement(Check, {
+      size: 13
+    }), "一手完了"), !hasChildren && React.createElement("button", {
+      className: "btn-ghost",
+      onClick: () => markBlock(item.id, step.id, 'waiting'),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "待ち"), !hasChildren && React.createElement("button", {
+      className: "btn-rose",
+      onClick: () => markBlock(item.id, step.id, 'resistant'),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "抵抗あり"), React.createElement("button", {
+      className: "btn-ghost",
+      onClick: () => addStep(item.id, step.id),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "子一手"), React.createElement("button", {
+      className: "btn-ghost",
+      onClick: () => reSplitItem(item.id, step.id),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "分解JSON"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => startEditStep(item, step),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "編集"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => removeStep(item.id, step.id),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12,
+        color: 'var(--text-3)'
+      }
+    }, "削除")), hasChildren && React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        marginTop: 10
+      }
+    }, children.map(child => renderStep(item, child, depth + 1))));
+  };
+  const renderWorkCard = item => {
+    const pri = workPriorityMeta(item.priority);
+    const progress = workProgress(item);
+    const next = nextWorkStep(item);
+    const days = daysUntilDateStr(item.deadline);
+    const open = !!expanded[item.id];
+    const isWorkEditing = editingWorkId === item.id;
+    return React.createElement("article", {
+      key: item.id,
+      style: {
+        background: 'var(--surface)',
+        border: `1.5px solid ${item.status === 'waiting' ? '#93C5FD' : item.status === 'resistant' ? '#FCA5A5' : 'var(--border)'}`,
+        borderLeft: `5px solid ${pri.color}`,
+        borderRadius: 16,
+        padding: 16,
+        boxShadow: 'var(--shadow-sm)'
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 10
+      }
+    }, React.createElement("div", {
+      style: {
+        minWidth: 0
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 6,
+        flexWrap: 'wrap',
+        marginBottom: 8
+      }
+    }, React.createElement("span", {
+      className: "tag",
+      style: {
+        color: pri.color,
+        background: pri.color + '18',
+        border: '1px solid ' + pri.color + '35'
+      }
+    }, pri.label), React.createElement("span", {
+      className: "tag"
+    }, workStatusLabel(item.status)), item.deadline && React.createElement("span", {
+      className: "tag",
+      style: {
+        color: days !== null && days <= 3 ? '#DC2626' : 'var(--text-2)'
+      }
+    }, formatDateShort(item.deadline), days !== null ? ` / あと${days}日` : '')), isWorkEditing ? React.createElement("div", {
+      style: {
+        display: 'grid',
+        gap: 8
+      }
+    }, React.createElement("input", {
+      className: "inp",
+      value: workDraft.title,
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        title: e.target.value
+      })),
+      placeholder: "仕事名",
+      style: {
+        padding: '8px 10px',
+        fontSize: 14,
+        fontWeight: 800
+      }
+    }), React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '120px 150px',
+        gap: 8
+      }
+    }, React.createElement("select", {
+      className: "inp",
+      value: workDraft.priority,
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        priority: e.target.value
+      })),
+      style: {
+        padding: '7px 8px',
+        fontSize: 12
+      }
+    }, WORK_PRIORITIES.map(p => React.createElement("option", {
+      key: p.id,
+      value: p.id
+    }, p.label))), React.createElement("input", {
+      className: "inp",
+      type: "date",
+      value: workDraft.deadline,
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        deadline: e.target.value
+      })),
+      style: {
+        padding: '7px 8px',
+        fontSize: 12
+      }
+    })), React.createElement("textarea", {
+      className: "inp",
+      value: workDraft.outcome,
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        outcome: e.target.value
+      })),
+      placeholder: "勝利条件・完了の形",
+      rows: 2,
+      style: {
+        padding: '8px 10px',
+        fontSize: 12,
+        resize: 'vertical'
+      }
+    }), React.createElement("input", {
+      className: "inp",
+      value: workDraft.currentFocus,
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        currentFocus: e.target.value
+      })),
+      placeholder: "現在の焦点",
+      style: {
+        padding: '7px 8px',
+        fontSize: 12
+      }
+    }), React.createElement("input", {
+      className: "inp",
+      value: workDraft.nextAction,
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        nextAction: e.target.value
+      })),
+      placeholder: "次の一手",
+      style: {
+        padding: '7px 8px',
+        fontSize: 12
+      }
+    }), React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 8,
+        flexWrap: 'wrap'
+      }
+    }, React.createElement("button", {
+      className: "btn-dark",
+      onClick: saveWorkEdit,
+      disabled: !workDraft.title.trim()
+    }, "保存"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setEditingWorkId(null)
+    }, "閉じる"))) : React.createElement(React.Fragment, null, React.createElement("h3", {
+      style: {
+        margin: 0,
+        fontSize: 17,
+        fontWeight: 900,
+        color: 'var(--text)',
+        lineHeight: 1.35
+      }
+    }, item.title), item.outcome && React.createElement("p", {
+      style: {
+        margin: '8px 0 0',
+        color: 'var(--text-2)',
+        fontSize: 12,
+        lineHeight: 1.6,
+        fontWeight: 600
+      }
+    }, item.outcome))), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setExpanded(prev => ({
+        ...prev,
+        [item.id]: !prev[item.id]
+      }))
+    }, open ? React.createElement(ChevronDown, {
+      size: 13
+    }) : React.createElement(ChevronRight, {
+      size: 13
+    }), "詳細")), React.createElement("div", {
+      style: {
+        marginTop: 12
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        color: 'var(--text-3)',
+        fontSize: 11,
+        fontWeight: 900,
+        marginBottom: 5
+      }
+    }, React.createElement("span", null, "進捗 ", progress.done, "/", progress.total), React.createElement("span", null, progress.pct, "%")), React.createElement("div", {
+      style: {
+        height: 9,
+        borderRadius: 99,
+        background: 'var(--surface-3)',
+        overflow: 'hidden'
+      }
+    }, React.createElement("div", {
+      style: {
+        width: `${progress.pct}%`,
+        height: '100%',
+        background: `linear-gradient(90deg, ${pri.color}, var(--accent))`
+      }
+    }))), next && React.createElement("div", {
+      style: {
+        marginTop: 12
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--text-3)',
+        fontWeight: 900,
+        marginBottom: 6
+      }
+    }, "次の一手"), renderStep(item, next)), open && React.createElement("div", {
+      style: {
+        marginTop: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10
+      }
+    }, item.currentFocus && React.createElement("div", {
+      style: {
+        color: 'var(--text-2)',
+        fontSize: 12,
+        fontWeight: 800
+      }
+    }, "現在の焦点: ", item.currentFocus), React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 8,
+        flexWrap: 'wrap'
+      }
+    }, React.createElement("button", {
+      className: "btn-ghost",
+      onClick: () => addStep(item.id)
+    }, React.createElement(Plus, {
+      size: 13
+    }), "一手追加"), React.createElement("button", {
+      className: "btn-ghost",
+      onClick: () => reSplitItem(item.id)
+    }, "再分割JSON"), React.createElement("button", {
+      className: isWorkEditing ? "btn-dark" : "btn-ghost",
+      onClick: () => isWorkEditing ? setEditingWorkId(null) : startEditWork(item)
+    }, isWorkEditing ? "編集を閉じる" : "仕事編集"), item.status !== 'done' && React.createElement("button", {
+      className: "btn-green",
+      onClick: () => setItemStatus(item.id, 'done')
+    }, "完了"), item.status !== 'abandoned' && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setItemStatus(item.id, 'abandoned')
+    }, "撤退")), workStepChildren(item, null).map(step => renderStep(item, step)), (item.logs || []).length > 0 && React.createElement("ul", {
+      style: {
+        borderTop: '1px solid var(--border)',
+        margin: 0,
+        padding: '10px 0 0 16px',
+        color: 'var(--text-2)',
+        fontSize: 12,
+        lineHeight: 1.6
+      }
+    }, item.logs.slice(-6).reverse().map(log => React.createElement("li", {
+      key: log.id
+    }, formatLogTime(log.at), " ", log.text)))));
+  };
+  const statCards = [{
+    label: '作業中',
+    val: activeItems.length
+  }, {
+    label: '未完の一手',
+    val: openSteps.length
+  }, {
+    label: '期限近め',
+    val: dueSoon
+  }, {
+    label: '今日の前進',
+    val: doneToday
+  }];
+  return React.createElement("section", {
+    className: "work-triage-view",
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 800
+    }
+  }, statCards.map(stat => React.createElement("span", {
+    key: stat.label,
+    className: "tag",
+    style: {
+      background: 'var(--surface-2)',
+      color: 'var(--text-3)',
+      border: '1px solid var(--border)'
+    }
+  }, stat.label, " ", stat.val)), React.createElement("button", {
+    className: addOpen ? "btn-dark" : "btn-ghost",
+    onClick: () => setAddOpen(v => !v),
+    style: {
+      marginLeft: 'auto',
+      padding: '7px 14px',
+      fontSize: 12
+    }
+  }, React.createElement(Plus, {
+    size: 14
+  }), "仕事追加")), addOpen && React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 16,
+      padding: 16,
+      boxShadow: 'var(--shadow-sm)'
+    }
+  }, React.createElement("h2", {
+    style: {
+      margin: '0 0 12px',
+      fontSize: 16,
+      fontWeight: 900,
+      color: 'var(--text)'
+    }
+  }, "大きな仕事を追加"), React.createElement("div", {
+    className: "work-form-grid",
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1fr) 110px 140px',
+      gap: 8
+    }
+  }, React.createElement("input", {
+    className: "inp",
+    value: form.title,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      title: e.target.value
+    })),
+    placeholder: "仕事名"
+  }), React.createElement("select", {
+    className: "inp",
+    value: form.priority,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      priority: e.target.value
+    }))
+  }, WORK_PRIORITIES.map(p => React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.label))), React.createElement("input", {
+    className: "inp",
+    type: "date",
+    value: form.deadline,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      deadline: e.target.value
+    }))
+  })), React.createElement("textarea", {
+    className: "inp",
+    rows: 2,
+    value: form.outcome,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      outcome: e.target.value
+    })),
+    placeholder: "完了条件",
+    style: {
+      marginTop: 8,
+      resize: 'vertical'
+    }
+  }), React.createElement("div", {
+    className: "work-form-grid-bottom",
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr auto',
+      gap: 8,
+      marginTop: 8
+    }
+  }, React.createElement("input", {
+    className: "inp",
+    value: form.currentFocus,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      currentFocus: e.target.value
+    })),
+    placeholder: "現在の焦点"
+  }), React.createElement("input", {
+    className: "inp",
+    value: form.nextAction,
+    onChange: e => setForm(prev => ({
+      ...prev,
+      nextAction: e.target.value
+    })),
+    placeholder: "最初の一手"
+  }), React.createElement("button", {
+    className: "btn-dark",
+    onClick: addManual,
+    disabled: !form.title.trim(),
+    style: {
+      opacity: form.title.trim() ? 1 : .45
+    }
+  }, React.createElement(Plus, {
+    size: 14
+  }), "追加"))), addOpen && React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 16,
+      padding: 16,
+      boxShadow: 'var(--shadow-sm)'
+    }
+  }, React.createElement("h2", {
+    style: {
+      margin: '0 0 10px',
+      fontSize: 16,
+      fontWeight: 900,
+      color: 'var(--text)'
+    }
+  }, "GPT分解JSONを貼り付け"), React.createElement("textarea", {
+    className: "inp",
+    value: jsonText,
+    onChange: e => setJsonText(e.target.value),
+    rows: 5,
+    placeholder: "BEGIN_BOSS_TRIAGE_JSON ... END_BOSS_TRIAGE_JSON",
+    style: {
+      resize: 'vertical',
+      fontFamily: 'Consolas, monospace',
+      fontSize: 12
+    }
+  }), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginTop: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: previewImport,
+    disabled: !jsonText.trim()
+  }, "プレビュー"), React.createElement("button", {
+    className: "btn-dark",
+    onClick: applyImport,
+    disabled: !preview?.length,
+    style: {
+      opacity: preview?.length ? 1 : .45
+    }
+  }, "この内容で追加"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => {
+      setJsonText('');
+      setPreview(null);
+      setImportError('');
+    }
+  }, "クリア")), importError && React.createElement("p", {
+    style: {
+      margin: '10px 0 0',
+      color: 'var(--stuck-fg)',
+      fontSize: 12,
+      fontWeight: 800
+    }
+  }, importError), preview?.length > 0 && React.createElement("div", {
+    style: {
+      marginTop: 12,
+      background: 'var(--surface-2)',
+      borderRadius: 12,
+      padding: 12,
+      color: 'var(--text-2)',
+      fontSize: 12
+    }
+  }, React.createElement("div", {
+    style: {
+      fontWeight: 900,
+      color: 'var(--text)',
+      marginBottom: 6
+    }
+  }, "プレビュー: ", preview.length, "件"), preview.map(item => React.createElement("div", {
+    key: item.id,
+    style: {
+      padding: '5px 0',
+      borderTop: '1px solid var(--border)'
+    }
+  }, item.title, " / ", (item.steps || []).length, "手 / 次: ", item.nextAction || '未設定')))), selectedCandidate && React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 16,
+      padding: 16,
+      boxShadow: 'var(--shadow-sm)'
+    }
+  }, React.createElement("h2", {
+    style: {
+      margin: '0 0 12px',
+      fontSize: 16,
+      fontWeight: 900,
+      color: 'var(--text)'
+    }
+  }, "本日の一手"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 6
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      minWidth: 0
+    }
+  }, selectedCandidate.item.title), candidates.length > 1 && React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setCandidateIndex(i => i + 1),
+    style: {
+      fontSize: 12,
+      flexShrink: 0
+    }
+  }, "別のを")), renderStep(selectedCandidate.item, selectedCandidate.step)), blockedCount > 0 && React.createElement("div", {
+    className: "stuck-bar",
+    style: {
+      padding: 14,
+      color: 'var(--stuck-fg)',
+      fontSize: 12,
+      fontWeight: 800
+    }
+  }, "詰まり/待ち: ", blockedCount, "件。外部要因と自分側の抵抗を分けて残せています。"), activeItems.length ? activeItems.map(renderWorkCard) : React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: '42px 20px',
+      borderRadius: 16,
+      border: '2px dashed var(--border-2)',
+      color: 'var(--text-3)',
+      fontSize: 13,
+      background: 'rgba(255,255,255,.5)',
+      fontWeight: 700
+    }
+  }, "大きな仕事を追加すると、ここに分解して並びます"), recentLogs.length > 0 && React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 16,
+      padding: 16
+    }
+  }, React.createElement("h2", {
+    style: {
+      margin: '0 0 10px',
+      fontSize: 15,
+      color: 'var(--text)',
+      fontWeight: 900
+    }
+  }, "最近のログ"), React.createElement("ul", {
+    style: {
+      margin: 0,
+      padding: '0 0 0 16px',
+      color: 'var(--text-2)',
+      fontSize: 12,
+      lineHeight: 1.7
+    }
+  }, recentLogs.map(log => React.createElement("li", {
+    key: log.id
+  }, formatLogTime(log.at), " ", log.itemTitle, ": ", log.text)))), doneItems.length > 0 && React.createElement("div", null, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setDoneOpen(v => !v),
+    style: {
+      color: 'var(--text-3)',
+      fontWeight: 800
+    }
+  }, doneOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "完了/撤退した仕事 (", doneItems.length, ")"), doneOpen && React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      opacity: .82
+    }
+  }, doneItems.map(renderWorkCard))));
+}
 function PatientTriage() {
   const {
     useState,
@@ -5939,6 +7186,8 @@ function PatientTriage() {
     scheduledDate: todayStr(),
     scheduledTime: ''
   });
+  const [workModeEnabled, setWorkModeEnabled] = useState(false);
+  const [workItems, setWorkItems] = useState([]);
   const [toast, setToast] = useState(null);
   const [endDayConfirm, setEndDayConfirm] = useState(false);
   const [endDayCelebrate, setEndDayCelebrate] = useState(null);
@@ -6185,6 +7434,7 @@ function PatientTriage() {
   };
   const effectiveHeaderBackdrop = useMemo(() => getHeaderBackdrop(headerBackdropMode, now), [headerBackdropMode, now]);
   const isDailyMode = appMode === 'daily';
+  const isWorkMode = appMode === 'work';
   const activePatients = isDailyMode ? dailyPatients : patients;
   const setActivePatients = isDailyMode ? setDailyPatients : setPatients;
   const activeGeneralTasks = isDailyMode ? dailyGeneralTasks : generalTasks;
@@ -6193,6 +7443,7 @@ function PatientTriage() {
   const setActiveExpandedPatients = isDailyMode ? setDailyExpandedPatients : setExpandedPatients;
   useEffect(() => {
     document.body.classList.toggle('daily-mode', isDailyMode);
+    document.body.classList.toggle('work-mode', isWorkMode);
     window.dispatchEvent(new CustomEvent('triage-mode-change', {
       detail: {
         mode: appMode
@@ -6202,8 +7453,14 @@ function PatientTriage() {
     setUndoEntry(null);
     setEndDayConfirm(false);
     setEndDayCelebrate(null);
-    return () => document.body.classList.remove('daily-mode');
-  }, [appMode]);
+    return () => {
+      document.body.classList.remove('daily-mode');
+      document.body.classList.remove('work-mode');
+    };
+  }, [appMode, isDailyMode, isWorkMode]);
+  useEffect(() => {
+    if (!workModeEnabled && appMode === 'work') setAppMode('patient');
+  }, [workModeEnabled, appMode]);
   const isInitialLoad = React.useRef(true);
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60000);
@@ -6258,6 +7515,8 @@ function PatientTriage() {
       setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
       setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
       setScheduledEvents(Array.isArray(parsed.scheduledEvents) ? parsed.scheduledEvents : []);
+      setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
+      setWorkItems(Array.isArray(parsed.workItems) ? parsed.workItems.map(normalizeWorkItem) : Array.isArray(parsed.bosses) ? parsed.bosses.map(normalizeWorkItem) : []);
     } else {
       setTemplates(DEFAULT_TEMPLATES);
     }
@@ -6283,9 +7542,11 @@ function PatientTriage() {
       generalTasks,
       dailyPatients,
       dailyGeneralTasks,
-      scheduledEvents
+      scheduledEvents,
+      workModeEnabled,
+      workItems
     });
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -7700,6 +8961,8 @@ function PatientTriage() {
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
+    workModeEnabled,
+    workItems,
     version: 10
   });
   const applyPayload = parsed => {
@@ -7722,6 +8985,8 @@ function PatientTriage() {
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
     if (Array.isArray(parsed.scheduledEvents)) setScheduledEvents(parsed.scheduledEvents);
+    setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
+    if (Array.isArray(parsed.workItems)) setWorkItems(parsed.workItems.map(normalizeWorkItem));else if (Array.isArray(parsed.bosses)) setWorkItems(parsed.bosses.map(normalizeWorkItem));
     return true;
   };
   const gasPush = async () => {
@@ -7778,7 +9043,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -7798,6 +9063,8 @@ function PatientTriage() {
     dailyPatients,
     dailyGeneralTasks,
     scheduledEvents,
+    workModeEnabled,
+    workItems,
     version: 10,
     exportedAt: new Date().toISOString()
   }, null, 2);
@@ -7868,6 +9135,8 @@ function PatientTriage() {
     if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
     if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
     if (Array.isArray(parsed.scheduledEvents)) setScheduledEvents(parsed.scheduledEvents);
+    setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
+    if (Array.isArray(parsed.workItems)) setWorkItems(parsed.workItems.map(normalizeWorkItem));else if (Array.isArray(parsed.bosses)) setWorkItems(parsed.bosses.map(normalizeWorkItem));
     return true;
   };
   const importFromFile = file => {
@@ -7936,8 +9205,19 @@ function PatientTriage() {
     background: active ? '#fff' : 'var(--surface-2)',
     color: active ? 'var(--accent)' : 'var(--text-3)'
   });
-  const appTitle = isDailyMode ? 'でいとり！' : 'ぺいとり！';
-  const appSubtitle = isDailyMode ? '日常タスクを今日の動ける形に分けるモード' : '患者さんと処置タスクを整理するモード';
+  const activeTheme = THEMES.find(t => t.id === themeId) || THEMES[0];
+  const nextTheme = () => {
+    const idx = THEMES.findIndex(t => t.id === themeId);
+    setThemeId(THEMES[(idx + 1) % THEMES.length].id);
+  };
+  const nextAppMode = mode => {
+    if (mode === 'patient') return 'daily';
+    if (mode === 'daily') return workModeEnabled ? 'work' : 'patient';
+    return 'patient';
+  };
+  const appTitle = isWorkMode ? 'わーとり！' : isDailyMode ? 'でいとり！' : 'ぺいとり！';
+  const appSubtitle = isWorkMode ? '重たい仕事を、一手ずつ' : isDailyMode ? '日常タスクを今日の動ける形に分けるモード' : '患者さんと処置タスクを整理するモード';
+  const nextModeTitle = nextAppMode(appMode) === 'daily' ? 'でいとり！に切り替え' : nextAppMode(appMode) === 'work' ? 'わーとり！に切り替え' : 'ぺいとり！に切り替え';
   const entityLabel = isDailyMode ? 'カテゴリ' : '受け持ち';
   const addEntityLabel = isDailyMode ? 'カテゴリ追加' : '受け持ち追加';
   if (!loaded) return React.createElement("div", {
@@ -7981,7 +9261,7 @@ function PatientTriage() {
     className: "app-header",
     style: {
       marginBottom: 20,
-      background: isDailyMode ? 'linear-gradient(135deg, #0F3A2E 0%, #167A5A 58%, #52B788 100%)' : (THEMES.find(t => t.id === themeId) || THEMES[0]).headerGrad
+      background: isDailyMode ? 'linear-gradient(135deg, #0F3A2E 0%, #167A5A 58%, #52B788 100%)' : isWorkMode ? 'linear-gradient(135deg, #2F2340 0%, #6C3EF8 58%, #B46DDE 100%)' : activeTheme.headerGrad
     }
   }, React.createElement("button", {
     type: "button",
@@ -8017,8 +9297,8 @@ function PatientTriage() {
     }
   }, React.createElement("div", null, React.createElement("button", {
     className: "app-title-button",
-    onClick: () => setAppMode(m => m === 'patient' ? 'daily' : 'patient'),
-    title: isDailyMode ? 'ぺいとり！に切り替え' : 'でいとり！に切り替え',
+    onClick: () => setAppMode(m => nextAppMode(m)),
+    title: nextModeTitle,
     style: {
       fontFamily: 'var(--font-serif)',
       fontSize: 28,
@@ -8032,7 +9312,7 @@ function PatientTriage() {
       cursor: 'pointer',
       letterSpacing: '.03em',
       textShadow: '0 2px 10px rgba(0,0,0,.25)',
-      transform: isDailyMode ? 'rotateY(360deg)' : 'rotateY(0deg)',
+      transform: isDailyMode ? 'rotateY(360deg)' : isWorkMode ? 'rotateY(720deg)' : 'rotateY(0deg)',
       transition: 'transform .38s cubic-bezier(.2,.9,.2,1), color .2s ease'
     }
   }, appTitle), React.createElement("p", {
@@ -8050,22 +9330,22 @@ function PatientTriage() {
       flexWrap: 'wrap'
     }
   }, [{
-    label: '受け持ち',
-    val: isDailyMode ? activeGeneralTasks.length : activePatients.length,
+    label: isWorkMode ? '仕事' : '受け持ち',
+    val: isWorkMode ? workItems.filter(item => item.status !== 'done' && item.status !== 'abandoned').length : isDailyMode ? activeGeneralTasks.length : activePatients.length,
     color: 'rgba(255,255,255,.9)'
   }, {
-    label: '未完了',
-    val: openTaskCount + openGeneralCount,
+    label: isWorkMode ? '一手' : '未完了',
+    val: isWorkMode ? workItems.reduce((sum, item) => sum + openWorkSteps(item).length, 0) : openTaskCount + openGeneralCount,
     color: 'rgba(255,255,255,.9)'
   }, {
-    label: '今日の済',
-    val: stats.doneToday,
+    label: isWorkMode ? '今日の前進' : '今日の済',
+    val: isWorkMode ? workItems.reduce((sum, item) => sum + (item.steps || []).filter(step => step.status === 'done' && step.completedAt && workdayStrForTimestamp(step.completedAt) === todayStr()).length, 0) : stats.doneToday,
     color: '#6EE7A0'
-  }, ...(openGeneralCount ? [{
+  }, ...(isWorkMode ? [] : openGeneralCount ? [{
     label: 'すきま',
     val: openGeneralCount,
     color: '#CBD5E1'
-  }] : []), ...(stuckTasks.length ? [{
+  }] : []), ...(isWorkMode ? [] : stuckTasks.length ? [{
     label: '詰まり',
     val: stuckTasks.length,
     color: '#FCA5A5'
@@ -8107,24 +9387,48 @@ function PatientTriage() {
       fontWeight: 600,
       letterSpacing: '.05em'
     }
-  }, "\u30C6\u30FC\u30DE"), THEMES.map(t => React.createElement("button", {
-    key: t.id,
-    onClick: () => setThemeId(t.id),
-    title: t.label,
+  }, "\u30C6\u30FC\u30DE"), React.createElement("button", {
+    onClick: nextTheme,
+    title: `テーマ: ${activeTheme.label}`,
     style: {
-      width: 22,
-      height: 22,
-      borderRadius: '50%',
-      border: 'none',
+      border: '1.5px solid rgba(255,255,255,.35)',
+      borderRadius: 6,
+      background: 'rgba(255,255,255,.12)',
+      color: '#fff',
+      padding: '3px 8px',
       cursor: 'pointer',
-      background: t.swatch,
-      outline: themeId === t.id ? '2.5px solid #fff' : '2.5px solid transparent',
-      outlineOffset: '2px',
-      transform: themeId === t.id ? 'scale(1.2)' : 'scale(1)',
-      transition: 'transform .15s, outline .15s',
-      boxShadow: themeId === t.id ? '0 2px 8px rgba(0,0,0,.35)' : '0 1px 3px rgba(0,0,0,.25)'
+      fontSize: 11,
+      fontWeight: 800,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0,
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6
     }
-  })), React.createElement("button", {
+  }, React.createElement("span", {
+    style: {
+      width: 12,
+      height: 12,
+      borderRadius: '50%',
+      background: activeTheme.swatch,
+      boxShadow: '0 1px 4px rgba(0,0,0,.3)'
+    }
+  }), activeTheme.label), React.createElement("button", {
+    onClick: () => setWorkModeEnabled(v => !v),
+    title: workModeEnabled ? 'わーとり！をタイトル切替から外す' : 'わーとり！をタイトル切替に追加',
+    style: {
+      border: workModeEnabled ? '2px solid #F0ABFC' : '1.5px solid rgba(255,255,255,.35)',
+      borderRadius: 6,
+      background: workModeEnabled ? 'rgba(168,85,247,.26)' : 'rgba(255,255,255,.12)',
+      color: '#fff',
+      padding: '3px 8px',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 800,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0
+    }
+  }, "わーとり", workModeEnabled ? " ON" : " OFF"), React.createElement("button", {
     onClick: () => setRpgMode(v => !v),
     title: "\u30EC\u30C8\u30ECRPG\u98A8UI",
     style: {
@@ -8180,7 +9484,7 @@ function PatientTriage() {
       letterSpacing: 0,
       whiteSpace: 'nowrap'
     }
-  }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), React.createElement("button", {
+  }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), !isWorkMode && React.createElement("button", {
     onClick: requestEndDay,
     title: "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u5168\u3066\u7247\u3065\u3051\u308B",
     style: {
@@ -8197,7 +9501,7 @@ function PatientTriage() {
       whiteSpace: 'nowrap',
       boxShadow: doneTaskCount ? '0 3px 10px rgba(22,163,74,.22)' : 'none'
     }
-  }, "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044!", doneTaskCount ? ` (${doneTaskCount})` : ''))), timedAlerts.length > 0 && React.createElement("div", {
+  }, "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044!", doneTaskCount ? ` (${doneTaskCount})` : ''))), !isWorkMode && timedAlerts.length > 0 && React.createElement("div", {
     className: "alert-bar",
     style: {
       marginBottom: 16,
@@ -8272,7 +9576,11 @@ function PatientTriage() {
         flexShrink: 0
       }
     }, "\u6E08"));
-  }))), React.createElement("div", {
+  }))), isWorkMode && React.createElement(WorkingTriageView, {
+    items: workItems,
+    setItems: setWorkItems,
+    showToast: showToast
+  }), !isWorkMode && React.createElement("div", {
     className: "command-dock",
     "aria-label": "タスク操作"
   }, React.createElement("div", {
@@ -8328,12 +9636,12 @@ function PatientTriage() {
     onClick: showFinishEstimate,
     "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",
     title: "\u6B8B\u30BF\u30B9\u30AF\u306E\u898B\u7A4D\u3082\u308A\u5408\u8A08\u3068\u6682\u5B9A\u7D42\u4E86\u6642\u523B"
-  }, "⏰️")), stuckTasks.length > 0 && React.createElement("button", {
+  }, "⏰️")), !isWorkMode && stuckTasks.length > 0 && React.createElement("button", {
     className: "btn-rose dock-alert",
     onClick: suggestFromStuck
   }, React.createElement(AlertCircle, {
     size: 13
-  }), "\u8A70\u307E\u308A\u304B\u30891\u3064")), !focusMode && React.createElement(ScheduledEventSection, {
+  }), "\u8A70\u307E\u308A\u304B\u30891\u3064")), !isWorkMode && !focusMode && React.createElement(ScheduledEventSection, {
     events: scheduledEvents,
     open: scheduledOpen,
     onToggleOpen: () => setScheduledOpen(o => !o),
@@ -8375,7 +9683,7 @@ function PatientTriage() {
       fontSize: 12,
       padding: '6px 12px'
     }
-  }, "\u4E00\u89A7\u3078")), suggestion && React.createElement(SuggestionCard, {
+  }, "\u4E00\u89A7\u3078")), !isWorkMode && suggestion && React.createElement(SuggestionCard, {
     suggestion: suggestion,
     typeMeta: typeMeta,
     estMeta: estMeta,
@@ -8405,7 +9713,7 @@ function PatientTriage() {
     onStartTimer: startTimer,
     onStartTally: startTally,
     running: runningTask
-  }), !focusMode && React.createElement("div", {
+  }), !isWorkMode && !focusMode && React.createElement("div", {
     className: `desktop-main-grid${isDailyMode ? ' desktop-main-grid-daily' : ''}`
   }, React.createElement("section", {
     className: "desktop-patient-column"
@@ -8633,7 +9941,7 @@ function PatientTriage() {
     onUpdate: updatePendingPatient,
     onRemove: removePendingPatient,
     onPromote: item => setPromoteTarget(item)
-  }))), !focusMode && stuckTasks.length > 0 && React.createElement("div", {
+  }))), !isWorkMode && !focusMode && stuckTasks.length > 0 && React.createElement("div", {
     className: "stuck-bar",
     style: {
       marginTop: 22,
@@ -8905,7 +10213,7 @@ function PatientTriage() {
       fontSize: 11,
       margin: 0
     }
-  }, "\u203B \u60A3\u8005\u7B26\u4E01\u4EE5\u5916\u306E\u500B\u4EBA\u60C5\u5831\u306F\u5165\u308C\u306A\u3044\u3053\u3068\u3002"))), React.createElement("div", {
+  }, "\u203B \u60A3\u8005\u7B26\u4E01\u4EE5\u5916\u306E\u500B\u4EBA\u60C5\u5831\u306F\u5165\u308C\u306A\u3044\u3053\u3068\u3002"))), !isWorkMode && React.createElement("div", {
     style: {
       marginTop: 10,
       marginBottom: 40
