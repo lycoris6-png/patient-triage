@@ -965,6 +965,8 @@ const normalizeWorkStep = (step = {}, parent = {}) => ({
   priority: normalizeWorkPriority(step.priority || parent.priority),
   status: normalizeWorkStepStatus(step.status),
   blockType: ['waiting', 'resistant'].includes(step.blockType) ? step.blockType : '',
+  blockNote: String(step.blockNote || '').trim(),
+  blockedAt: Number(step.blockedAt) || null,
   phase: step.phase || step.category || '',
   parentId: step.parentId || step.parentStepId || null,
   isGroup: step.isGroup === true,
@@ -999,6 +1001,7 @@ const normalizeWorkItem = (item = {}) => {
     status,
     deadline: item.deadline || '',
     outcome: item.outcome || item.victoryCondition || '',
+    memo: String(item.memo || '').trim(),
     currentFocus: item.currentFocus || item.currentPhase || '',
     nextAction,
     steps,
@@ -6018,6 +6021,7 @@ function WorkingTriageView({
     priority: 'normal',
     deadline: '',
     outcome: '',
+    memo: '',
     currentFocus: '',
     nextAction: ''
   });
@@ -6131,6 +6135,9 @@ function WorkingTriageView({
     }));
   };
   const markBlock = (itemId, stepId, blockType) => {
+    const note = window.prompt(blockType === 'waiting' ? '何を / 誰を待ちますか？（任意・後で編集可）' : '何が引っかかっていますか？（任意・後で編集可）', '');
+    if (note === null) return;
+    const now = Date.now();
     updateItem(itemId, item => {
       const step = (item.steps || []).find(s => s.id === stepId);
       const label = blockType === 'waiting' ? '待ち' : '抵抗あり';
@@ -6139,13 +6146,54 @@ function WorkingTriageView({
         status: blockType,
         steps: (item.steps || []).map(s => s.id === stepId ? {
           ...s,
-          blockType
+          blockType,
+          blockNote: note.trim(),
+          blockedAt: now
         } : s),
-        updatedAt: Date.now(),
-        logs: [...(item.logs || []), workLog(`${label}: ${step?.title || item.title}`)]
+        updatedAt: now,
+        logs: [...(item.logs || []), workLog(`${label}: ${step?.title || item.title}${note.trim() ? ` — ${note.trim()}` : ''}`)]
       };
     });
     showToast(blockType === 'waiting' ? '外部要因の待ちにしました' : '抵抗ありとして残しました');
+  };
+  const unblockStep = (itemId, stepId) => {
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      const otherBlocked = (item.steps || []).some(s => s.id !== stepId && (s.blockType === 'waiting' || s.blockType === 'resistant'));
+      return {
+        ...item,
+        status: otherBlocked ? item.status : 'active',
+        steps: (item.steps || []).map(s => s.id === stepId ? {
+          ...s,
+          blockType: '',
+          blockNote: '',
+          blockedAt: null
+        } : s),
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(`ブロック解除: ${step?.title || ''}`)]
+      };
+    });
+    showToast('ブロックを解除しました');
+  };
+  const updateBlockNote = (itemId, stepId, note) => {
+    updateItem(itemId, item => ({
+      ...item,
+      steps: (item.steps || []).map(s => s.id === stepId ? {
+        ...s,
+        blockNote: String(note || '').trim()
+      } : s),
+      updatedAt: Date.now()
+    }));
+  };
+  const setStepPriority = (itemId, stepId, priority) => {
+    updateItem(itemId, item => ({
+      ...item,
+      steps: (item.steps || []).map(s => s.id === stepId ? {
+        ...s,
+        priority: normalizeWorkPriority(priority)
+      } : s),
+      updatedAt: Date.now()
+    }));
   };
   const setItemStatus = (itemId, status) => updateItem(itemId, item => ({
     ...item,
@@ -6237,6 +6285,7 @@ function WorkingTriageView({
       priority: item.priority || 'normal',
       deadline: item.deadline || '',
       outcome: item.outcome || '',
+      memo: item.memo || '',
       currentFocus: item.currentFocus || '',
       nextAction: item.nextAction || ''
     });
@@ -6249,6 +6298,7 @@ function WorkingTriageView({
       priority: normalizeWorkPriority(workDraft.priority),
       deadline: workDraft.deadline || '',
       outcome: workDraft.outcome.trim(),
+      memo: (workDraft.memo || '').trim(),
       currentFocus: workDraft.currentFocus.trim(),
       nextAction: workDraft.nextAction.trim() || item.nextAction,
       updatedAt: Date.now(),
@@ -6318,15 +6368,27 @@ function WorkingTriageView({
         gap: 8,
         alignItems: 'flex-start'
       }
-    }, React.createElement("span", {
-      className: "tag",
+    }, React.createElement("select", {
+      value: step.priority || item.priority || 'normal',
+      onChange: e => setStepPriority(item.id, step.id, e.target.value),
       style: {
         color: pri.color,
         background: pri.color + '18',
         border: '1px solid ' + pri.color + '35',
-        flexShrink: 0
-      }
-    }, pri.label), React.createElement("div", {
+        borderRadius: 99,
+        padding: '2px 4px',
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: 'pointer',
+        flexShrink: 0,
+        appearance: 'none'
+      },
+      title: "優先度を変更"
+    }, WORK_PRIORITIES.map(p => React.createElement("option", {
+      key: p.id,
+      value: p.id,
+      style: { background: '#fff', color: p.color }
+    }, p.label))), React.createElement("div", {
       style: {
         flex: 1,
         minWidth: 0
@@ -6610,6 +6672,22 @@ function WorkingTriageView({
         fontSize: 12,
         resize: 'vertical'
       }
+    }), React.createElement("textarea", {
+      className: "inp",
+      value: workDraft.memo || '',
+      onChange: e => setWorkDraft(prev => ({
+        ...prev,
+        memo: e.target.value
+      })),
+      placeholder: "メモ（経緯・関係者・参考リンク・気づきなど）",
+      rows: 3,
+      style: {
+        padding: '8px 10px',
+        fontSize: 12,
+        resize: 'vertical',
+        lineHeight: 1.6,
+        fontFamily: 'var(--font-sans)'
+      }
     }), React.createElement("input", {
       className: "inp",
       value: workDraft.currentFocus,
@@ -6663,7 +6741,21 @@ function WorkingTriageView({
         lineHeight: 1.6,
         fontWeight: 600
       }
-    }, item.outcome))), React.createElement("button", {
+    }, item.outcome), item.memo && React.createElement("p", {
+      style: {
+        margin: '6px 0 0',
+        padding: '8px 10px',
+        background: 'var(--surface-2)',
+        borderRadius: 8,
+        borderLeft: '3px solid var(--accent)',
+        color: 'var(--text-2)',
+        fontSize: 12,
+        lineHeight: 1.55,
+        whiteSpace: 'pre-wrap',
+        fontWeight: 500
+      },
+      title: "メモ"
+    }, item.memo))), React.createElement("button", {
       className: "btn-sm",
       onClick: () => setExpanded(prev => ({
         ...prev,
@@ -6759,6 +6851,7 @@ function WorkingTriageView({
       key: log.id
     }, formatLogTime(log.at), " ", log.text)))));
   };
+  const blockedSteps = items.flatMap(item => (item.steps || []).filter(s => s.blockType === 'waiting' || s.blockType === 'resistant').map(s => ({ item, step: s }))).sort((a, b) => (a.step.blockedAt || 0) - (b.step.blockedAt || 0));
   const statCards = [{
     label: '作業中',
     val: activeItems.length
@@ -6772,6 +6865,60 @@ function WorkingTriageView({
     label: '今日の前進',
     val: doneToday
   }];
+  const renderBlockedRow = ({ item, step }) => {
+    const isWaiting = step.blockType === 'waiting';
+    const accent = isWaiting ? '#2563EB' : '#DC2626';
+    const bg = isWaiting ? 'rgba(59,130,246,.07)' : 'rgba(239,68,68,.07)';
+    const days = step.blockedAt ? Math.floor((Date.now() - step.blockedAt) / 86400000) : null;
+    const longWait = days !== null && days >= 5;
+    return React.createElement("div", {
+      key: item.id + ':' + step.id,
+      style: {
+        background: bg,
+        border: `1px solid ${accent}33`,
+        borderLeft: `4px solid ${accent}`,
+        borderRadius: 10,
+        padding: '8px 10px',
+        display: 'grid',
+        gap: 6
+      }
+    }, React.createElement("div", {
+      style: { display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }
+    }, React.createElement("span", {
+      style: { fontSize: 11, fontWeight: 800, color: accent }
+    }, isWaiting ? '⏸ 待ち' : '😣 抵抗あり'), React.createElement("span", {
+      style: { fontSize: 12, fontWeight: 700, color: 'var(--text)' }
+    }, step.title), React.createElement("span", {
+      style: { fontSize: 10, color: 'var(--text-3)' }
+    }, '/ ', item.title), days !== null && React.createElement("span", {
+      style: {
+        marginLeft: 'auto',
+        fontSize: 11,
+        fontWeight: 800,
+        color: longWait ? '#B91C1C' : 'var(--text-3)'
+      }
+    }, days === 0 ? '今日' : `${days}日経過`, longWait ? ' ⚠ 催促候補' : '')), React.createElement("input", {
+      className: "inp",
+      value: step.blockNote || '',
+      onChange: e => updateBlockNote(item.id, step.id, e.target.value),
+      placeholder: isWaiting ? '誰の何待ち？（任意）' : '何が引っかかってる？（任意）',
+      style: { padding: '5px 8px', fontSize: 11 }
+    }), React.createElement("div", {
+      style: { display: 'flex', gap: 6, flexWrap: 'wrap' }
+    }, React.createElement("button", {
+      className: "btn-green",
+      onClick: () => unblockStep(item.id, step.id),
+      style: { padding: '4px 10px', fontSize: 11 }
+    }, "解除して再開"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => completeStep(item.id, step.id),
+      style: { padding: '4px 10px', fontSize: 11 }
+    }, "そのまま完了"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setExpanded(prev => ({ ...prev, [item.id]: true })),
+      style: { padding: '4px 10px', fontSize: 11, opacity: .7 }
+    }, "仕事を開く")));
+  };
   return React.createElement("section", {
     className: "work-triage-view",
     style: {
@@ -7025,7 +7172,33 @@ function WorkingTriageView({
       fontSize: 12,
       fontWeight: 800
     }
-  }, "詰まり/待ち: ", blockedCount, "件。外部要因と自分側の抵抗を分けて残せています。"), activeItems.length ? activeItems.map(renderWorkCard) : React.createElement("div", {
+  }, "詰まり/待ち: ", blockedCount, "件。外部要因と自分側の抵抗を分けて残せています。"), blockedSteps.length > 0 && React.createElement("section", {
+    style: {
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 14,
+      padding: 14,
+      display: 'grid',
+      gap: 10
+    }
+  }, React.createElement("h3", {
+    style: {
+      margin: 0,
+      fontSize: 13,
+      fontWeight: 900,
+      color: 'var(--text-2)',
+      letterSpacing: '.04em'
+    }
+  }, "ブロック中の一手 (", blockedSteps.length, "件)"), React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 11,
+      color: 'var(--text-3)',
+      lineHeight: 1.55
+    }
+  }, "待ち=外部要因、抵抗あり=自分側の引っかかり。5日以上経つと催促候補マーク ⚠ が付きます。"), React.createElement("div", {
+    style: { display: 'grid', gap: 8 }
+  }, blockedSteps.map(renderBlockedRow))), activeItems.length ? activeItems.map(renderWorkCard) : React.createElement("div", {
     style: {
       textAlign: 'center',
       padding: '42px 20px',
