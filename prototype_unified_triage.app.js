@@ -1102,10 +1102,35 @@ function gasCoachLine(cfg, context) {
   });
 }
 const aiCoachResponseText = response => {
-  const candidatesText = response?.candidates?.[0]?.content?.parts?.map(part => part?.text || '').join(' ');
-  return String(response?.text || response?.line || response?.message || response?.data?.text || response?.data?.line || candidatesText || '').replace(/[\r\n]+/g, ' ').trim();
+  const partsText = source => source?.candidates?.[0]?.content?.parts?.map(part => part?.text || '').join(' ');
+  return String(
+    response?.text ||
+    response?.line ||
+    response?.reply ||
+    response?.result ||
+    response?.output ||
+    response?.content ||
+    response?.data?.text ||
+    response?.data?.line ||
+    response?.data?.reply ||
+    response?.data?.result ||
+    response?.data?.output ||
+    response?.data?.content ||
+    partsText(response) ||
+    partsText(response?.data) ||
+    ''
+  ).replace(/[\r\n]+/g, ' ').trim();
 };
 const aiCoachResponseError = response => String(response?.error?.message || response?.error || response?.message || response?.data?.error || '').trim();
+const aiCoachResponseShape = response => {
+  try {
+    const keys = Object.keys(response || {}).slice(0, 8).join(',');
+    const dataKeys = response?.data && typeof response.data === 'object' ? ` data:${Object.keys(response.data).slice(0, 8).join(',')}` : '';
+    return `${keys || 'no keys'}${dataKeys}`;
+  } catch {
+    return 'unknown shape';
+  }
+};
 const weatherLabel = code => {
   if (code === 0) return '快晴';
   if ([1, 2].includes(code)) return '晴れ時々くもり';
@@ -6677,7 +6702,7 @@ function PatientTriage() {
       const error = aiCoachResponseError(response);
       if (response?.ok === false) return { ok: false, error: error || 'GASが失敗を返しました' };
       const text = aiCoachResponseText(response).slice(0, 140);
-      if (!text) return { ok: false, error: error || 'GASからセリフ本文が返りませんでした' };
+      if (!text) return { ok: false, error: error || `GASからセリフ本文が返りませんでした (${aiCoachResponseShape(response)})` };
       window.dispatchEvent(new CustomEvent('chibi-coach', {
         detail: {
           kind: trigger === 'endday' ? 'endday' : 'start',
