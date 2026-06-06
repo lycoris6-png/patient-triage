@@ -1088,7 +1088,7 @@ function gasJsonp(cfg, params = {}) {
       callback: cbName,
       ...params
     });
-    script.src = `${cfg.url}?${q.toString()}`;
+    script.src = `${cfg.url}${String(cfg.url || '').includes('?') ? '&' : '?'}${q.toString()}`;
     document.head.appendChild(script);
   });
 }
@@ -1101,6 +1101,11 @@ function gasCoachLine(cfg, context) {
     payload: JSON.stringify(context || {})
   });
 }
+const aiCoachResponseText = response => {
+  const candidatesText = response?.candidates?.[0]?.content?.parts?.map(part => part?.text || '').join(' ');
+  return String(response?.text || response?.line || response?.message || response?.data?.text || response?.data?.line || candidatesText || '').replace(/[\r\n]+/g, ' ').trim();
+};
+const aiCoachResponseError = response => String(response?.error?.message || response?.error || response?.message || response?.data?.error || '').trim();
 const weatherLabel = code => {
   if (code === 0) return '快晴';
   if ([1, 2].includes(code)) return '晴れ時々くもり';
@@ -6664,22 +6669,24 @@ function PatientTriage() {
   };
   const requestAiCoachLine = async (trigger, extra = {}) => {
     const cfg = normalizeGasConfig(gasConfig);
-    if (!aiCoachReady()) return false;
-    if (trigger === 'start' && !cfg.aiCoach.onStart) return false;
-    if (trigger === 'endday' && !cfg.aiCoach.onEndDay) return false;
+    if (!aiCoachReady()) return { ok: false, error: 'GAS URL・シークレット・AI一言ONを確認してください' };
+    if (trigger === 'start' && !cfg.aiCoach.onStart) return { ok: false, error: '起動時のAI一言がOFFです' };
+    if (trigger === 'endday' && !cfg.aiCoach.onEndDay) return { ok: false, error: 'おしまい時のAI一言がOFFです' };
     try {
       const response = await gasCoachLine(cfg, await buildAiCoachContext(trigger, extra));
-      const text = String(response?.text || response?.line || '').trim().slice(0, 140);
-      if (!text) return false;
+      const error = aiCoachResponseError(response);
+      if (response?.ok === false) return { ok: false, error: error || 'GASが失敗を返しました' };
+      const text = aiCoachResponseText(response).slice(0, 140);
+      if (!text) return { ok: false, error: error || 'GASからセリフ本文が返りませんでした' };
       window.dispatchEvent(new CustomEvent('chibi-coach', {
         detail: {
           kind: trigger === 'endday' ? 'endday' : 'start',
           text
         }
       }));
-      return true;
-    } catch {
-      return false;
+      return { ok: true, text };
+    } catch (e) {
+      return { ok: false, error: e?.message || 'GAS通信に失敗しました' };
     }
   };
   useEffect(() => {
@@ -6876,12 +6883,12 @@ function PatientTriage() {
       }
     }));
     if (aiEndDayEnabled) setTimeout(async () => {
-      const ok = await requestAiCoachLine('endday', { endedAt, endedTime });
-      if (!ok) {
+      const result = await requestAiCoachLine('endday', { endedAt, endedTime });
+      if (!result.ok) {
         window.dispatchEvent(new CustomEvent('chibi-coach', {
           detail: {
             kind: 'endday',
-            text: 'AI一言が返ってきませんでした。GAS設定を確認してください。'
+            text: `AI一言の生成に失敗しました: ${result.error || 'GAS設定を確認してください'}`
           }
         }));
       }
@@ -8766,8 +8773,8 @@ function PatientTriage() {
     onClick: async e => {
       e.stopPropagation();
       showToast('AI一言を取得中…');
-      const ok = await requestAiCoachLine('start');
-      showToast(ok ? 'AI一言を表示しました' : 'AI一言が返ってきませんでした');
+      const result = await requestAiCoachLine('start');
+      showToast(result.ok ? 'AI一言を表示しました' : `AI一言失敗: ${result.error || 'GAS設定を確認してください'}`);
     },
     disabled: !gasConfig.url || !gasConfig.secret || !gasAiCoach.enabled,
     style: {
