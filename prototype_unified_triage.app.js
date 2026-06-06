@@ -1186,6 +1186,15 @@ const timeBandLabel = (date = new Date()) => {
   if (h < 18) return '夕方';
   return '夜';
 };
+const pickAiCoachCharacter = (trigger, mode) => {
+  const kind = trigger === 'endday' ? 'endday' : 'start';
+  try {
+    if (typeof window.__triagePickAiCoachCharacter === 'function') {
+      return window.__triagePickAiCoachCharacter(kind, mode);
+    }
+  } catch {}
+  return null;
+};
 function TimeBadge({
   scheduledTime,
   now,
@@ -6677,13 +6686,16 @@ function PatientTriage() {
     const cfg = normalizeGasConfig(gasConfig);
     const endedDate = extra.endedAt ? new Date(extra.endedAt) : new Date();
     const isLateEnd = trigger === 'endday' && endedDate.getHours() >= 20;
+    const mode = isDailyMode ? 'daily' : 'patient';
+    const character = pickAiCoachCharacter(trigger, mode);
     let weather = null;
     try {
       weather = await fetchWeatherSummary(cfg.aiCoach);
     } catch {}
     return {
       trigger,
-      mode: isDailyMode ? 'daily' : 'patient',
+      mode,
+      character,
       locationLabel: cfg.aiCoach.locationLabel || '職場',
       season: seasonLabel(endedDate),
       timeBand: timeBandLabel(endedDate),
@@ -6693,7 +6705,8 @@ function PatientTriage() {
       lateEndThreshold: '20:00',
       lateEndLabel: isLateEnd ? '20時過ぎ' : '',
       weather,
-      safety: '患者名、病棟、タスク名、医療判断は送らない。80字以内の短い励ましだけ。20時以降のおしまい時は遅くまで残ったことを労う。具体的な終了時刻はセリフに出さない。'
+      safety: '患者名、病棟、タスク名、医療判断は送らない。80字以内の短い励ましだけ。20時以降のおしまい時は遅くまで残ったことを労う。具体的な終了時刻はセリフに出さない。',
+      voiceInstruction: 'character.nameの本人として一言だけ返す。character.persona、rules、avoid、examplesを最優先し、一人称・語尾・温度感を守る。例文の丸写しではなく、同じ口調の新しい短文にする。'
     };
   };
   const requestAiCoachLine = async (trigger, extra = {}) => {
@@ -6702,7 +6715,8 @@ function PatientTriage() {
     if (trigger === 'start' && !cfg.aiCoach.onStart) return { ok: false, error: '起動時のAI一言がOFFです' };
     if (trigger === 'endday' && !cfg.aiCoach.onEndDay) return { ok: false, error: 'おしまい時のAI一言がOFFです' };
     try {
-      const response = await gasCoachLine(cfg, await buildAiCoachContext(trigger, extra));
+      const context = await buildAiCoachContext(trigger, extra);
+      const response = await gasCoachLine(cfg, context);
       const error = aiCoachResponseError(response);
       if (response?.ok === false) return { ok: false, error: error || 'GASが失敗を返しました' };
       if (isGasSyncPayload(response)) return { ok: false, error: 'GASが通常同期データを返しています。doGetでaction=coachLineを先に処理してください' };
@@ -6711,7 +6725,9 @@ function PatientTriage() {
       window.dispatchEvent(new CustomEvent('chibi-coach', {
         detail: {
           kind: trigger === 'endday' ? 'endday' : 'start',
-          text
+          text,
+          actor: context.character?.actor || context.character?.id || '',
+          pose: context.character?.pose || ''
         }
       }));
       return { ok: true, text };

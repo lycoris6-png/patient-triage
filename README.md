@@ -59,7 +59,7 @@ https://lycoris6-png.github.io/patient-triage/
 
 ## GAS AI Coach Line
 
-The unified prototype can ask the existing GAS endpoint for a generated chibi coach line on app startup and when `今日はおしまい！` runs. The browser sends only coarse context: trigger, app mode, season, time band, fixed location label, rounded end-time label / whether the end time is after 20:00, and Open-Meteo weather summary. It does not send patient names, wards, task titles, or clinical details.
+The unified prototype can ask the existing GAS endpoint for a generated chibi coach line on app startup and when `今日はおしまい！` runs. The browser sends only coarse context: trigger, app mode, selected character voice guide, season, time band, fixed location label, rounded end-time label / whether the end time is after 20:00, and Open-Meteo weather summary. It does not send patient names, wards, task titles, or clinical details.
 
 Store the Gemini API key in Apps Script **Script properties** as `GEMINI_API_KEY`; do not commit it to this repo. Extend the GAS `doGet(e)` handler so `action=coachLine` returns JSONP:
 
@@ -90,6 +90,14 @@ function coachLine_(callback, payloadText) {
     : '天気情報なし';
   const triggerLabel = ctx.trigger === 'endday' ? '今日はおしまい時' : '起動時';
   const modeLabel = ctx.mode === 'daily' ? 'でいとり' : 'ぺいとり';
+  const character = ctx.character || {};
+  const voiceGuide = [
+    `話者: ${character.name || 'アプリキャラクター'}`,
+    `人物像: ${character.persona || ''}`,
+    `口調ルール: ${(character.rules || []).join(' / ')}`,
+    `避ける表現: ${(character.avoid || []).join(' / ')}`,
+    `参考例: ${(character.examples || []).join(' | ')}`
+  ].filter(line => !/:\s*$/.test(line)).join('\n');
   const lateEndNote = ctx.isLateEnd
     ? '20時を過ぎた遅いおしまいです。具体的な時刻は言わず、「夜遅く」「20時過ぎ」程度に丸めて、帰りが遅くなったことを労い、早く休む方向に短く寄り添ってください。'
     : '';
@@ -97,7 +105,10 @@ function coachLine_(callback, payloadText) {
     'あなたはタスク整理アプリの小さなキャラクターです。',
     '医療判断、診療助言、患者情報への言及は禁止。',
     'ユーザーを軽く励ます日本語の一言だけを返してください。80字以内。',
+    '話者本人の口調を最優先してください。一人称、語尾、温度感、粗さ/丁寧さを守ります。',
+    '参考例の丸写しは避け、同じ人物が今言いそうな新しい短文にしてください。',
     '不自然な比喩や硬い言い回しは避け、普通に人へ声をかける口調にしてください。',
+    voiceGuide,
     `場面: ${triggerLabel}`,
     `モード: ${modeLabel}`,
     `場所: ${ctx.locationLabel || '職場'}`,
@@ -113,7 +124,10 @@ function coachLine_(callback, payloadText) {
     method: 'post',
     contentType: 'application/json',
     muteHttpExceptions: true,
-    payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    payload: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 80, temperature: 0.85 }
+    })
   });
   const data = JSON.parse(res.getContentText() || '{}');
   const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120);

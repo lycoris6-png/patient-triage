@@ -1016,7 +1016,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="prototype_unified_triage.app.js?v=20260606-ai-coach-sync-payload-detect"></script>
+<script src="prototype_unified_triage.app.js?v=20260606-ai-coach-voice-guide"></script>
 
 
 
@@ -1227,6 +1227,48 @@ body.rpg-mode .chibi-coach-bubble {
     }
   };
 
+  const voiceGuides = {
+    mentor: {
+      name: 'エスト',
+      persona: '落ち着いていて面倒見がよい。医療現場でも日常でも、手順を整えて安心させる案内役。',
+      rules: ['丁寧だが硬すぎない', '「〜しましょう」「大丈夫です」を自然に使う', '急かさず、整える・見える形にする方向へ寄り添う'],
+      avoid: ['命令口調', '過剰な褒め', '大げさな冒険表現']
+    },
+    spark: {
+      name: 'ナディア',
+      persona: '明るく勢いがあり、ユーザーの背中を軽く押す。元気だが押しつけすぎない。',
+      rules: ['短く弾む口調', '「いこ」「だね」「よし」を自然に使う', '小さな勝ちや突破感を出す'],
+      avoid: ['説教', 'しっとりしすぎた慰め', '医療判断に触れること']
+    },
+    butler: {
+      name: 'ジーン',
+      persona: '穏やかで見守り上手。ぼくが一緒に確認する、という安心感を出す。',
+      rules: ['一人称は必ず「ぼく」', '慇懃になりすぎず柔らかい敬体', '見守る・順に整える・一緒に見る雰囲気'],
+      avoid: ['執事っぽすぎる敬語', '上から目線', '「私」や「わたくし」']
+    },
+    yushka: {
+      name: 'ユシュカ',
+      persona: '傲慢だが面倒見がよく、破天荒だがやるときはやる男。粗野寄りだが乱暴すぎない。',
+      rules: ['一人称は「俺」', '「だな」「だろう」「なんでだよ…」程度の柔らかい粗さ', '短く判断し、手順を小さくしろと促す', '褒める時も少し偉そうに面倒を見る'],
+      avoid: ['「だぜ」口調の多用', '乱暴な罵倒', '甘すぎる口調', '過剰な感嘆符']
+    }
+  };
+
+  function voiceProfileFor(who, mode, kind){
+    const guide = voiceGuides[who] || voiceGuides.mentor;
+    const sourceLines = mode === 'daily' && dailyLines[who] ? dailyLines[who] : cast[who].lines;
+    const keys = [kind, 'done', 'idle', 'stuck'].filter((key, index, arr) => key && arr.indexOf(key) === index);
+    const examples = keys.flatMap(key => (sourceLines[key] || []).slice(0, 3).map(text => `${key}: ${text}`)).slice(0, 10);
+    return {
+      id: who,
+      name: guide.name,
+      persona: guide.persona,
+      rules: guide.rules,
+      avoid: guide.avoid,
+      examples
+    };
+  }
+
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
   const STORAGE_KEY_FOR_REWARDS = 'patient-triage-v1';
   function readRewards(){
@@ -1264,6 +1306,18 @@ body.rpg-mode .chibi-coach-bubble {
     return entry;
   }
 
+  window.__triagePickAiCoachCharacter = function(kind, mode){
+    const normalizedMode = mode === 'daily' ? 'daily' : 'patient';
+    const flowKey = kind === 'endday' ? 'endday' : 'start';
+    const [who, pose] = pickCastEntry(flows[flowKey] || flows.start);
+    return {
+      actor: who,
+      pose,
+      mode: normalizedMode,
+      ...voiceProfileFor(who, normalizedMode, flowKey)
+    };
+  };
+
   function ensureCoach(){
     if (el) return;
     el = document.createElement('div');
@@ -1280,7 +1334,7 @@ body.rpg-mode .chibi-coach-bubble {
     });
   }
 
-  function show(kind, force, customText, meta){
+  function show(kind, force, customText, meta, forcedActor, forcedPose){
     const now = Date.now();
     if (!force && now - lastShown < 1800) return;
     lastShown = now;
@@ -1303,7 +1357,14 @@ body.rpg-mode .chibi-coach-bubble {
     }
     const flowKey = (kind === 'reward') ? 'reward' : effectiveKind;
     const flowList = (flowKey === 'reward') ? rewardFlow : (flows[flowKey] || flows.idle);
-    const [who, pose] = pickCastEntry(flowList);
+    let who, pose;
+    if (forcedActor && cast[forcedActor]) {
+      who = forcedActor;
+      pose = forcedPose || (flowList.find(([entryWho]) => entryWho === who) || [who, 'neutral'])[1];
+      lastActor = who;
+    } else {
+      [who, pose] = pickCastEntry(flowList);
+    }
     const actor = cast[who];
     el.dataset.actor = who;
     img.src = CHIBI_BASE + (actor.img[pose] || actor.img.neutral);
@@ -1331,7 +1392,8 @@ body.rpg-mode .chibi-coach-bubble {
   }
 
   window.addEventListener('chibi-coach', event => {
-    show(event.detail?.kind || 'idle', true, event.detail?.text || '', event.detail?.estimate || null);
+    const detail = event.detail || {};
+    show(detail.kind || 'idle', true, detail.text || '', detail.estimate || null, detail.actor || '', detail.pose || '');
   });
   window.addEventListener('triage-mode-change', event => {
     currentMode = event.detail?.mode === 'daily' ? 'daily' : 'patient';
