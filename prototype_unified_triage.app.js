@@ -6191,6 +6191,23 @@ function WorkingTriageView({
       updatedAt: Date.now()
     }));
   };
+  const archiveCompletedSteps = itemId => {
+    let archivedCount = 0;
+    updateItem(itemId, item => {
+      const doneSteps = (item.steps || []).filter(s => s.status === 'done');
+      if (!doneSteps.length) return item;
+      archivedCount = doneSteps.length;
+      const titles = doneSteps.map(s => s.title).filter(Boolean);
+      const preview = titles.slice(0, 5).join('、') + (titles.length > 5 ? `ほか${titles.length - 5}件` : '');
+      return {
+        ...item,
+        steps: (item.steps || []).filter(s => s.status !== 'done'),
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(`完了 ${doneSteps.length}件をログ送り: ${preview}`)]
+      };
+    });
+    if (archivedCount > 0) showToast(`完了タスク${archivedCount}件をログに送りました`);
+  };
   const setItemStatus = (itemId, status) => updateItem(itemId, item => ({
     ...item,
     status,
@@ -6863,7 +6880,34 @@ function WorkingTriageView({
         if (window.confirm(`「${item.title}」を撤退としますか？`)) setItemStatus(item.id, 'abandoned');
       },
       style: { fontSize: 11, padding: '5px 10px', color: 'var(--text-3)' }
-    }, "撤退")), workStepChildren(item, null).map(step => renderStep(item, step)), (item.logs || []).length > 0 && React.createElement("ul", {
+    }, "撤退")), workStepChildren(item, null).map(step => renderStep(item, step)), (() => {
+      const doneSteps = (item.steps || []).filter(s => s.status === 'done');
+      if (!doneSteps.length) return null;
+      const preview = doneSteps.slice(0, 5).map(s => s.title).join('、') + (doneSteps.length > 5 ? `…ほか${doneSteps.length - 5}件` : '');
+      return React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 10px',
+          background: 'rgba(22,163,74,.06)',
+          border: '1px dashed rgba(22,163,74,.35)',
+          borderRadius: 10,
+          flexWrap: 'wrap'
+        }
+      }, React.createElement("span", {
+        style: { fontSize: 11, color: 'var(--done)', fontWeight: 800 }
+      }, "✓ 完了 ", doneSteps.length, "件"), React.createElement("span", {
+        style: { fontSize: 11, color: 'var(--text-3)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+        title: doneSteps.map(s => s.title).join('\n')
+      }, preview), React.createElement("button", {
+        className: "btn-sm",
+        onClick: () => {
+          if (window.confirm(`完了タスク ${doneSteps.length}件を一覧から外して、ログに送りますか？\n（ログには「完了 ${doneSteps.length}件をログ送り」として残ります）`)) archiveCompletedSteps(item.id);
+        },
+        style: { fontSize: 11, padding: '5px 10px', color: 'var(--done)', fontWeight: 700 }
+      }, "ログ送り"));
+    })(), (item.logs || []).length > 0 && React.createElement("ul", {
       style: {
         borderTop: '1px solid var(--border)',
         margin: 0,
@@ -9472,7 +9516,7 @@ function PatientTriage() {
     className: "app-header",
     style: {
       marginBottom: 20,
-      background: isDailyMode ? 'linear-gradient(135deg, #0F3A2E 0%, #167A5A 58%, #52B788 100%)' : isWorkMode ? 'linear-gradient(135deg, #2F2340 0%, #6C3EF8 58%, #B46DDE 100%)' : activeTheme.headerGrad
+      background: isDailyMode ? 'linear-gradient(135deg, #0F3A2E 0%, #167A5A 58%, #52B788 100%)' : isWorkMode ? 'linear-gradient(135deg, #172033 0%, #293A7A 58%, #7C5CFF 100%)' : activeTheme.headerGrad
     }
   }, React.createElement("button", {
     type: "button",
