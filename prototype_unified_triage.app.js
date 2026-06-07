@@ -6228,6 +6228,13 @@ function WorkingTriageView({
       logs: [...(item.logs || []), workLog(status === 'done' ? '仕事を完了' : status === 'abandoned' ? '撤退' : `${workStatusLabel(status)}に変更`)]
     }));
   };
+  const removeItem = itemId => {
+    const target = items.find(item => item.id === itemId);
+    if (!target) return;
+    rememberWorkChange('わーとり仕事削除');
+    setItems(prev => prev.filter(item => item.id !== itemId));
+    showToast('完了/撤退した仕事を削除しました');
+  };
   const addStep = (itemId, parentId = null) => {
     const title = window.prompt(parentId ? '追加する子タスク' : '追加するタスク');
     if (!title || !title.trim()) return;
@@ -6829,7 +6836,17 @@ function WorkingTriageView({
       }
     }, React.createElement("div", {
       style: { display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }
-    }, React.createElement("button", {
+    }, item.status === 'done' || item.status === 'abandoned' ? React.createElement(React.Fragment, null, React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setItemStatus(item.id, 'active'),
+      style: { fontSize: 11, padding: '4px 9px', color: 'var(--accent)' }
+    }, "activeに戻す"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => {
+        if (window.confirm(`「${item.title}」を削除しますか？`)) removeItem(item.id);
+      },
+      style: { fontSize: 11, padding: '4px 9px', color: '#DC2626' }
+    }, "削除")) : React.createElement(React.Fragment, null, React.createElement("button", {
       className: isWorkEditing ? "btn-dark" : "btn-sm",
       onClick: () => isWorkEditing ? setEditingWorkId(null) : startEditWork(item),
       style: { fontSize: 11, padding: '4px 9px' }
@@ -6839,7 +6856,7 @@ function WorkingTriageView({
         if (window.confirm(`「${item.title}」を終了にしますか？`)) setItemStatus(item.id, 'done');
       },
       style: { fontSize: 11, padding: '4px 9px', color: 'var(--done)' }
-    }, "終了")))), React.createElement("div", {
+    }, "終了"))))), React.createElement("div", {
       style: {
         marginTop: 12
       }
