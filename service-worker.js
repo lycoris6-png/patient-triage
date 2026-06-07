@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patient-triage-pwa-v62';
+const CACHE_NAME = 'patient-triage-pwa-v64';
 const APP_SHELL = [
   './',
   './index.html',
@@ -24,6 +24,7 @@ const APP_SHELL = [
   './patient_triage_vendor/header-nurse-station-evening.png',
   './patient_triage_vendor/header-nurse-station-night.png',
   './patient_triage_vendor/header-daily-life.png',
+  './patient_triage_vendor/header-working-triage-map.png',
   './chibi_split_pngs/blue_white_girl_06_clipboard.png',
   './chibi_split_pngs/red_antler_girl_03_cheer.png',
   './chibi_split_pngs/bat_wing_girl_01_neutral.png',
