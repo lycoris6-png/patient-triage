@@ -5992,7 +5992,8 @@ function PendingPatientSection({
 function WorkingTriageView({
   items,
   setItems,
-  showToast
+  showToast,
+  onBeforeChange
 }) {
   const [form, setForm] = React.useState({
     title: '',
@@ -6055,6 +6056,9 @@ function WorkingTriageView({
     ...log,
     itemTitle: item.title
   }))).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 8);
+  const rememberWorkChange = label => {
+    if (typeof onBeforeChange === 'function') onBeforeChange(label);
+  };
   const updateItem = (itemId, updater) => setItems(prev => prev.map(item => item.id === itemId ? normalizeWorkItem(typeof updater === 'function' ? updater(item) : {
     ...item,
     ...updater
@@ -6062,6 +6066,7 @@ function WorkingTriageView({
   const addManual = () => {
     const title = form.title.trim();
     if (!title) return;
+    rememberWorkChange('わーとり仕事追加');
     const item = normalizeWorkItem({
       ...form,
       title,
@@ -6085,6 +6090,7 @@ function WorkingTriageView({
     setAddOpen(false);
   };
   const completeStep = (itemId, stepId) => {
+    rememberWorkChange('わーとり一手完了');
     updateItem(itemId, item => {
       const step = (item.steps || []).find(s => s.id === stepId);
       if (!step) return item;
@@ -6112,15 +6118,14 @@ function WorkingTriageView({
         });
       }
       const nextOpen = workLeafSteps({ steps }).find(s => s.status === 'open');
-      const allDone = steps.length > 0 && !nextOpen;
       return {
         ...item,
         steps,
-        status: allDone ? 'done' : item.status === 'waiting' || item.status === 'resistant' ? 'active' : item.status,
-        nextAction: nextOpen?.title || item.nextAction,
+        status: item.status === 'waiting' || item.status === 'resistant' ? 'active' : item.status,
+        nextAction: nextOpen?.title || '',
         lastWorkedAt: now,
         updatedAt: now,
-        logs: [...(item.logs || []), workLog(`完了: ${step.title}`), ...(allDone ? [workLog('仕事を完了')] : [])]
+        logs: [...(item.logs || []), workLog(`完了: ${step.title}`)]
       };
     });
     window.dispatchEvent(new CustomEvent('chibi-coach', {
@@ -6133,6 +6138,7 @@ function WorkingTriageView({
   const markBlock = (itemId, stepId, blockType) => {
     const note = window.prompt(blockType === 'waiting' ? '何を / 誰を待ちますか？（任意・後で編集可）' : '何が引っかかっていますか？（任意・後で編集可）', '');
     if (note === null) return;
+    rememberWorkChange(blockType === 'waiting' ? 'わーとり待ち設定' : 'わーとり抵抗あり設定');
     const now = Date.now();
     updateItem(itemId, item => {
       const step = (item.steps || []).find(s => s.id === stepId);
@@ -6153,6 +6159,7 @@ function WorkingTriageView({
     showToast(blockType === 'waiting' ? '外部要因の待ちにしました' : '抵抗ありとして残しました');
   };
   const unblockStep = (itemId, stepId) => {
+    rememberWorkChange('わーとりブロック解除');
     updateItem(itemId, item => {
       const step = (item.steps || []).find(s => s.id === stepId);
       const otherBlocked = (item.steps || []).some(s => s.id !== stepId && (s.blockType === 'waiting' || s.blockType === 'resistant'));
@@ -6182,6 +6189,7 @@ function WorkingTriageView({
     }));
   };
   const setStepPriority = (itemId, stepId, priority) => {
+    rememberWorkChange('わーとり一手優先度変更');
     updateItem(itemId, item => ({
       ...item,
       steps: (item.steps || []).map(s => s.id === stepId ? {
@@ -6192,7 +6200,10 @@ function WorkingTriageView({
     }));
   };
   const archiveCompletedSteps = itemId => {
+    const target = items.find(item => item.id === itemId);
+    if (!(target?.steps || []).some(s => s.status === 'done')) return;
     let archivedCount = 0;
+    rememberWorkChange('わーとり完了一手ログ送り');
     updateItem(itemId, item => {
       const doneSteps = (item.steps || []).filter(s => s.status === 'done');
       if (!doneSteps.length) return item;
@@ -6208,15 +6219,19 @@ function WorkingTriageView({
     });
     if (archivedCount > 0) showToast(`完了タスク${archivedCount}件をログに送りました`);
   };
-  const setItemStatus = (itemId, status) => updateItem(itemId, item => ({
-    ...item,
-    status,
-    updatedAt: Date.now(),
-    logs: [...(item.logs || []), workLog(status === 'done' ? '仕事を完了' : status === 'abandoned' ? '撤退' : `${workStatusLabel(status)}に変更`)]
-  }));
+  const setItemStatus = (itemId, status) => {
+    rememberWorkChange(status === 'done' ? 'わーとり仕事終了' : status === 'abandoned' ? 'わーとり撤退' : 'わーとり状態変更');
+    updateItem(itemId, item => ({
+      ...item,
+      status,
+      updatedAt: Date.now(),
+      logs: [...(item.logs || []), workLog(status === 'done' ? '仕事を完了' : status === 'abandoned' ? '撤退' : `${workStatusLabel(status)}に変更`)]
+    }));
+  };
   const addStep = (itemId, parentId = null) => {
     const title = window.prompt(parentId ? '追加する子タスク' : '追加するタスク');
     if (!title || !title.trim()) return;
+    rememberWorkChange(parentId ? 'わーとり子一手追加' : 'わーとり一手追加');
     updateItem(itemId, item => ({
       ...item,
       steps: (item.steps || []).map(step => step.id === parentId ? {
@@ -6245,6 +6260,7 @@ function WorkingTriageView({
         completedAt: null
       }, imported));
       if (!newSteps.length) throw new Error('一手がありません');
+      rememberWorkChange(parentStepId ? 'わーとり一手再分解' : 'わーとり再分解');
       updateItem(itemId, item => ({
         ...item,
         outcome: imported.outcome || item.outcome,
@@ -6277,6 +6293,7 @@ function WorkingTriageView({
   };
   const saveStepEdit = () => {
     if (!editingStep || !stepDraft.title.trim()) return;
+    rememberWorkChange('わーとり一手編集');
     updateItem(editingStep.itemId, item => ({
       ...item,
       steps: (item.steps || []).map(step => step.id === editingStep.stepId ? {
@@ -6305,6 +6322,7 @@ function WorkingTriageView({
   };
   const saveWorkEdit = () => {
     if (!editingWorkId || !workDraft.title.trim()) return;
+    rememberWorkChange('わーとり仕事編集');
     updateItem(editingWorkId, item => ({
       ...item,
       title: workDraft.title.trim(),
@@ -6320,6 +6338,7 @@ function WorkingTriageView({
     setEditingWorkId(null);
   };
   const removeStep = (itemId, stepId) => {
+    rememberWorkChange('わーとり一手削除');
     updateItem(itemId, item => {
       const step = (item.steps || []).find(s => s.id === stepId);
       const removeIds = new Set([stepId]);
@@ -6353,6 +6372,7 @@ function WorkingTriageView({
   };
   const applyImport = () => {
     if (!preview?.length) return;
+    rememberWorkChange('わーとりJSON取込');
     setItems(prev => [...prev, ...preview]);
     showToast(`わーとりに${preview.length}件追加しました`);
     setJsonText('');
@@ -7933,6 +7953,7 @@ function PatientTriage() {
     pendingPatients: cloneForUndo(pendingPatients),
     generalTasks: cloneForUndo(activeGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
+    workItems: cloneForUndo(workItems),
     expandedPatients: cloneForUndo(activeExpandedPatients),
     suggestion: cloneForUndo(suggestion),
     at: Date.now()
@@ -7958,6 +7979,7 @@ function PatientTriage() {
     setPendingPatients(Array.isArray(undoEntry.pendingPatients) ? undoEntry.pendingPatients : []);
     setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
+    setWorkItems(Array.isArray(undoEntry.workItems) ? undoEntry.workItems.map(normalizeWorkItem) : workItems);
     setActiveExpandedPatients(undoEntry.expandedPatients || {});
     setSuggestion(undoEntry.suggestion || null);
     setEndDayCelebrate(null);
@@ -9846,7 +9868,8 @@ function PatientTriage() {
   }))), isWorkMode && React.createElement(WorkingTriageView, {
     items: workItems,
     setItems: setWorkItems,
-    showToast: showToast
+    showToast: showToast,
+    onBeforeChange: rememberUndo
   }), !isWorkMode && React.createElement("div", {
     className: "command-dock",
     "aria-label": "タスク操作"
