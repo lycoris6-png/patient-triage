@@ -6592,11 +6592,34 @@ function WorkingTriageView({
       }
     }, React.createElement("div", {
       style: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: 10
+        display: 'grid',
+        gridTemplateColumns: '42px minmax(0, 1fr) auto',
+        gap: 10,
+        alignItems: 'flex-start'
       }
-    }, React.createElement("div", {
+    }, React.createElement("button", {
+      className: open ? "btn-dark" : "btn-ghost",
+      "aria-label": open ? "詳細を閉じる" : "詳細を開く",
+      title: open ? "詳細を閉じる" : "詳細を開く",
+      onClick: () => setExpanded(prev => ({
+        ...prev,
+        [item.id]: !prev[item.id]
+      })),
+      style: {
+        width: 38,
+        height: 38,
+        minWidth: 38,
+        padding: 0,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        boxShadow: open ? '0 6px 16px rgba(47,111,237,.28)' : 'none'
+      }
+    }, open ? React.createElement(ChevronDown, {
+      size: 18
+    }) : React.createElement(ChevronRight, {
+      size: 18
+    })), React.createElement("div", {
       style: {
         minWidth: 0
       }
@@ -6796,18 +6819,7 @@ function WorkingTriageView({
         if (window.confirm(`「${item.title}」を終了にしますか？`)) setItemStatus(item.id, 'done');
       },
       style: { fontSize: 11, padding: '4px 9px', color: 'var(--done)' }
-    }, "終了")), React.createElement("button", {
-      className: "btn-sm",
-      onClick: () => setExpanded(prev => ({
-        ...prev,
-        [item.id]: !prev[item.id]
-      })),
-      style: { fontSize: 11, padding: '4px 9px' }
-    }, open ? React.createElement(ChevronDown, {
-      size: 12
-    }) : React.createElement(ChevronRight, {
-      size: 12
-    }), "詳細"))), React.createElement("div", {
+    }, "終了")))), React.createElement("div", {
       style: {
         marginTop: 12
       }
