@@ -1022,6 +1022,27 @@ const sortWorkItems = items => [...(Array.isArray(items) ? items : [])].sort((a,
   return (a.createdAt || 0) - (b.createdAt || 0);
 });
 const workStepChildren = (item, parentId) => (item.steps || []).filter(step => (step.parentId || null) === (parentId || null));
+const workStepAncestorIds = (steps, stepId) => {
+  const byId = new Map((steps || []).map(step => [step.id, step]));
+  const ids = [];
+  let current = byId.get(stepId);
+  while (current?.parentId && byId.has(current.parentId)) {
+    ids.push(current.parentId);
+    current = byId.get(current.parentId);
+  }
+  return ids;
+};
+const workStepDescendantIds = (item, stepId) => {
+  const ids = [];
+  const walk = parentId => {
+    workStepChildren(item, parentId).forEach(child => {
+      ids.push(child.id);
+      walk(child.id);
+    });
+  };
+  walk(stepId);
+  return ids;
+};
 const workLeafSteps = item => (item.steps || []).filter(step => !workStepChildren(item, step.id).length);
 const workProgress = item => {
   const leafSteps = workLeafSteps(item);
@@ -6135,6 +6156,85 @@ function WorkingTriageView({
       }
     }));
   };
+  const reopenStep = (itemId, stepId) => {
+    rememberWorkChange('わーとり一手未完戻し');
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      const reopenIds = new Set([stepId, ...workStepAncestorIds(item.steps || [], stepId)]);
+      return {
+        ...item,
+        status: item.status === 'done' || item.status === 'abandoned' ? 'active' : item.status,
+        steps: (item.steps || []).map(s => reopenIds.has(s.id) ? {
+          ...s,
+          status: 'open',
+          completedAt: null
+        } : s),
+        nextAction: step?.title || item.nextAction,
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(`未完に戻す: ${step?.title || ''}`)]
+      };
+    });
+  };
+  const completeStepTree = (itemId, stepId) => {
+    rememberWorkChange('わーとり一手まとめて完了');
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      if (!step) return item;
+      const now = Date.now();
+      const doneIds = new Set([stepId, ...workStepDescendantIds(item, stepId)]);
+      let steps = (item.steps || []).map(s => doneIds.has(s.id) ? {
+        ...s,
+        status: 'done',
+        blockType: '',
+        completedAt: now
+      } : s);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        steps = steps.map(s => {
+          const children = steps.filter(child => child.parentId === s.id);
+          if (children.length && s.status !== 'done' && children.every(child => child.status === 'done' || child.status === 'skipped')) {
+            changed = true;
+            return {
+              ...s,
+              status: 'done',
+              completedAt: now
+            };
+          }
+          return s;
+        });
+      }
+      const nextOpen = workLeafSteps({ steps }).find(s => s.status === 'open');
+      return {
+        ...item,
+        steps,
+        status: item.status === 'waiting' || item.status === 'resistant' ? 'active' : item.status,
+        nextAction: nextOpen?.title || '',
+        lastWorkedAt: now,
+        updatedAt: now,
+        logs: [...(item.logs || []), workLog(`まとめて完了: ${step.title}`)]
+      };
+    });
+  };
+  const reopenStepTree = (itemId, stepId) => {
+    rememberWorkChange('わーとり一手まとめて未完戻し');
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      const reopenIds = new Set([stepId, ...workStepDescendantIds(item, stepId), ...workStepAncestorIds(item.steps || [], stepId)]);
+      return {
+        ...item,
+        status: item.status === 'done' || item.status === 'abandoned' ? 'active' : item.status,
+        steps: (item.steps || []).map(s => reopenIds.has(s.id) ? {
+          ...s,
+          status: 'open',
+          completedAt: null
+        } : s),
+        nextAction: step?.title || item.nextAction,
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(`まとめて未完に戻す: ${step?.title || ''}`)]
+      };
+    });
+  };
   const markBlock = (itemId, stepId, blockType) => {
     const note = window.prompt(blockType === 'waiting' ? '何を / 誰を待ちますか？（任意・後で編集可）' : '何が引っかかっていますか？（任意・後で編集可）', '');
     if (note === null) return;
@@ -6239,20 +6339,30 @@ function WorkingTriageView({
     const title = window.prompt(parentId ? '追加する子タスク' : '追加するタスク');
     if (!title || !title.trim()) return;
     rememberWorkChange(parentId ? 'わーとり子一手追加' : 'わーとり一手追加');
-    updateItem(itemId, item => ({
-      ...item,
-      steps: (item.steps || []).map(step => step.id === parentId ? {
-        ...step,
-        isGroup: true
-      } : step).concat(normalizeWorkStep({
+    updateItem(itemId, item => {
+      const reopenIds = parentId ? new Set([parentId, ...workStepAncestorIds(item.steps || [], parentId)]) : new Set();
+      return {
+        ...item,
+        status: item.status === 'done' || item.status === 'abandoned' ? 'active' : item.status,
+        steps: (item.steps || []).map(step => step.id === parentId ? {
+          ...step,
+          isGroup: true,
+          status: 'open',
+          completedAt: null
+        } : reopenIds.has(step.id) ? {
+          ...step,
+          status: 'open',
+          completedAt: null
+        } : step).concat(normalizeWorkStep({
         title: title.trim(),
         estimate: '10',
         priority: item.priority,
         parentId
-      }, item)),
-      updatedAt: Date.now(),
-      logs: [...(item.logs || []), workLog(parentId ? `子一手追加: ${title.trim()}` : `一手追加: ${title.trim()}`)]
-    }));
+        }, item)),
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(parentId ? `子一手追加: ${title.trim()}` : `一手追加: ${title.trim()}`)]
+      };
+    });
   };
   const reSplitItem = (itemId, parentStepId = null) => {
     const text = window.prompt(parentStepId ? 'この一手をさらに分けるJSONを貼り付けてください。子一手として追加します。' : 'この仕事の再分割JSONを貼り付けてください。一手を追加します。');
@@ -6268,19 +6378,28 @@ function WorkingTriageView({
       }, imported));
       if (!newSteps.length) throw new Error('一手がありません');
       rememberWorkChange(parentStepId ? 'わーとり一手再分解' : 'わーとり再分解');
-      updateItem(itemId, item => ({
-        ...item,
-        outcome: imported.outcome || item.outcome,
-        currentFocus: imported.currentFocus || item.currentFocus,
-        nextAction: imported.nextAction || newSteps[0]?.title || item.nextAction,
-        steps: (item.steps || []).map(step => step.id === parentStepId ? {
-          ...step,
-          isGroup: true
-        } : step).concat(newSteps),
-        status: item.status === 'done' || item.status === 'abandoned' ? 'active' : item.status,
-        updatedAt: Date.now(),
-        logs: [...(item.logs || []), workLog(parentStepId ? `一手を再分割: ${newSteps.length}手追加` : `再分割: ${newSteps.length}手追加`)]
-      }));
+      updateItem(itemId, item => {
+        const reopenIds = parentStepId ? new Set([parentStepId, ...workStepAncestorIds(item.steps || [], parentStepId)]) : new Set();
+        return {
+          ...item,
+          outcome: imported.outcome || item.outcome,
+          currentFocus: imported.currentFocus || item.currentFocus,
+          nextAction: imported.nextAction || newSteps[0]?.title || item.nextAction,
+          steps: (item.steps || []).map(step => step.id === parentStepId ? {
+            ...step,
+            isGroup: true,
+            status: 'open',
+            completedAt: null
+          } : reopenIds.has(step.id) ? {
+            ...step,
+            status: 'open',
+            completedAt: null
+          } : step).concat(newSteps),
+          status: item.status === 'done' || item.status === 'abandoned' ? 'active' : item.status,
+          updatedAt: Date.now(),
+          logs: [...(item.logs || []), workLog(parentStepId ? `一手を再分割: ${newSteps.length}手追加` : `再分割: ${newSteps.length}手追加`)]
+        };
+      });
       showToast(`一手を${newSteps.length}件追加しました`);
     } catch (e) {
       showToast('再分割JSONを読めませんでした: ' + (e.message || '形式エラー'));
@@ -6392,6 +6511,11 @@ function WorkingTriageView({
     const isEditing = editingStep?.itemId === item.id && editingStep?.stepId === step.id;
     const children = workStepChildren(item, step.id);
     const hasChildren = children.length > 0;
+    const descendantIds = hasChildren ? workStepDescendantIds(item, step.id) : [];
+    const descendantLeaves = hasChildren ? workLeafSteps({
+      steps: (item.steps || []).filter(s => descendantIds.includes(s.id))
+    }) : [];
+    const isChecked = hasChildren ? descendantLeaves.length > 0 && descendantLeaves.every(s => s.status === 'done' || s.status === 'skipped') : step.status === 'done';
     return React.createElement("div", {
       key: step.id,
       style: {
@@ -6400,7 +6524,7 @@ function WorkingTriageView({
         borderRadius: 12,
         padding: 10,
         marginLeft: depth ? 14 : 0,
-        background: hasChildren ? 'var(--surface-2)' : step.status === 'done' ? 'rgba(22,163,74,.08)' : step.blockType === 'waiting' ? 'rgba(59,130,246,.08)' : step.blockType === 'resistant' ? 'rgba(239,68,68,.08)' : 'var(--surface)'
+        background: hasChildren ? isChecked ? 'rgba(22,163,74,.08)' : 'var(--surface-2)' : step.status === 'done' ? 'rgba(22,163,74,.08)' : step.blockType === 'waiting' ? 'rgba(59,130,246,.08)' : step.blockType === 'resistant' ? 'rgba(239,68,68,.08)' : 'var(--surface)'
       }
     }, React.createElement("div", {
       style: {
@@ -6408,7 +6532,17 @@ function WorkingTriageView({
         gap: 8,
         alignItems: 'flex-start'
       }
-    }, React.createElement("select", {
+    }, React.createElement("button", {
+      className: `check-circle${isChecked ? ' done' : step.blockType ? ' stuck' : ''}`,
+      onClick: () => hasChildren ? isChecked ? reopenStepTree(item.id, step.id) : completeStepTree(item.id, step.id) : step.status === 'done' ? reopenStep(item.id, step.id) : completeStep(item.id, step.id),
+      style: {
+        marginTop: 1
+      },
+      title: hasChildren ? isChecked ? '配下を未完に戻す' : '配下をまとめて完了にする' : step.status === 'done' ? 'クリックで未完に戻す' : '完了にする'
+    }, isChecked && React.createElement(Check, {
+      size: 11,
+      color: "#fff"
+    })), React.createElement("select", {
       value: step.priority || item.priority || 'normal',
       onChange: e => setStepPriority(item.id, step.id, e.target.value),
       style: {
@@ -6438,8 +6572,7 @@ function WorkingTriageView({
         fontSize: 13,
         fontWeight: 900,
         color: 'var(--text)',
-        lineHeight: 1.45,
-        textDecoration: step.status === 'done' ? 'line-through' : 'none'
+        lineHeight: 1.45
       }
     }, hasChildren && React.createElement("span", {
       style: {
@@ -6540,16 +6673,7 @@ function WorkingTriageView({
         marginTop: 8,
         alignItems: 'center'
       }
-    }, step.status !== 'done' && !hasChildren && React.createElement("button", {
-      className: "btn-green",
-      onClick: () => completeStep(item.id, step.id),
-      style: {
-        padding: '6px 12px',
-        fontSize: 12
-      }
-    }, React.createElement(Check, {
-      size: 13
-    }), "完了"), step.status !== 'done' && hasChildren && React.createElement("button", {
+    }, step.status !== 'done' && hasChildren && React.createElement("button", {
       className: "btn-ghost",
       onClick: () => addStep(item.id, step.id),
       style: {
@@ -8298,7 +8422,7 @@ function PatientTriage() {
     const cfg = normalizeGasConfig(gasConfig);
     const endedDate = extra.endedAt ? new Date(extra.endedAt) : new Date();
     const isLateEnd = trigger === 'endday' && endedDate.getHours() >= 20;
-    const mode = isDailyMode ? 'daily' : 'patient';
+    const mode = isWorkMode ? 'work' : isDailyMode ? 'daily' : 'patient';
     const character = pickAiCoachCharacter(trigger, mode);
     let weather = null;
     try {

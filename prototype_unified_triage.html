@@ -1070,7 +1070,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="prototype_unified_triage.app.js?v=20260607-work-step-action-menu"></script>
+<script src="prototype_unified_triage.app.js?v=20260607-work-parent-checks"></script>
 
 
 
@@ -1281,6 +1281,57 @@ body.rpg-mode .chibi-coach-bubble {
     }
   };
 
+  const workLines = {
+    mentor: {
+      start: ['大きな仕事も、見える一手に分ければ扱えます。', 'まずは地図を広げましょう。今日触る場所は一箇所で十分です。', '全体を抱えず、今動かせる一手だけ確認しましょう。'],
+      suggest: ['次の一手はこれくらいがよさそうです。', 'いま進めるなら、この小さな区切りから始めましょう。', '勝利条件へ近づく一手を選びました。ここだけ見れば大丈夫です。'],
+      add: ['仕事を追加しました。まずは輪郭が見えれば十分です。', '大きな仕事を一覧に置けました。ここから分けていきましょう。', '記録できました。頭の中から外へ出せた時点で前進です。'],
+      done: ['一手進みました。大きな仕事ほど、この積み重ねが効きます。', '完了です。全体の輪郭が少し軽くなりました。', 'よく動かせました。次も同じくらい小さくしましょう。'],
+      tally: ['一手分、進捗に残りました。途中の足跡も大切です。', 'カウントしました。仕事は少しずつ削れていきます。', 'よい進み方です。次も一手だけ見ましょう。'],
+      allclear: ['今日触れる一手は片づきました。大きな仕事にも、ちゃんと手が入っています。', 'ここまで進みました。今は積み上がった分を確認して大丈夫です。', '見える範囲は整いました。次の分解はまた必要な時にしましょう。'],
+      endday: ['今日の仕事はここまでで区切りましょう。進めた分は残っています。', '大きな仕事にも手を入れました。今日は十分です。', 'ここで閉じても大丈夫です。続きは一覧が覚えています。'],
+      stuck: ['詰まりを見つけられました。外部待ちか、手元の重さかを分けましょう。', '止まった理由を置いておきましょう。次にほどきやすくなります。', 'ここは無理に押さず、詰まりの種類を確認しましょう。'],
+      idle: ['大きな仕事は、ひとつの入口だけ見れば大丈夫です。', '今は全体を見なくて大丈夫です。次の一手だけ戻しましょう。', '地図はここにあります。迷ったら一番小さい印から見ましょう。'],
+      daydream: ['少し先の段取りを考えていました。今は目の前の一手に戻りましょう。', '全体図を眺めていました。では、今日触る場所へ戻しますね。', '少し考えが遠くまで行っていました。一手に戻しましょう。']
+    },
+    spark: {
+      start: ['わーとり開始！大物も一撃ずつならいける！', '大仕事の地図、広げよ！まず一個だけ！', '今日のボス戦開始！最初の一撃は小さめでいこ！'],
+      suggest: ['次の一撃はこれ！ここから崩そ！', '今ならこの一手が刺さりそう！', '大物に行く前に、まずこの足場から！'],
+      add: ['仕事追加！ちゃんと地図に載ったよ！', '大物発見！でも分ければいける！', '書けた！ここから一撃サイズにしてこ！'],
+      done: ['一撃入った！ちゃんと削れてる！', 'ナイス一手！大きい仕事が少し動いたよ！', 'よし進んだ！この小さい勝ちが効く！'],
+      tally: ['+1！進捗ログに刻んだ！', '一撃カウント！この調子！', '進んだ進んだ！次も小さくいこ！'],
+      allclear: ['今日の一撃、出し切った！よくやった！', '見える分はクリア！大物相手にちゃんと前進！', 'ここまで削れた！今日は勝ちでいいよ！'],
+      endday: ['今日のボス戦ここまで！おつかれさま！', '一撃ずつ積めた！今日は十分勝ち！', '仕事を動かした！ここで撤収して大丈夫！'],
+      stuck: ['詰まったら作戦変更！理由を分けよ！', '外待ち？気持ちの重さ？そこ分けたら動ける！', '止まった場所発見！そこから攻略しよ！'],
+      idle: ['大物でも、次の一撃だけでOK！', '迷ったら小さいやつ！一撃だけ入れよ！', '全体じゃなくて、今日の入口を探そ！'],
+      daydream: ['あ、今ちょっと地図の端っこ見てた！戻ろ！', '大物のこと考えすぎてた！一撃に戻す！', '心が作戦会議してた！よし次！']
+    },
+    butler: {
+      start: ['本日の大きなお仕事も、ぼくが一緒に見ています。', 'まずは全体を置いて、次の一手だけ選びましょう。', '大きな仕事も、順に分ければ進められます。'],
+      suggest: ['次はこの一手がよさそうです。', '今の状態なら、こちらから始めると戻りやすいです。', 'まずここを進めましょう。ぼくも確認しています。'],
+      add: ['仕事を一覧に入れました。ここから一緒に分けましょう。', '記録しました。大きさが見えれば、扱いやすくなります。', '置き場所ができましたね。次は一手に分けましょう。'],
+      done: ['一手、完了ですね。大きな仕事の中でも確かな前進です。', '進みました。ぼくがログにも残しておきます。', 'いいですね。小さな一手が積み上がっています。'],
+      tally: ['一手分、記録しました。途中経過も大事にしましょう。', 'カウントできました。少しずつ進めています。', '進行中の足跡として残りました。'],
+      allclear: ['今日扱う分は整いました。大きな仕事にもちゃんと手が入りましたね。', '見える一手は片づきました。ここで一度休んで大丈夫です。', 'ここまで進められました。お見事です。'],
+      endday: ['今日の作業はここで閉じましょう。続きはぼくも覚えています。', '大きな仕事を少し動かせました。今日は十分です。', '一覧は残っています。明日また一緒に見ましょう。'],
+      stuck: ['困っている理由を分けておきましょう。外部待ちか、手元の重さかですね。', '止まった場所を記録できれば、次に戻りやすくなります。', 'ここは印をつけておきましょう。ぼくも見ています。'],
+      idle: ['全体ではなく、次の一手だけ見ましょう。', 'ぼくはここにいます。大きな仕事も一緒に小さくできます。', '迷ったら、最初に触れる場所だけ探しましょう。'],
+      daydream: ['少し資料の整理を考えていました。戻りますね。', '全体の地図を見ていました。次の一手に戻しましょう。', '少し考えごとをしていました。ぼくも一緒に確認します。']
+    },
+    yushka: {
+      start: ['来たな。大物仕事も俺が見ててやる。まず一撃だ。', '全体を相手にするな。今日殴る場所だけ決めろ。', 'でかい仕事ほど小さく割れ。最初はそれで十分だ。'],
+      suggest: ['次はここだな。今の手で届くところを削れ。', 'これを入れろ。大物に行く前に足場を作る。', '今やるならこの一手だろう。考えすぎるな。'],
+      add: ['よし、仕事を捕まえたな。逃がす前に分けろ。', '大物を一覧に置けた。悪くない、ここから削るぞ。', '書いたなら半分勝ちだ。次は一撃サイズにしろ。'],
+      done: ['一撃入ったな。大物相手でもちゃんと効いてる。', 'やるじゃないか。ひとつずつ削れば、いずれ終わる。', '完了だな。小さくても仕事は確かに動いた。'],
+      tally: ['一手進んだ。数字が動けば流れも動く。', 'よし、積んだな。大物はこうやって削る。', 'カウントした。止まるな、次も小さくしろ。'],
+      allclear: ['今日の分は削れたな。全部じゃなくても勝ちは勝ちだ。', '見える一手は片づいた。胸を張れ、仕事は動いてる。', 'ここまでやれば上等だ。次はまた必要な時に割ればいい。'],
+      endday: ['今日はここまでだな。大物相手に手を入れた、それで十分だ。', '進めた分はちゃんと積み上がってる。胸を張れ。', 'ここで閉じろ。続きは逃げない、一覧に残ってる。'],
+      stuck: ['詰まったか。外待ちか、気が重いだけか、まず分けろ。', '手順を半分に。思考を止めるな、少しずつ積み上げるんだ。', '止まるなら理由を残せ。次に戻る足場になる。'],
+      idle: ['全部相手にするな。次の一撃だけでいい。', '迷うなら小さくしろ。大物はそれで崩れる。', '手が止まったなら、今できない理由だけ残せ。それも前進だ。'],
+      daydream: ['……今、別の攻略を考えてた。まあいい、次だ。', '少し気が抜けてたな。大物相手だと考えすぎる。戻るぞ。', '全体を見すぎた。次の一撃だけに戻す。']
+    }
+  };
+
   const voiceGuides = {
     mentor: {
       name: 'エスト',
@@ -1310,7 +1361,7 @@ body.rpg-mode .chibi-coach-bubble {
 
   function voiceProfileFor(who, mode, kind){
     const guide = voiceGuides[who] || voiceGuides.mentor;
-    const sourceLines = mode === 'daily' && dailyLines[who] ? dailyLines[who] : cast[who].lines;
+    const sourceLines = mode === 'work' && workLines[who] ? workLines[who] : mode === 'daily' && dailyLines[who] ? dailyLines[who] : cast[who].lines;
     const keys = [kind, 'done', 'idle', 'stuck'].filter((key, index, arr) => key && arr.indexOf(key) === index);
     const examples = keys.flatMap(key => (sourceLines[key] || []).slice(0, 3).map(text => `${key}: ${text}`)).slice(0, 10);
     return {
@@ -1361,7 +1412,7 @@ body.rpg-mode .chibi-coach-bubble {
   }
 
   window.__triagePickAiCoachCharacter = function(kind, mode){
-    const normalizedMode = mode === 'daily' ? 'daily' : 'patient';
+    const normalizedMode = mode === 'work' ? 'work' : mode === 'daily' ? 'daily' : 'patient';
     const flowKey = kind === 'endday' ? 'endday' : 'start';
     const [who, pose] = pickCastEntry(flows[flowKey] || flows.start);
     return {
@@ -1423,7 +1474,7 @@ body.rpg-mode .chibi-coach-bubble {
     el.dataset.actor = who;
     img.src = CHIBI_BASE + (actor.img[pose] || actor.img.neutral);
     img.alt = actor.alt;
-    const lines = currentMode === 'daily' && dailyLines[who] ? dailyLines[who] : actor.lines;
+    const lines = currentMode === 'work' && workLines[who] ? workLines[who] : currentMode === 'daily' && dailyLines[who] ? dailyLines[who] : actor.lines;
     const estimateSet = currentMode === 'daily' ? dailyEstimateLines : estimateLines;
     textEl.textContent = customText || rewardOverride || (effectiveKind === 'estimate' && estimateSet[who] ? estimateSet[who](meta || {}) : pick(lines[effectiveKind] || lines.idle));
     clearTimeout(hideTimer);
@@ -1450,7 +1501,8 @@ body.rpg-mode .chibi-coach-bubble {
     show(detail.kind || 'idle', true, detail.text || '', detail.estimate || null, detail.actor || '', detail.pose || '');
   });
   window.addEventListener('triage-mode-change', event => {
-    currentMode = event.detail?.mode === 'daily' ? 'daily' : 'patient';
+    const nextMode = event.detail?.mode;
+    currentMode = nextMode === 'work' ? 'work' : nextMode === 'daily' ? 'daily' : 'patient';
     rotateHeaderCast(true);
     show('start', true);
   });
