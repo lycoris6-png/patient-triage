@@ -6532,14 +6532,15 @@ function WorkingTriageView({
         padding: '6px 10px',
         fontSize: 12
       }
-    }, "閉じる")) : step.status !== 'done' && React.createElement("div", {
+    }, "閉じる")) : React.createElement("div", {
       style: {
         display: 'flex',
         gap: 6,
         flexWrap: 'wrap',
-        marginTop: 8
+        marginTop: 8,
+        alignItems: 'center'
       }
-    }, !hasChildren && React.createElement("button", {
+    }, step.status !== 'done' && !hasChildren && React.createElement("button", {
       className: "btn-green",
       onClick: () => completeStep(item.id, step.id),
       style: {
@@ -6548,50 +6549,94 @@ function WorkingTriageView({
       }
     }, React.createElement(Check, {
       size: 13
-    }), "一手完了"), !hasChildren && React.createElement("button", {
-      className: "btn-ghost",
-      onClick: () => markBlock(item.id, step.id, 'waiting'),
-      style: {
-        padding: '6px 10px',
-        fontSize: 12
-      }
-    }, "待ち"), !hasChildren && React.createElement("button", {
-      className: "btn-rose",
-      onClick: () => markBlock(item.id, step.id, 'resistant'),
-      style: {
-        padding: '6px 10px',
-        fontSize: 12
-      }
-    }, "抵抗あり"), React.createElement("button", {
+    }), "完了"), step.status !== 'done' && hasChildren && React.createElement("button", {
       className: "btn-ghost",
       onClick: () => addStep(item.id, step.id),
       style: {
         padding: '6px 10px',
         fontSize: 12
       }
-    }, "子一手"), React.createElement("button", {
-      className: "btn-ghost",
-      onClick: () => reSplitItem(item.id, step.id),
+    }, "小タスク追加"), React.createElement("details", {
       style: {
-        padding: '6px 10px',
+        position: 'relative'
+      }
+    }, React.createElement("summary", {
+      className: "btn-sm",
+      style: {
+        padding: '6px 11px',
+        fontSize: 14,
+        lineHeight: 1,
+        cursor: 'pointer',
+        listStyle: 'none',
+        userSelect: 'none'
+      },
+      title: "その他の操作"
+    }, "…"), React.createElement("div", {
+      style: {
+        position: 'absolute',
+        right: 0,
+        top: 'calc(100% + 6px)',
+        zIndex: 20,
+        display: 'grid',
+        gap: 4,
+        minWidth: 156,
+        padding: 8,
+        background: 'var(--surface)',
+        border: '1.5px solid var(--border)',
+        borderRadius: 10,
+        boxShadow: 'var(--shadow)'
+      }
+    }, step.status !== 'done' && !hasChildren && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => markBlock(item.id, step.id, 'waiting'),
+      style: {
+        justifyContent: 'flex-start',
+        padding: '7px 9px',
         fontSize: 12
       }
-    }, "分解JSON"), React.createElement("button", {
+    }, "待ちにする"), step.status !== 'done' && !hasChildren && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => markBlock(item.id, step.id, 'resistant'),
+      style: {
+        justifyContent: 'flex-start',
+        padding: '7px 9px',
+        fontSize: 12,
+        color: '#DC2626'
+      }
+    }, "抵抗あり"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => addStep(item.id, step.id),
+      style: {
+        justifyContent: 'flex-start',
+        padding: '7px 9px',
+        fontSize: 12
+      }
+    }, "小タスク追加"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => reSplitItem(item.id, step.id),
+      style: {
+        justifyContent: 'flex-start',
+        padding: '7px 9px',
+        fontSize: 12
+      }
+    }, "小タスクJSON"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => startEditStep(item, step),
       style: {
-        padding: '6px 10px',
+        justifyContent: 'flex-start',
+        padding: '7px 9px',
         fontSize: 12
       }
-    }, "編集"), React.createElement("button", {
+    }, "タスク編集"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => removeStep(item.id, step.id),
       style: {
-        padding: '6px 10px',
+        justifyContent: 'flex-start',
+        padding: '7px 9px',
         fontSize: 12,
         color: 'var(--text-3)'
       }
-    }, "削除")), hasChildren && React.createElement("div", {
+    }, "タスク削除")))), hasChildren && React.createElement("div", {
       style: {
         display: 'flex',
         flexDirection: 'column',
