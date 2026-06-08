@@ -786,6 +786,28 @@ const todayStr = () => {
   if (d.getHours() < WORKDAY_START_HOUR) d.setDate(d.getDate() - 1);
   return d.toLocaleDateString('sv-SE');
 };
+const addDaysStr = (dateStr, days) => {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString('sv-SE');
+};
+const nextWorkdayStr = () => addDaysStr(todayStr(), 1);
+const isActionableTask = task => task && task.status !== 'done' && task.status !== 'hold';
+const withTaskStatusDefaults = updates => {
+  if (!Object.prototype.hasOwnProperty.call(updates || {}, 'status')) return updates || {};
+  if (updates.status === 'hold') {
+    return {
+      ...updates,
+      holdUntilDate: updates.holdUntilDate || nextWorkdayStr(),
+      holdCreatedWorkday: updates.holdCreatedWorkday || todayStr()
+    };
+  }
+  return {
+    ...updates,
+    holdUntilDate: null,
+    holdCreatedWorkday: null
+  };
+};
 const currentWorkday = () => new Date(todayStr() + 'T00:00:00');
 const workdayStrForTimestamp = timestamp => {
   const d = new Date(timestamp);
@@ -1679,6 +1701,7 @@ function TaskRow({
   const isHold = task.status === 'hold';
   const isDoing = task.status === 'doing';
   const isDone = task.status === 'done';
+  const holdUntilDate = task.holdUntilDate || nextWorkdayStr();
   const [editingTime, setEditingTime] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(task.title);
@@ -1814,7 +1837,15 @@ function TaskRow({
       border: '1px solid var(--border)',
       fontSize: 10
     }
-  }, "今はできない")), editingTime && onSetTime && React.createElement("div", {
+  }, "今はできない"), isHold && React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(108,62,248,.08)',
+      color: 'var(--accent)',
+      border: '1px solid var(--border)',
+      fontSize: 10
+    }
+  }, holdUntilDate, "再開")), editingTime && onSetTime && React.createElement("div", {
     style: {
       marginTop: 4
     }
@@ -1868,13 +1899,32 @@ function TaskRow({
   }, "\u7740\u624B"), isDoing && React.createElement("button", {
     className: "btn-sm",
     onClick: onTodo
-  }, "\u4E2D\u65AD"), isHold ? React.createElement("button", {
-    className: "btn-sm",
-    onClick: onTodo
-  }, "再開") : React.createElement("button", {
+  }, "\u4E2D\u65AD"), isHold ? React.createElement(React.Fragment, null, React.createElement("input", {
+    type: "date",
+    value: holdUntilDate,
+    onChange: e => onUpdate && onUpdate({
+      holdUntilDate: e.target.value || nextWorkdayStr()
+    }),
+    className: "inp",
+    title: "この日になったら自動で再開",
+    style: {
+      width: 'auto',
+      padding: '3px 8px',
+      fontSize: 11
+    }
+  }), React.createElement("button", {
     className: "btn-sm",
     onClick: () => onUpdate && onUpdate({
-      status: 'hold'
+      status: 'todo',
+      holdUntilDate: null,
+      holdCreatedWorkday: null
+    })
+  }, "再開")) : React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onUpdate && onUpdate({
+      status: 'hold',
+      holdUntilDate: nextWorkdayStr(),
+      holdCreatedWorkday: todayStr()
     })
   }, "今は無理"), !isStuck ? React.createElement("button", {
     className: "btn-sm",
@@ -2551,7 +2601,7 @@ function FocusView({
   onStartTally,
   running
 }) {
-  const allOpen = patients.flatMap(p => p.tasks.filter(t => t.status !== 'done').map(t => ({
+  const allOpen = patients.flatMap(p => p.tasks.filter(isActionableTask).map(t => ({
     ...t,
     patientId: p.id,
     patientName: p.name,
@@ -2749,10 +2799,10 @@ function DailyFocusView({
     const quickBoost = est <= 5 ? 35 : est <= 10 ? 18 : 0;
     const ts = timeStatus(t.scheduledTime, now);
     const timeBoost = ts === 'past' ? 260 : ts === 'now' ? 230 : ts === 'soon' ? 160 : ts === 'upcoming' ? 60 : 0;
-    const statusBoost = t.status === 'doing' ? 1000 : t.status === 'hold' ? -80 : 0;
+    const statusBoost = t.status === 'doing' ? 1000 : 0;
     return statusBoost + pri.weight * 100 + (due?.weight || 0) + timeBoost + quickBoost - est;
   };
-  const current = [...tasks.filter(t => t.status !== 'done')].sort((a, b) => score(b) - score(a))[0];
+  const current = [...tasks.filter(isActionableTask)].sort((a, b) => score(b) - score(a))[0];
   if (!current) return React.createElement("div", {
     className: "focus-card",
     style: {
@@ -2965,6 +3015,7 @@ function GeneralTaskSection({
     const isDone = task.status === 'done';
     const isDoing = task.status === 'doing';
     const isHold = task.status === 'hold';
+    const holdUntilDate = task.holdUntilDate || nextWorkdayStr();
     return React.createElement("li", {
       key: task.id,
       style: {
@@ -3086,7 +3137,23 @@ function GeneralTaskSection({
       fontWeight: 600,
       marginLeft: isDone && task.completedAt ? 0 : 'auto'
     }
-    }, est.label)), editingTaskId === task.id && React.createElement("div", {
+    }, est.label), isHold && React.createElement("span", {
+      className: "tag",
+      style: {
+        background: 'rgba(148,163,184,.14)',
+        color: 'var(--text-3)',
+        border: '1px solid var(--border)',
+        fontSize: 10
+      }
+    }, "保留"), isHold && React.createElement("span", {
+      className: "tag",
+      style: {
+        background: 'rgba(108,62,248,.08)',
+        color: 'var(--accent)',
+        border: '1px solid var(--border)',
+        fontSize: 10
+      }
+    }, holdUntilDate, "再開")), editingTaskId === task.id && React.createElement("div", {
       style: {
         display: 'flex',
         gap: 10,
@@ -3178,14 +3245,31 @@ function GeneralTaskSection({
     }, "\u4E2D\u65AD"), task.status !== 'hold' ? React.createElement("button", {
       className: "btn-sm",
       onClick: () => onUpdate(task.id, {
-        status: 'hold'
+        status: 'hold',
+        holdUntilDate: nextWorkdayStr(),
+        holdCreatedWorkday: todayStr()
       })
-    }, "\u4FDD\u7559") : React.createElement("button", {
+    }, "\u4FDD\u7559") : React.createElement(React.Fragment, null, React.createElement("input", {
+      type: "date",
+      value: holdUntilDate,
+      onChange: e => onUpdate(task.id, {
+        holdUntilDate: e.target.value || nextWorkdayStr()
+      }),
+      className: "inp",
+      title: "この日になったら自動で再開",
+      style: {
+        width: 'auto',
+        padding: '3px 8px',
+        fontSize: 11
+      }
+    }), React.createElement("button", {
       className: "btn-sm",
       onClick: () => onUpdate(task.id, {
-        status: 'todo'
+        status: 'todo',
+        holdUntilDate: null,
+        holdCreatedWorkday: null
       })
-    }, "\u623B\u3059"), React.createElement("button", {
+    }, "\u623B\u3059")), React.createElement("button", {
       className: "btn-sm",
       onClick: () => onRemove(task.id),
       style: {
@@ -8082,15 +8166,15 @@ function PatientTriage() {
   }))), [activePatients]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
   const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done').length, [flatTasks]);
-  const remainingPatientTasks = useMemo(() => flatTasks.filter(t => t.status !== 'done'), [flatTasks]);
-  const remainingGeneralTasks = useMemo(() => activeGeneralTasks.filter(t => t.status !== 'done'), [activeGeneralTasks]);
+  const remainingPatientTasks = useMemo(() => flatTasks.filter(isActionableTask), [flatTasks]);
+  const remainingGeneralTasks = useMemo(() => activeGeneralTasks.filter(isActionableTask), [activeGeneralTasks]);
   const donePatientTaskCount = useMemo(() => flatTasks.filter(t => t.status === 'done').length, [flatTasks]);
   const openGeneralCount = useMemo(() => activeGeneralTasks.filter(t => t.status !== 'done').length, [activeGeneralTasks]);
   const doneGeneralTaskCount = useMemo(() => activeGeneralTasks.filter(t => t.status === 'done').length, [activeGeneralTasks]);
   const openScheduledCount = useMemo(() => scheduledEvents.filter(e => e.status !== 'done').length, [scheduledEvents]);
   const doneTaskCount = donePatientTaskCount + doneGeneralTaskCount;
   const timedAlerts = useMemo(() => {
-    const patientAlerts = flatTasks.filter(t => t.status !== 'done' && t.scheduledTime).map(t => ({
+    const patientAlerts = flatTasks.filter(t => isActionableTask(t) && t.scheduledTime).map(t => ({
       ...t,
       ts: timeStatus(t.scheduledTime, now)
     })).filter(t => t.ts && (timedAlertMode === 'all' || t.ts === 'past' || t.ts === 'now' || t.ts === 'soon'));
@@ -8120,6 +8204,48 @@ function PatientTriage() {
     });
     return [...patientAlerts, ...eventAlerts, ...pendingAlerts].sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
   }, [flatTasks, scheduledEvents, now, timedAlertMode, pendingPatients]);
+  useEffect(() => {
+    if (!loaded) return;
+    const workDate = todayStr();
+    const activateHeldTasks = tasks => {
+      let changed = false;
+      const next = (tasks || []).map(task => {
+        if (task.status !== 'hold') return task;
+        if (!task.holdUntilDate) {
+          changed = true;
+          return {
+            ...task,
+            holdUntilDate: nextWorkdayStr(),
+            holdCreatedWorkday: task.holdCreatedWorkday || workDate
+          };
+        }
+        if (task.holdUntilDate > workDate) return task;
+        changed = true;
+        return {
+          ...task,
+          status: 'todo',
+          holdUntilDate: null,
+          holdCreatedWorkday: null
+        };
+      });
+      return changed ? next : tasks;
+    };
+    const activateHeldPatients = patients => {
+      let changed = false;
+      const next = (patients || []).map(patient => {
+        const originalTasks = patient.tasks || [];
+        const tasks = activateHeldTasks(originalTasks);
+        if (tasks === originalTasks) return patient;
+        changed = true;
+        return { ...patient, tasks };
+      });
+      return changed ? next : patients;
+    };
+    setPatients(activateHeldPatients);
+    setDailyPatients(activateHeldPatients);
+    setGeneralTasks(activateHeldTasks);
+    setDailyGeneralTasks(activateHeldTasks);
+  }, [loaded, now]);
   const cloneForUndo = value => JSON.parse(JSON.stringify(value));
   const rememberUndo = label => setUndoEntry({
     label,
@@ -8293,11 +8419,12 @@ function PatientTriage() {
   };
   const updateTask = (patientId, taskId, updates) => {
     if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('タスク状態変更');
+    const patch = withTaskStatusDefaults(updates);
     setActivePatients(prev => prev.map(p => p.id === patientId ? {
       ...p,
       tasks: p.tasks.map(t => t.id === taskId ? {
         ...t,
-        ...updates
+        ...patch
       } : t)
     } : p));
   };
@@ -8719,9 +8846,10 @@ function PatientTriage() {
   };
   const updateGeneralTask = (taskId, updates) => {
     if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('すきまタスク状態変更');
+    const patch = withTaskStatusDefaults(updates);
     setActiveGeneralTasks(prev => prev.map(t => t.id === taskId ? {
       ...t,
-      ...updates
+      ...patch
     } : t));
     if (suggestion?.task?.general && suggestion.task.id === taskId && updates.status === 'done') setSuggestion(null);
   };
@@ -9102,8 +9230,8 @@ function PatientTriage() {
   };
   const willClearSuggestedTasks = () => {
     if (!suggestion?.task) return false;
-    const remainingPatients = flatTasks.filter(task => task.status !== 'done' && !(task.id === suggestion.task.id && task.patientId === suggestion.task.patientId)).length;
-    const remainingGeneral = activeGeneralTasks.filter(task => task.status !== 'done' && !(suggestion.fromGeneral && task.id === suggestion.task.id)).length;
+    const remainingPatients = flatTasks.filter(task => isActionableTask(task) && !(task.id === suggestion.task.id && task.patientId === suggestion.task.patientId)).length;
+    const remainingGeneral = activeGeneralTasks.filter(task => isActionableTask(task) && !(suggestion.fromGeneral && task.id === suggestion.task.id)).length;
     return remainingPatients + remainingGeneral === 0;
   };
   const celebrateSuggestedClear = clear => {
