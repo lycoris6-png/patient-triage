@@ -828,8 +828,11 @@ const weekRangeForDate = dateStr => {
 const currentWeekRange = () => weekRangeForDate(todayStr());
 const pruneEndDayLogs = (logs, baseDate = todayStr()) => {
   const { start, end } = weekRangeForDate(baseDate);
-  return (Array.isArray(logs) ? logs : []).filter(log => log && log.date >= start && log.date <= end).map(normalizeEndDayLog).sort((a, b) => a.date.localeCompare(b.date));
+  return (Array.isArray(logs) ? logs : []).filter(log => log && log.date >= start && log.date <= end).map(normalizeEndDayLog).sort((a, b) => a.date.localeCompare(b.date) || (a.mode || '').localeCompare(b.mode || '') || (a.endedAt || 0) - (b.endedAt || 0));
 };
+const endDayMode = mode => mode === 'daily' ? 'daily' : 'patient';
+const endDayModeLabel = mode => endDayMode(mode) === 'daily' ? 'でいとり就寝' : 'ぺいとり業務終了';
+const endDayActionLabel = mode => endDayMode(mode) === 'daily' ? '今日はおやすみ' : '今日はおしまい';
 const weekdayLabel = dateStr => ['日', '月', '火', '水', '木', '金', '土'][new Date(dateStr + 'T00:00:00').getDay()] || '';
 const uniqueLogItems = (items, keyFor) => {
   const seen = new Set();
@@ -841,8 +844,11 @@ const uniqueLogItems = (items, keyFor) => {
   });
 };
 const normalizeEndDayLog = log => {
+  const mode = endDayMode(log?.mode);
   const normalized = {
     ...log,
+    id: log?.id || `${log?.date || todayStr()}-${mode}`,
+    mode,
     patientTasks: uniqueLogItems(log?.patientTasks, item => [item.patientName || '', item.title || '', item.completedAt || ''].join('|')),
     generalTasks: uniqueLogItems(log?.generalTasks, item => [item.mode || '', item.title || '', item.completedAt || ''].join('|')),
     events: uniqueLogItems(log?.events, item => [item.title || '', item.scheduledDate || '', item.scheduledTime || '', item.completedAt || ''].join('|'))
@@ -861,8 +867,8 @@ const formatEndDayLogs = (logs, baseDate = todayStr()) => {
     return lines.join('\n');
   }
   weekly.forEach(log => {
-    lines.push(`## ${log.date}(${weekdayLabel(log.date)})`);
-    lines.push(`終了 ${log.endedTime || '--:--'} / 完了 ${log.count || 0}件`);
+    lines.push(`## ${log.date}(${weekdayLabel(log.date)}) ${endDayModeLabel(log.mode)}`);
+    lines.push(`${endDayActionLabel(log.mode)} ${log.endedTime || '--:--'} / 完了 ${log.count || 0}件`);
     (log.patientTasks || []).forEach(item => lines.push(`- 患者: ${item.patientName || ''} / ${item.title || ''}`));
     (log.generalTasks || []).forEach(item => lines.push(`- ${item.mode === 'daily' ? 'でいとり' : 'すきま'}: ${item.title || ''}`));
     (log.events || []).forEach(item => lines.push(`- 予定: ${item.title || ''}${item.scheduledTime ? ' ' + item.scheduledTime : ''}`));
@@ -5019,6 +5025,8 @@ function EndDayLogSection({
   const { start, end } = currentWeekRange();
   const total = weekly.reduce((sum, log) => sum + (log.count || 0), 0);
   const lastEnd = weekly.map(log => log.endedTime || '').filter(Boolean).at(-1);
+  const patientCount = weekly.filter(log => log.mode !== 'daily').length;
+  const dailyCount = weekly.filter(log => log.mode === 'daily').length;
   return React.createElement("div", {
     className: "card",
     style: {
@@ -5051,7 +5059,7 @@ function EndDayLogSection({
       background: 'rgba(99,102,241,.14)',
       color: '#4338CA'
     }
-  }, weekly.length, "日 / ", total, "件", lastEnd ? ` / ${lastEnd}` : '')), open && React.createElement("div", {
+  }, patientCount, "業務 / ", dailyCount, "就寝 / ", total, "件", lastEnd ? ` / ${lastEnd}` : '')), open && React.createElement("div", {
     style: {
       padding: '12px 16px 16px',
       borderTop: '1px solid var(--border)',
@@ -5088,7 +5096,7 @@ function EndDayLogSection({
       fontSize: 12
     }
   }, "今週のおしまいログはまだありません。") : weekly.map(log => React.createElement("div", {
-    key: log.date,
+    key: `${log.date}-${log.mode}`,
     style: {
       background: 'var(--surface-2)',
       border: '1px solid var(--border)',
@@ -5108,7 +5116,7 @@ function EndDayLogSection({
       fontSize: 13,
       color: 'var(--text)'
     }
-  }, log.date, "(", weekdayLabel(log.date), ")", log.endedTime ? ` ${log.endedTime}` : ''), React.createElement("span", {
+  }, log.date, "(", weekdayLabel(log.date), ") ", endDayModeLabel(log.mode), log.endedTime ? ` ${log.endedTime}` : ''), React.createElement("span", {
     className: "tag",
     style: {
       background: 'rgba(22,163,74,.12)',
@@ -7695,6 +7703,7 @@ function PatientTriage() {
   const [dailyLinksOpen, setDailyLinksOpen] = useState(false);
   const [patientLinks, setPatientLinks] = useState([]);
   const [patientLinksOpen, setPatientLinksOpen] = useState(false);
+  const [closedPatientTasks, setClosedPatientTasks] = useState([]);
   const [lastDoneItems, setLastDoneItems] = useState(DEFAULT_LAST_DONE_ITEMS);
   const [lastDoneOpen, setLastDoneOpen] = useState(false);
   const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr() });
@@ -8065,6 +8074,7 @@ function PatientTriage() {
       setRoutinePresets(Array.isArray(parsed.routinePresets) ? parsed.routinePresets : DEFAULT_ROUTINE_PRESETS);
       setDailyLinks(Array.isArray(parsed.dailyLinks) ? parsed.dailyLinks : []);
       setPatientLinks(Array.isArray(parsed.patientLinks) ? parsed.patientLinks : []);
+      setClosedPatientTasks(Array.isArray(parsed.closedPatientTasks) ? parsed.closedPatientTasks : []);
       setLastDoneItems(Array.isArray(parsed.lastDoneItems) ? parsed.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
       setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
       setRewards(Array.isArray(parsed.rewards) ? parsed.rewards : []);
@@ -8092,6 +8102,7 @@ function PatientTriage() {
       routinePresets,
       dailyLinks,
       patientLinks,
+      closedPatientTasks,
       lastDoneItems,
       endDayLogs,
       rewards,
@@ -8103,7 +8114,7 @@ function PatientTriage() {
       workModeEnabled,
       workItems
     });
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -8121,12 +8132,13 @@ function PatientTriage() {
     const stamp = todayStr();
     const isMissed = item => item && item.status === 'done' && item.completedAt && workdayStrForTimestamp(item.completedAt) < stamp;
     const patientCount = [...patients, ...dailyPatients].reduce((sum, patient) => sum + (patient.tasks || []).filter(isMissed).length, 0);
+    const closedPatientCount = closedPatientTasks.filter(item => item && item.completedAt && workdayStrForTimestamp(item.completedAt) < stamp).length;
     const generalCount = [...generalTasks, ...dailyGeneralTasks].filter(isMissed).length;
-    const count = patientCount + generalCount;
+    const count = patientCount + closedPatientCount + generalCount;
     if (!count) return;
     endDayPromptShownRef.current = true;
     setMissedEndDayPrompt({ count });
-  }, [loaded, patients, dailyPatients, generalTasks, dailyGeneralTasks]);
+  }, [loaded, patients, dailyPatients, closedPatientTasks, generalTasks, dailyGeneralTasks]);
   useEffect(() => {
     if (!loaded || rolloverPromptShownRef.current) return;
     const { start, end } = currentWeekRange();
@@ -8156,6 +8168,7 @@ function PatientTriage() {
       return pa !== pb ? pa - pb : (a.createdAt || 0) - (b.createdAt || 0);
     });
   }, [activePatients, patientSortMode]);
+  const visiblePatients = useMemo(() => erOnly && !isDailyMode ? sortedPatients.filter(p => getPri(p) === 'er') : sortedPatients, [sortedPatients, erOnly, isDailyMode]);
   const flatTasks = useMemo(() => activePatients.flatMap(p => p.tasks.map(t => ({
     ...t,
     patientId: p.id,
@@ -8164,11 +8177,12 @@ function PatientTriage() {
     patientPlanned: getPri(p) === 'planned',
     patientAlerts: getPatientAlerts(p)
   }))), [activePatients]);
+  const visibleFlatTasks = useMemo(() => erOnly && !isDailyMode ? flatTasks.filter(t => t.patientPriority === 'er') : flatTasks, [flatTasks, erOnly, isDailyMode]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
   const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done').length, [flatTasks]);
   const remainingPatientTasks = useMemo(() => flatTasks.filter(isActionableTask), [flatTasks]);
   const remainingGeneralTasks = useMemo(() => activeGeneralTasks.filter(isActionableTask), [activeGeneralTasks]);
-  const donePatientTaskCount = useMemo(() => flatTasks.filter(t => t.status === 'done').length, [flatTasks]);
+  const donePatientTaskCount = useMemo(() => flatTasks.filter(t => t.status === 'done').length + (isDailyMode ? 0 : closedPatientTasks.length), [flatTasks, closedPatientTasks, isDailyMode]);
   const openGeneralCount = useMemo(() => activeGeneralTasks.filter(t => t.status !== 'done').length, [activeGeneralTasks]);
   const doneGeneralTaskCount = useMemo(() => activeGeneralTasks.filter(t => t.status === 'done').length, [activeGeneralTasks]);
   const openScheduledCount = useMemo(() => scheduledEvents.filter(e => e.status !== 'done').length, [scheduledEvents]);
@@ -8259,6 +8273,7 @@ function PatientTriage() {
     routinePresets: cloneForUndo(routinePresets),
     dailyLinks: cloneForUndo(dailyLinks),
     patientLinks: cloneForUndo(patientLinks),
+    closedPatientTasks: cloneForUndo(closedPatientTasks),
     lastDoneItems: cloneForUndo(lastDoneItems),
     endDayLogs: cloneForUndo(endDayLogs),
     rewards: cloneForUndo(rewards),
@@ -8285,6 +8300,7 @@ function PatientTriage() {
     setRoutinePresets(Array.isArray(undoEntry.routinePresets) ? undoEntry.routinePresets : DEFAULT_ROUTINE_PRESETS);
     setDailyLinks(Array.isArray(undoEntry.dailyLinks) ? undoEntry.dailyLinks : []);
     setPatientLinks(Array.isArray(undoEntry.patientLinks) ? undoEntry.patientLinks : []);
+    setClosedPatientTasks(Array.isArray(undoEntry.closedPatientTasks) ? undoEntry.closedPatientTasks : []);
     setLastDoneItems(Array.isArray(undoEntry.lastDoneItems) ? undoEntry.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
     setEndDayLogs(Array.isArray(undoEntry.endDayLogs) ? undoEntry.endDayLogs : []);
     setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
@@ -8326,6 +8342,19 @@ function PatientTriage() {
   const removePatient = id => {
     const patient = activePatients.find(p => p.id === id);
     if (patient) rememberUndo(`${patient.name}の終了`);
+    if (patient && !isDailyMode) {
+      const closedDoneTasks = (patient.tasks || []).filter(t => t.status === 'done').map(t => ({
+        id: t.id || uid(),
+        patientId: patient.id,
+        patientName: patient.name,
+        title: t.title,
+        type: t.type,
+        estimate: t.estimate,
+        completedAt: t.completedAt || Date.now(),
+        closedAt: Date.now()
+      }));
+      if (closedDoneTasks.length) setClosedPatientTasks(prev => [...prev, ...closedDoneTasks]);
+    }
     setActivePatients(prev => prev.filter(p => p.id !== id));
     if (patient) {
       showToast(`${patient.name} 終了おつかれさまでした`);
@@ -8550,6 +8579,7 @@ function PatientTriage() {
     const endedDate = extra.endedAt ? new Date(extra.endedAt) : new Date();
     const isLateEnd = trigger === 'endday' && endedDate.getHours() >= 20;
     const mode = isWorkMode ? 'work' : isDailyMode ? 'daily' : 'patient';
+    const endContext = mode === 'daily' ? '就寝前のでいとり締め。寝る準備に入るため、静かに労って休む方向へ送る。' : mode === 'work' ? 'わーとりの作業区切り。大きな仕事を一旦閉じ、続きは一覧へ預ける。' : 'ぺいとりの業務終了。勤務を閉じるため、完了分を片づけて帰る方向へ送る。';
     const character = pickAiCoachCharacter(trigger, mode);
     let weather = null;
     try {
@@ -8568,7 +8598,8 @@ function PatientTriage() {
       lateEndThreshold: '20:00',
       lateEndLabel: isLateEnd ? '20時過ぎ' : '',
       weather,
-      safety: '患者名、病棟、タスク名、医療判断は送らない。80字以内の短い励ましだけ。20時以降のおしまい時は遅くまで残ったことを労う。具体的な終了時刻はセリフに出さない。',
+      endContext,
+      safety: `患者名、病棟、タスク名、医療判断は送らない。80字以内の短い励ましだけ。${endContext}20時以降のおしまい時は遅くまで残ったことを労う。具体的な終了時刻はセリフに出さない。`,
       voiceInstruction: 'character.nameの本人として一言だけ返す。character.persona、rules、avoid、examplesを最優先し、一人称・語尾・温度感を守る。例文の丸写しではなく、同じ口調の新しい短文にする。'
     };
   };
@@ -8611,16 +8642,17 @@ function PatientTriage() {
   const mergeEndDayEntries = entries => setEndDayLogs(prev => {
     let next = [...(prev || [])];
     entries.forEach(entry => {
-      const existing = next.find(log => log.date === entry.date);
+      const mode = endDayMode(entry.mode);
+      const existing = next.find(log => log.date === entry.date && endDayMode(log.mode) === mode);
       const merged = normalizeEndDayLog(existing ? {
         ...existing,
         patientTasks: [...(existing.patientTasks || []), ...(entry.patientTasks || [])],
         generalTasks: [...(existing.generalTasks || []), ...(entry.generalTasks || [])],
         events: [...(existing.events || []), ...(entry.events || [])]
       } : entry);
-      next = [...next.filter(log => log.date !== entry.date), merged];
+      next = [...next.filter(log => !(log.date === entry.date && endDayMode(log.mode) === mode)), merged];
     });
-    return next.sort((a, b) => a.date.localeCompare(b.date));
+    return next.sort((a, b) => a.date.localeCompare(b.date) || (a.mode || '').localeCompare(b.mode || ''));
   });
   const sendMissedTasksToLogs = () => {
     const stamp = todayStr();
@@ -8646,6 +8678,15 @@ function PatientTriage() {
         completedAt: task.completedAt
       });
     }));
+    const collectClosedPatients = source => source.filter(item => item && item.completedAt && workdayStrForTimestamp(item.completedAt) < stamp).forEach(task => {
+      entryFor(workdayStrForTimestamp(task.completedAt)).patientTasks.push({
+        patientName: task.patientName,
+        title: task.title,
+        type: task.type,
+        estimate: task.estimate,
+        completedAt: task.completedAt
+      });
+    });
     const collectGeneral = (source, mode) => source.filter(isMissed).forEach(task => {
       entryFor(workdayStrForTimestamp(task.completedAt)).generalTasks.push({
         title: task.title,
@@ -8657,6 +8698,7 @@ function PatientTriage() {
     });
     collectPatients(patients);
     collectPatients(dailyPatients);
+    collectClosedPatients(closedPatientTasks);
     collectGeneral(generalTasks, 'patient');
     collectGeneral(dailyGeneralTasks, 'daily');
 
@@ -8668,6 +8710,7 @@ function PatientTriage() {
     mergeEndDayEntries(logs);
     setPatients(prev => prev.map(patient => ({ ...patient, tasks: (patient.tasks || []).filter(task => !isMissed(task)) })));
     setDailyPatients(prev => prev.map(patient => ({ ...patient, tasks: (patient.tasks || []).filter(task => !isMissed(task)) })));
+    setClosedPatientTasks(prev => prev.filter(task => !(task && task.completedAt && workdayStrForTimestamp(task.completedAt) < stamp)));
     setGeneralTasks(prev => prev.filter(task => !isMissed(task)));
     setDailyGeneralTasks(prev => prev.filter(task => !isMissed(task)));
     setMissedEndDayPrompt(null);
@@ -8710,8 +8753,11 @@ function PatientTriage() {
     const total = doneTaskCount;
     const endedAt = Date.now();
     const endedTime = formatHHMM(endedAt);
+    const mode = isDailyMode ? 'daily' : 'patient';
+    const actionLabel = endDayActionLabel(mode);
+    const logLabel = endDayModeLabel(mode);
     if (!total) {
-      showToast('完了済みタスクはまだありません。ここまでの整理だけでも十分です。');
+      showToast(isDailyMode ? '今日はおやすみ前に片づける完了タスクはまだありません。今日はここで休んで大丈夫です。' : '今日はおしまいで片づける完了タスクはまだありません。ここまでの整理だけでも十分です。');
       window.dispatchEvent(new CustomEvent('chibi-coach', {
         detail: {
           kind: 'idle'
@@ -8721,13 +8767,20 @@ function PatientTriage() {
     }
     rememberUndo('今日はおしまい');
     const stamp = todayStr();
-    const patientTasks = activePatients.flatMap(p => (p.tasks || []).filter(t => t.status === 'done').map(t => ({
+    const activePatientTasksDone = activePatients.flatMap(p => (p.tasks || []).filter(t => t.status === 'done').map(t => ({
       patientName: p.name,
       title: t.title,
       type: t.type,
       estimate: t.estimate,
       completedAt: t.completedAt || null
     })));
+    const patientTasks = isDailyMode ? activePatientTasksDone : [...closedPatientTasks.map(t => ({
+      patientName: t.patientName,
+      title: t.title,
+      type: t.type,
+      estimate: t.estimate,
+      completedAt: t.completedAt || t.closedAt || null
+    })), ...activePatientTasksDone];
     const generalTasksDone = activeGeneralTasks.filter(t => t.status === 'done').map(t => ({
       title: t.title,
       type: t.type,
@@ -8743,20 +8796,20 @@ function PatientTriage() {
       completedAt: e.completedAt || null
     }));
     const entry = {
-      id: stamp,
+      id: `${stamp}-${mode}`,
       date: stamp,
       weekStart: currentWeekRange().start,
       createdAt: endedAt,
       endedAt,
       endedTime,
-      mode: isDailyMode ? 'daily' : 'patient',
+      mode,
       count: patientTasks.length + generalTasksDone.length + eventsDone.length,
       patientTasks,
       generalTasks: generalTasksDone,
       events: eventsDone
     };
     setEndDayLogs(prev => {
-      const existing = (prev || []).find(log => log.date === stamp);
+      const existing = (prev || []).find(log => log.date === stamp && endDayMode(log.mode) === mode);
       const merged = normalizeEndDayLog(existing ? {
         ...entry,
         patientTasks: [...(existing.patientTasks || []), ...patientTasks],
@@ -8766,21 +8819,25 @@ function PatientTriage() {
         endedTime,
         events: [...(existing.events || []), ...eventsDone]
       } : entry);
-      return [...(prev || []).filter(log => log.date !== stamp), merged].sort((a, b) => a.date.localeCompare(b.date));
+      return [...(prev || []).filter(log => !(log.date === stamp && endDayMode(log.mode) === mode)), merged].sort((a, b) => a.date.localeCompare(b.date) || (a.mode || '').localeCompare(b.mode || ''));
     });
     setEndDayLogsOpen(true);
     setActivePatients(prev => prev.map(p => ({
       ...p,
       tasks: p.tasks.filter(t => t.status !== 'done')
     })));
+    if (!isDailyMode) setClosedPatientTasks([]);
     setActiveGeneralTasks(prev => prev.filter(t => t.status !== 'done'));
     setScheduledEvents(prev => prev.filter(e => !(e.status === 'done' && (!e.scheduledDate || e.scheduledDate === stamp))));
     if (suggestion?.task?.status === 'done') setSuggestion(null);
-    showToast(isDailyMode ? `今日の完了タスク ${total}件を片づけました。おつかれさまでした!` : `${endedTime}におしまい。今日の完了タスク ${total}件を片づけました。`);
+    showToast(isDailyMode ? `今日はおやすみ。完了タスク ${total}件を片づけました。` : `${endedTime}に今日はおしまい。完了タスク ${total}件を片づけました。`);
     setEndDayCelebrate({
       count: total,
       endedTime,
-      id: endedAt
+      id: endedAt,
+      mode,
+      actionLabel,
+      logLabel
     });
     const aiEndDayEnabled = aiCoachReady() && normalizeGasConfig(gasConfig).aiCoach.onEndDay;
     window.dispatchEvent(new CustomEvent('chibi-coach', {
@@ -9230,9 +9287,10 @@ function PatientTriage() {
   };
   const willClearSuggestedTasks = () => {
     if (!suggestion?.task) return false;
-    const remainingPatients = flatTasks.filter(task => isActionableTask(task) && !(task.id === suggestion.task.id && task.patientId === suggestion.task.patientId)).length;
+    const visibleTaskPool = erOnly && !isDailyMode ? flatTasks.filter(task => task.patientPriority === 'er') : flatTasks;
+    const remainingPatients = visibleTaskPool.filter(task => isActionableTask(task) && !(task.id === suggestion.task.id && task.patientId === suggestion.task.patientId)).length;
     const remainingGeneral = activeGeneralTasks.filter(task => isActionableTask(task) && !(suggestion.fromGeneral && task.id === suggestion.task.id)).length;
-    return remainingPatients + remainingGeneral === 0;
+    return remainingPatients + (erOnly && !isDailyMode ? 0 : remainingGeneral) === 0;
   };
   const celebrateSuggestedClear = clear => {
     if (!clear) return;
@@ -9556,6 +9614,7 @@ function PatientTriage() {
     routinePresets,
     dailyLinks,
     patientLinks,
+    closedPatientTasks,
     lastDoneItems,
     endDayLogs,
     rewards,
@@ -9580,6 +9639,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
+    if (Array.isArray(parsed.closedPatientTasks)) setClosedPatientTasks(parsed.closedPatientTasks);
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
     if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
@@ -9646,7 +9706,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -9658,6 +9718,7 @@ function PatientTriage() {
     routinePresets,
     dailyLinks,
     patientLinks,
+    closedPatientTasks,
     lastDoneItems,
     endDayLogs,
     rewards,
@@ -9730,6 +9791,7 @@ function PatientTriage() {
     if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
     if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
     if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
+    if (Array.isArray(parsed.closedPatientTasks)) setClosedPatientTasks(parsed.closedPatientTasks);
     if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
     if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
     if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
@@ -9934,11 +9996,11 @@ function PatientTriage() {
     }
   }, [{
     label: isWorkMode ? '仕事' : '受け持ち',
-    val: isWorkMode ? workItems.filter(item => item.status !== 'done' && item.status !== 'abandoned').length : isDailyMode ? activeGeneralTasks.length : activePatients.length,
+    val: isWorkMode ? workItems.filter(item => item.status !== 'done' && item.status !== 'abandoned').length : isDailyMode ? activeGeneralTasks.length : visiblePatients.length,
     color: 'rgba(255,255,255,.9)'
   }, {
     label: isWorkMode ? '一手' : '未完了',
-    val: isWorkMode ? workItems.reduce((sum, item) => sum + openWorkSteps(item).length, 0) : openTaskCount + openGeneralCount,
+    val: isWorkMode ? workItems.reduce((sum, item) => sum + openWorkSteps(item).length, 0) : erOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done').length : openTaskCount + openGeneralCount,
     color: 'rgba(255,255,255,.9)'
   }, {
     label: isWorkMode ? '今日の前進' : '今日の済',
@@ -10089,7 +10151,7 @@ function PatientTriage() {
     }
   }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), !isWorkMode && React.createElement("button", {
     onClick: requestEndDay,
-    title: "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u5168\u3066\u7247\u3065\u3051\u308B",
+    title: isDailyMode ? "\u5C31\u5BDD\u524D\u306B\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u7247\u3065\u3051\u308B" : "\u696D\u52D9\u7D42\u4E86\u3068\u3057\u3066\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u7247\u3065\u3051\u308B",
     style: {
       border: '2px solid rgba(255,255,255,.72)',
       borderRadius: 8,
@@ -10104,7 +10166,7 @@ function PatientTriage() {
       whiteSpace: 'nowrap',
       boxShadow: doneTaskCount ? '0 3px 10px rgba(22,163,74,.22)' : 'none'
     }
-  }, "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044!", doneTaskCount ? ` (${doneTaskCount})` : ''))), !isWorkMode && timedAlerts.length > 0 && React.createElement("div", {
+  }, isDailyMode ? "\u4ECA\u65E5\u306F\u304A\u3084\u3059\u307F!" : "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044!", doneTaskCount ? ` (${doneTaskCount})` : ''))), !isWorkMode && timedAlerts.length > 0 && React.createElement("div", {
     className: "alert-bar",
     style: {
       marginBottom: 16,
@@ -10203,10 +10265,14 @@ function PatientTriage() {
     style: filterButtonStyle(quickOnly)
   }, "☕️"), React.createElement("button", {
     className: `btn-ghost dock-icon${erOnly ? ' btn-ghost-active' : ''}`,
-    onClick: () => setErOnly(v => !v),
+    onClick: () => setErOnly(v => {
+      const next = !v;
+      if (next && (suggestion?.fromGeneral || suggestion?.task && suggestion.task.patientPriority !== 'er')) setSuggestion(null);
+      return next;
+    }),
     "aria-label": "ERのみ",
     "aria-pressed": erOnly,
-    title: erOnly ? "\u6B21\u306E\u4E00\u624B\u3092ER\u60A3\u8005\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u6B21\u306E\u4E00\u624B\u3092ER\u60A3\u8005\u306B\u7D5E\u308A\u8FBC\u3080",
+    title: erOnly ? "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092ER\u306E\u307F\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092ER\u306E\u307F\u306B\u7D5E\u308A\u8FBC\u3080",
     style: filterButtonStyle(erOnly)
   }, "ER")), React.createElement("div", {
     className: "action-cluster"
@@ -10443,7 +10509,7 @@ function PatientTriage() {
       flexDirection: 'column',
       gap: 10
     }
-  }, activePatients.length === 0 && React.createElement("div", {
+  }, visiblePatients.length === 0 && React.createElement("div", {
     style: {
       textAlign: 'center',
       padding: '56px 20px',
@@ -10454,7 +10520,7 @@ function PatientTriage() {
       background: 'rgba(255,255,255,.5)',
       fontWeight: 500
     }
-  }, "\u307E\u305A\u306F\u53D7\u3051\u6301\u3061\u30921\u4EBA\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"), sortedPatients.map(p => React.createElement(PatientCard, {
+  }, erOnly && !isDailyMode ? "\u8868\u793A\u4E2D\u306EER\u60A3\u8005\u306F\u3044\u307E\u305B\u3093" : "\u307E\u305A\u306F\u53D7\u3051\u6301\u3061\u30921\u4EBA\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"), visiblePatients.map(p => React.createElement(PatientCard, {
     key: p.id,
     patient: p,
     expanded: activeExpandedPatients[p.id],
@@ -11268,7 +11334,7 @@ function PatientTriage() {
       color: 'var(--text)',
       margin: '0 0 8px'
     }
-  }, "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044\u306B\u3059\u308B?"), React.createElement("p", {
+  }, isDailyMode ? "\u4ECA\u65E5\u306F\u304A\u3084\u3059\u307F\u306B\u3059\u308B?" : "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044\u306B\u3059\u308B?"), React.createElement("p", {
     style: {
       margin: '0 0 18px',
       color: 'var(--text-2)',
@@ -11276,7 +11342,7 @@ function PatientTriage() {
       lineHeight: 1.7,
       fontWeight: 600
     }
-  }, "\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF ", doneTaskCount, " \u4EF6\u3092\u4E00\u62EC\u3067\u7247\u3065\u3051\u307E\u3059\u3002\u672A\u5B8C\u4E86\u30BF\u30B9\u30AF\u306F\u6B8B\u308A\u307E\u3059\u3002"), React.createElement("div", {
+  }, isDailyMode ? "\u5C31\u5BDD\u524D\u306E\u533A\u5207\u308A\u3068\u3057\u3066\u3001\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF " : "\u696D\u52D9\u7D42\u4E86\u3068\u3057\u3066\u3001\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF ", doneTaskCount, " \u4EF6\u3092\u4E00\u62EC\u3067\u7247\u3065\u3051\u307E\u3059\u3002\u672A\u5B8C\u4E86\u30BF\u30B9\u30AF\u306F\u6B8B\u308A\u307E\u3059\u3002"), React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'flex-end',
@@ -11367,7 +11433,7 @@ function PatientTriage() {
       letterSpacing: '.08em',
       marginBottom: 8
     }
-  }, "\u672C\u65E5\u7D42\u4E86"), React.createElement("div", {
+  }, endDayCelebrate.mode === 'daily' ? "\u4ECA\u65E5\u306F\u304A\u3084\u3059\u307F" : "\u4ECA\u65E5\u306F\u304A\u3057\u307E\u3044"), React.createElement("div", {
     style: {
       position: 'relative',
       fontFamily: 'var(--font-serif)',
@@ -11375,7 +11441,7 @@ function PatientTriage() {
       fontWeight: 900,
       marginBottom: 8
     }
-  }, "\u304A\u3064\u304B\u308C\u3055\u307E\u3067\u3057\u305F!"), React.createElement("div", {
+  }, endDayCelebrate.mode === 'daily' ? "\u304A\u3084\u3059\u307F\u6E96\u5099OK!" : "\u304A\u3064\u304B\u308C\u3055\u307E\u3067\u3057\u305F!"), React.createElement("div", {
     style: {
       position: 'relative',
       fontSize: 14,
@@ -11388,7 +11454,7 @@ function PatientTriage() {
       color: 'var(--done)',
       fontSize: 22
     }
-  }, endDayCelebrate.count), " \u4EF6\u3092\u7247\u3065\u3051\u307E\u3057\u305F", !isDailyMode && endDayCelebrate.endedTime ? React.createElement("span", null, "（", endDayCelebrate.endedTime, "）") : null), React.createElement("div", {
+  }, endDayCelebrate.count), " \u4EF6\u3092\u7247\u3065\u3051\u307E\u3057\u305F", endDayCelebrate.mode !== 'daily' && endDayCelebrate.endedTime ? React.createElement("span", null, "（", endDayCelebrate.endedTime, "）") : null), React.createElement("div", {
     style: {
       position: 'relative',
       marginTop: 12,
@@ -11396,7 +11462,7 @@ function PatientTriage() {
       fontSize: 12,
       fontWeight: 700
     }
-  }, "\u4ECA\u65E5\u306E\u4F5C\u696D\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
+  }, endDayCelebrate.mode === 'daily' ? "\u4ECA\u65E5\u306E\u751F\u6D3B\u30BF\u30B9\u30AF\u306F\u3053\u3053\u307E\u3067\u3002\u4F11\u3080\u65B9\u5411\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u3087\u3046\u3002" : "\u4ECA\u65E5\u306E\u696D\u52D9\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
   }, toast), React.createElement(TimerQuickLauncher, {
     running: runningTask,
