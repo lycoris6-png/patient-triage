@@ -61,6 +61,17 @@ If GitHub Pages is enabled from the repository root on `master`, the public URL 
 
 https://lycoris6-png.github.io/patient-triage/
 
+## Dialogue (セリフ) Editing
+
+All character dialogue lives in **`dialogue.js`** (`window.APP_DIALOGUE`) — characters' personas/voice rules, lines per mode (ぺいとり/でいとり/わーとり) and scene (start/suggest/add/done/tally/allclear/endday/stuck/idle/daydream), estimate announcements (with `{count}`/`{duration}`/`{finishTime}`/`{freeDuration}` placeholders), reward popups, and milestone toasts.
+
+Two ways to edit:
+
+1. Edit `dialogue.js` directly (or ask an AI tool to — the file is self-documenting).
+2. Open **`dialogue-editor.html`** in a browser (also reachable from the app: データ panel → 🎭 セリフ編集…). Edit in forms, preview lines, then download the regenerated `dialogue.js` and replace the file.
+
+The engine in `index.html` and `prototype_unified_triage.app.js` only reads `window.APP_DIALOGUE`; adding/removing lines per scene is safe (a random line is picked each time; an empty scene falls back to idle lines). After replacing `dialogue.js`, bump `CACHE_NAME` in `service-worker.js` if you want installed PWAs to pick it up immediately.
+
 ## GAS Sync Notes
 
 The unified prototype now includes `updatedAt` (epoch ms) at the top of every push payload, and reads the JSON response of the POST when CORS allows it. To protect against a stale device silently overwriting newer data (last-write-wins problem), extend the GAS `doPost(e)` to reject pushes older than what is stored:

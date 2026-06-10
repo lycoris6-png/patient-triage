@@ -876,14 +876,15 @@ const formatEndDayLogs = (logs, baseDate = todayStr()) => {
   });
   return lines.join('\n').trimEnd();
 };
-const MILESTONE_LINES = {
+// マイルストーンのセリフは dialogue.js で編集できます(ここは読み込みフォールバック付き)
+const MILESTONE_LINES = Object.assign({
   5: '今日5件終了。いい流れです。',
   10: '今日10件終了。かなり片づいてきました。',
   15: '今日15件終了。ここまで積めたのは大きいです。',
   20: '今日20件終了。今日は相当動いています。',
   25: '今日25件終了。少し息を入れつつ、この調子です。',
   30: '今日30件終了。ここまで来たら十分すごいです。'
-};
+}, (typeof window !== 'undefined' && window.APP_DIALOGUE && window.APP_DIALOGUE.milestones) || {});
 const milestoneForDone = count => count <= 30 && count % 5 === 0 ? count : null;
 const PATIENT_ALERTS = [{ id: 'medHold', icon: '💊', label: '中断薬あり' }, { id: 'fasting', icon: '🍙', label: '欠食あり' }, { id: 'rehabMissing', icon: '🏃‍♀️', label: 'リハビリ未介入' }];
 const getPatientAlerts = patient => PATIENT_ALERTS.filter(alert => patient?.alerts?.[alert.id]);
@@ -11236,6 +11237,13 @@ function PatientTriage() {
       padding: '7px 14px'
     }
   }, "\u30AF\u30EA\u30C3\u30D7\u30DC\u30FC\u30C9\u306B\u30B3\u30D4\u30FC"), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => window.open('./dialogue-editor.html', '_blank'),
+    style: {
+      fontSize: 11,
+      padding: '7px 14px'
+    }
+  }, "\uD83C\uDFAD \u30BB\u30EA\u30D5\u7DE8\u96C6\u2026"), React.createElement("button", {
     className: "btn-ghost",
     onClick: () => setImportDialog(true),
     style: {
