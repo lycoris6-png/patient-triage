@@ -4,7 +4,7 @@
   "description": "患者さんの処置タスクと日常タスクを切り替えて整理するトリアージアプリ",
   "lang": "ja",
   "id": "/patient-triage/unified",
-  "start_url": "./prototype_unified_triage.html?source=pwa",
+  "start_url": "./index.html?source=pwa",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

@@ -1179,8 +1179,284 @@ const loadLocal = key => {
 const saveLocal = (key, val) => {
   try {
     localStorage.setItem(key, JSON.stringify(val));
+    return true;
+  } catch {
+    return false;
+  }
+};
+const BACKUP_KEY_PREFIX = 'patient-triage-backup-';
+const BACKUP_KEEP_DAYS = 3;
+const listBackupKeys = () => {
+  const keys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(BACKUP_KEY_PREFIX)) keys.push(key);
+    }
+  } catch {}
+  return keys.sort();
+};
+const pruneBackups = keep => {
+  const keys = listBackupKeys();
+  keys.slice(0, Math.max(0, keys.length - keep)).forEach(key => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  });
+};
+const backupMainStore = () => {
+  try {
+    const key = BACKUP_KEY_PREFIX + todayStr();
+    if (localStorage.getItem(key)) return;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      localStorage.setItem(key, raw);
+    } catch {
+      pruneBackups(1);
+      localStorage.setItem(key, raw);
+    }
+    pruneBackups(BACKUP_KEEP_DAYS);
   } catch {}
 };
+function BackupRestoreSection({
+  onRestore
+}) {
+  const keys = listBackupKeys();
+  return React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, React.createElement("p", {
+    style: {
+      fontWeight: 700,
+      color: 'var(--text-2)',
+      marginBottom: 8,
+      fontSize: 12
+    }
+  }, "自動バックアップ（直近", BACKUP_KEEP_DAYS, "日 / 1日1回）"), keys.length ? React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 7
+    }
+  }, keys.slice().reverse().map(key => React.createElement("button", {
+    key: key,
+    className: "btn-ghost",
+    onClick: () => onRestore(key),
+    style: {
+      fontSize: 11,
+      padding: '7px 14px'
+    }
+  }, key.slice(BACKUP_KEY_PREFIX.length), " に戻す"))) : React.createElement("p", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      margin: 0
+    }
+  }, "まだバックアップはありません（次の保存時に作成されます）。"));
+}
+// ── アプリ内ダイアログ(window.prompt / confirm / alert の置き換え) ──
+// appConfirm({title, message, confirmText, cancelText, danger}) -> Promise<boolean>
+// appForm({title, message, fields:[{key,label,type,defaultValue,placeholder}], ...}) -> Promise<object|null>
+// appPrompt({title, label, defaultValue, type, ...}) -> Promise<string|null>
+let appDialogShow = null;
+const appDialogRequest = opts => new Promise(resolve => {
+  if (typeof appDialogShow === 'function') {
+    appDialogShow({
+      ...opts,
+      resolve
+    });
+    return;
+  }
+  // ホスト未マウント時のフォールバック(通常は通らない)
+  if (opts.kind === 'form') {
+    const out = {};
+    for (const f of opts.fields || []) {
+      const v = window.prompt(f.label || opts.title || '', f.defaultValue != null ? String(f.defaultValue) : '');
+      if (v === null) {
+        resolve(null);
+        return;
+      }
+      out[f.key] = v;
+    }
+    resolve(out);
+    return;
+  }
+  resolve(window.confirm([opts.title, opts.message].filter(Boolean).join('\n')));
+});
+const appConfirm = opts => appDialogRequest({
+  kind: 'confirm',
+  ...opts
+});
+const appForm = opts => appDialogRequest({
+  kind: 'form',
+  ...opts
+});
+const appPrompt = async ({
+  title,
+  message,
+  label,
+  defaultValue,
+  type,
+  placeholder,
+  confirmText
+}) => {
+  const res = await appForm({
+    title,
+    message,
+    confirmText,
+    fields: [{
+      key: 'value',
+      label,
+      defaultValue,
+      type,
+      placeholder
+    }]
+  });
+  return res ? res.value : null;
+};
+const appAlert = opts => appConfirm({
+  cancelText: null,
+  ...opts
+});
+function AppDialogHost() {
+  const {
+    useState,
+    useEffect,
+    useRef
+  } = React;
+  const [req, setReq] = useState(null);
+  const [values, setValues] = useState({});
+  const focusRef = useRef(null);
+  useEffect(() => {
+    appDialogShow = r => {
+      const vals = {};
+      (r.fields || []).forEach(f => {
+        vals[f.key] = f.defaultValue != null ? String(f.defaultValue) : '';
+      });
+      setValues(vals);
+      setReq(r);
+    };
+    return () => {
+      appDialogShow = null;
+    };
+  }, []);
+  useEffect(() => {
+    if (req && focusRef.current) focusRef.current.focus();
+  }, [req]);
+  if (!req) return null;
+  const isForm = req.kind === 'form';
+  const close = result => {
+    setReq(null);
+    req.resolve(result);
+  };
+  const cancel = () => close(isForm ? null : false);
+  const submit = () => close(isForm ? {
+    ...values
+  } : true);
+  const fields = isForm ? req.fields || [] : [];
+  return React.createElement("div", {
+    className: "dialog-bg",
+    style: {
+      zIndex: 9200
+    },
+    onClick: cancel
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    onKeyDown: e => {
+      if (e.key === 'Escape') cancel();
+    },
+    style: {
+      maxWidth: 420
+    }
+  }, React.createElement("h3", {
+    style: {
+      fontFamily: 'var(--font-serif)',
+      fontSize: 17,
+      fontWeight: 800,
+      color: 'var(--text)',
+      margin: '0 0 8px'
+    }
+  }, req.title || '確認'), req.message && React.createElement("p", {
+    style: {
+      margin: '0 0 14px',
+      color: 'var(--text-2)',
+      fontSize: 13,
+      lineHeight: 1.7,
+      whiteSpace: 'pre-line'
+    }
+  }, req.message), fields.map((f, i) => React.createElement("label", {
+    key: f.key,
+    style: {
+      display: 'block',
+      marginBottom: 12
+    }
+  }, f.label && React.createElement("span", {
+    style: {
+      display: 'block',
+      fontSize: 11,
+      fontWeight: 700,
+      color: 'var(--text-2)',
+      marginBottom: 5
+    }
+  }, f.label), f.type === 'textarea' ? React.createElement("textarea", {
+    className: "inp",
+    ref: i === 0 ? focusRef : null,
+    value: values[f.key] || '',
+    placeholder: f.placeholder || '',
+    rows: 6,
+    onChange: e => setValues(prev => ({
+      ...prev,
+      [f.key]: e.target.value
+    })),
+    style: {
+      resize: 'vertical',
+      fontFamily: 'monospace',
+      fontSize: 12
+    }
+  }) : React.createElement("input", {
+    className: "inp",
+    ref: i === 0 ? focusRef : null,
+    type: f.type === 'number' ? 'number' : 'text',
+    inputMode: f.type === 'number' ? 'numeric' : undefined,
+    value: values[f.key] || '',
+    placeholder: f.placeholder || '',
+    onChange: e => setValues(prev => ({
+      ...prev,
+      [f.key]: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    }
+  }))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 8,
+      marginTop: 16
+    }
+  }, req.cancelText !== null && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: cancel,
+    style: {
+      fontSize: 13,
+      padding: '8px 16px'
+    }
+  }, req.cancelText || 'キャンセル'), React.createElement("button", {
+    className: req.danger ? "btn-rose" : "btn-dark",
+    ref: fields.length ? null : focusRef,
+    onClick: submit,
+    style: {
+      fontSize: 13,
+      padding: '8px 18px'
+    }
+  }, req.confirmText || 'OK'))));
+}
 const DEFAULT_GAS_CONFIG = {
   url: '',
   secret: '',
@@ -1241,27 +1517,57 @@ function dateLabel(dateStr) {
   const today = todayStr();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  const tomorrowStr = dateStrFromDate(tomorrow);
   if (dateStr === today) return '今日';
   if (dateStr === tomorrowStr) return '明日';
   const [, month, day] = dateStr.split('-');
   return month && day ? `${Number(month)}/${Number(day)}` : dateStr;
 }
 async function gasFetch(cfg, payload) {
-  await fetch(cfg.url, {
-    method: 'POST',
-    body: JSON.stringify({
-      secret: cfg.secret,
-      data: payload
-    }),
-    headers: {
-      'Content-Type': 'text/plain'
-    },
-    mode: 'no-cors'
+  const body = JSON.stringify({
+    secret: cfg.secret,
+    data: payload
   });
-  return {
-    ok: true
-  };
+  // text/plainのPOSTはシンプルリクエストなのでGASのCORS応答を読める。
+  // 応答を確認して、URL間違い・シークレット不一致を「保存成功」と誤表示しないようにする。
+  try {
+    const res = await fetch(cfg.url, {
+      method: 'POST',
+      body,
+      headers: {
+        'Content-Type': 'text/plain'
+      }
+    });
+    if (!res.ok) return {
+      ok: false,
+      error: `HTTP ${res.status}`
+    };
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (data && data.ok === false) return {
+        ok: false,
+        error: String(data.error || '保存エラー')
+      };
+    } catch {}
+    return {
+      ok: true
+    };
+  } catch {
+    // CORSで応答を読めない環境では、従来どおり送信だけ行う(確認不可)
+    await fetch(cfg.url, {
+      method: 'POST',
+      body,
+      headers: {
+        'Content-Type': 'text/plain'
+      },
+      mode: 'no-cors'
+    });
+    return {
+      ok: true,
+      unverified: true
+    };
+  }
 }
 function gasJsonp(cfg, params = {}) {
   return new Promise((resolve, reject) => {
@@ -5507,7 +5813,6 @@ const TIMER_CHIBI = {
 };
 function FloatingTimerBar({
   running,
-  now,
   onIncrement,
   onAddMinute,
   onPauseToggle,
@@ -5515,6 +5820,37 @@ function FloatingTimerBar({
   onStop,
   onComplete
 }) {
+  // 毎秒のtickはこのバーの中だけで完結させ、アプリ全体の再レンダリングを避ける
+  const [now, setNow] = React.useState(Date.now());
+  const firedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!running || running.pausedAt) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+  React.useEffect(() => {
+    if (!running || running.mode !== 'timer') {
+      firedRef.current = false;
+      return;
+    }
+    if (running.pausedAt) return;
+    const over = elapsedMsOf(running, now) >= (running.durationMs || 0);
+    if (over && !firedRef.current) {
+      firedRef.current = true;
+      try {
+        if (navigator.vibrate) navigator.vibrate([180, 80, 180]);
+      } catch {}
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: 'done',
+          text: `⏰ ${running.title} の見積もり時間です`
+        }
+      }));
+    } else if (!over && firedRef.current) {
+      firedRef.current = false;
+    }
+  }, [running, now]);
   if (!running) return null;
   const isTally = running.mode === 'tally';
   const paused = !!running.pausedAt;
@@ -6327,8 +6663,12 @@ function WorkingTriageView({
       };
     });
   };
-  const markBlock = (itemId, stepId, blockType) => {
-    const note = window.prompt(blockType === 'waiting' ? '何を / 誰を待ちますか？（任意・後で編集可）' : '何が引っかかっていますか？（任意・後で編集可）', '');
+  const markBlock = async (itemId, stepId, blockType) => {
+    const note = await appPrompt({
+      title: blockType === 'waiting' ? '外部要因の待ちにする' : '抵抗ありにする',
+      label: blockType === 'waiting' ? '何を / 誰を待ちますか？（任意・後で編集可）' : '何が引っかかっていますか？（任意・後で編集可）',
+      defaultValue: ''
+    });
     if (note === null) return;
     rememberWorkChange(blockType === 'waiting' ? 'わーとり待ち設定' : 'わーとり抵抗あり設定');
     const now = Date.now();
@@ -6427,8 +6767,12 @@ function WorkingTriageView({
     setItems(prev => prev.filter(item => item.id !== itemId));
     showToast('完了/撤退した仕事を削除しました');
   };
-  const addStep = (itemId, parentId = null) => {
-    const title = window.prompt(parentId ? '追加する子タスク' : '追加するタスク');
+  const addStep = async (itemId, parentId = null) => {
+    const title = await appPrompt({
+      title: parentId ? '子タスクを追加' : 'タスクを追加',
+      label: parentId ? '追加する子タスク' : '追加するタスク',
+      confirmText: '追加'
+    });
     if (!title || !title.trim()) return;
     rememberWorkChange(parentId ? 'わーとり子一手追加' : 'わーとり一手追加');
     updateItem(itemId, item => {
@@ -6456,8 +6800,13 @@ function WorkingTriageView({
       };
     });
   };
-  const reSplitItem = (itemId, parentStepId = null) => {
-    const text = window.prompt(parentStepId ? 'この一手をさらに分けるJSONを貼り付けてください。子一手として追加します。' : 'この仕事の再分割JSONを貼り付けてください。一手を追加します。');
+  const reSplitItem = async (itemId, parentStepId = null) => {
+    const text = await appPrompt({
+      title: parentStepId ? '一手をさらに分ける' : '仕事を再分解する',
+      label: parentStepId ? 'この一手をさらに分けるJSONを貼り付けてください。子一手として追加します。' : 'この仕事の再分割JSONを貼り付けてください。一手を追加します。',
+      type: 'textarea',
+      confirmText: '取り込む'
+    });
     if (!text || !text.trim()) return;
     try {
       const imported = parseWorkImport(text)[0];
@@ -7103,8 +7452,13 @@ function WorkingTriageView({
       style: { fontSize: 11, padding: '4px 9px', color: 'var(--accent)' }
     }, "activeに戻す"), React.createElement("button", {
       className: "btn-sm",
-      onClick: () => {
-        if (window.confirm(`「${item.title}」を削除しますか？`)) removeItem(item.id);
+      onClick: async () => {
+        if (await appConfirm({
+          title: '仕事を削除',
+          message: `「${item.title}」を削除しますか？`,
+          confirmText: '削除する',
+          danger: true
+        })) removeItem(item.id);
       },
       style: { fontSize: 11, padding: '4px 9px', color: '#DC2626' }
     }, "削除")) : React.createElement(React.Fragment, null, React.createElement("button", {
@@ -7113,8 +7467,12 @@ function WorkingTriageView({
       style: { fontSize: 11, padding: '4px 9px' }
     }, isWorkEditing ? '閉' : '編集'), item.status !== 'done' && React.createElement("button", {
       className: "btn-sm",
-      onClick: () => {
-        if (window.confirm(`「${item.title}」を終了にしますか？`)) setItemStatus(item.id, 'done');
+      onClick: async () => {
+        if (await appConfirm({
+          title: '仕事を終了',
+          message: `「${item.title}」を終了にしますか？`,
+          confirmText: '終了にする'
+        })) setItemStatus(item.id, 'done');
       },
       style: { fontSize: 11, padding: '4px 9px', color: 'var(--done)' }
     }, "終了"))))), React.createElement("div", {
@@ -7186,8 +7544,13 @@ function WorkingTriageView({
       style: { fontSize: 11, padding: '5px 10px', opacity: .75, marginLeft: 'auto' }
     }, "再分割JSON"), item.status !== 'abandoned' && React.createElement("button", {
       className: "btn-sm",
-      onClick: () => {
-        if (window.confirm(`「${item.title}」を撤退としますか？`)) setItemStatus(item.id, 'abandoned');
+      onClick: async () => {
+        if (await appConfirm({
+          title: '撤退にする',
+          message: `「${item.title}」を撤退としますか？`,
+          confirmText: '撤退する',
+          danger: true
+        })) setItemStatus(item.id, 'abandoned');
       },
       style: { fontSize: 11, padding: '5px 10px', color: 'var(--text-3)' }
     }, "撤退")), workStepChildren(item, null).map(step => renderStep(item, step)), (() => {
@@ -7212,8 +7575,12 @@ function WorkingTriageView({
         title: doneSteps.map(s => s.title).join('\n')
       }, preview), React.createElement("button", {
         className: "btn-sm",
-        onClick: () => {
-          if (window.confirm(`完了タスク ${doneSteps.length}件を一覧から外して、ログに送りますか？\n（ログには「完了 ${doneSteps.length}件をログ送り」として残ります）`)) archiveCompletedSteps(item.id);
+        onClick: async () => {
+          if (await appConfirm({
+            title: 'ログ送り',
+            message: `完了タスク ${doneSteps.length}件を一覧から外して、ログに送りますか？\n（ログには「完了 ${doneSteps.length}件をログ送り」として残ります）`,
+            confirmText: 'ログに送る'
+          })) archiveCompletedSteps(item.id);
         },
         style: { fontSize: 11, padding: '5px 10px', color: 'var(--done)', fontWeight: 700 }
       }, "ログ送り"));
@@ -7767,10 +8134,8 @@ function PatientTriage() {
     const saved = loadLocal(HEADER_BACKDROP_STORAGE_KEY);
     return HEADER_BACKDROP_MODES.includes(saved) ? saved : 'auto';
   });
-  const [tweaksOpen, setTweaksOpen] = useState(false);
   const [undoEntry, setUndoEntry] = useState(null);
   const [runningTask, setRunningTask] = useState(null);
-  const [runningTick, setRunningTick] = useState(Date.now());
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('triage-running-change', {
       detail: {
@@ -7785,28 +8150,6 @@ function PatientTriage() {
       }
     }));
   }, [runningTask]);
-  useEffect(() => {
-    if (!runningTask || runningTask.pausedAt) return;
-    const id = setInterval(() => setRunningTick(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [runningTask]);
-  const timerFiredRef = React.useRef(false);
-  useEffect(() => {
-    if (!runningTask || runningTask.mode !== 'timer' || runningTask.pausedAt) return;
-    const elapsed = elapsedMsOf(runningTask, runningTick);
-    if (!timerFiredRef.current && elapsed >= runningTask.durationMs) {
-      timerFiredRef.current = true;
-      try {
-        if (navigator.vibrate) navigator.vibrate([180, 80, 180]);
-      } catch {}
-      window.dispatchEvent(new CustomEvent('chibi-coach', {
-        detail: {
-          kind: 'done',
-          text: `⏰ ${runningTask.title} の見積もり時間です`
-        }
-      }));
-    }
-  }, [runningTask, runningTick]);
   const startTimer = task => {
     if (!task) return;
     const mins = estimateMinutes(task);
@@ -7814,7 +8157,6 @@ function PatientTriage() {
       showToast('見積もり分が未設定です');
       return;
     }
-    timerFiredRef.current = false;
     setRunningTask({
       mode: 'timer',
       taskId: task.id,
@@ -7826,13 +8168,18 @@ function PatientTriage() {
       accumulatedPaused: 0,
       durationMs: mins * 60 * 1000
     });
-    setRunningTick(Date.now());
   };
-  const startTally = task => {
+  const startTally = async task => {
     if (!task) return;
     const existing = Number.parseInt(task.targetCount, 10);
     const defaultVal = Number.isFinite(existing) && existing > 0 ? existing : '';
-    const input = window.prompt('何件で計測しますか？（半角数字）', String(defaultVal || ''));
+    const input = await appPrompt({
+      title: '件数カウンター',
+      label: '何件で計測しますか？',
+      type: 'number',
+      defaultValue: String(defaultVal || ''),
+      confirmText: 'スタート'
+    });
     if (input === null) return;
     const target = Number.parseInt(input, 10);
     if (!Number.isFinite(target) || target <= 0) {
@@ -7848,7 +8195,6 @@ function PatientTriage() {
         targetCount: target
       });
     }
-    timerFiredRef.current = false;
     setRunningTask({
       mode: 'tally',
       taskId: task.id,
@@ -7861,20 +8207,29 @@ function PatientTriage() {
       targetCount: target,
       currentCount: 0
     });
-    setRunningTick(Date.now());
   };
-  const startManualTimer = () => {
-    const titleInput = window.prompt('何のタイマーにしますか？', '自由タイマー');
-    if (titleInput === null) return;
-    const title = titleInput.trim() || '自由タイマー';
-    const minsInput = window.prompt('何分で測りますか？', generalForm.estimate || '5');
-    if (minsInput === null) return;
-    const mins = Number.parseFloat(minsInput);
+  const startManualTimer = async () => {
+    const res = await appForm({
+      title: '自由タイマー',
+      confirmText: 'スタート',
+      fields: [{
+        key: 'title',
+        label: '何のタイマーにしますか？',
+        defaultValue: '自由タイマー'
+      }, {
+        key: 'mins',
+        label: '何分で測りますか？',
+        type: 'number',
+        defaultValue: generalForm.estimate || '5'
+      }]
+    });
+    if (res === null) return;
+    const title = res.title.trim() || '自由タイマー';
+    const mins = Number.parseFloat(res.mins);
     if (!Number.isFinite(mins) || mins <= 0) {
       showToast('1分以上の数字で指定してください');
       return;
     }
-    timerFiredRef.current = false;
     setRunningTask({
       mode: 'timer',
       taskId: null,
@@ -7886,20 +8241,29 @@ function PatientTriage() {
       accumulatedPaused: 0,
       durationMs: mins * 60 * 1000
     });
-    setRunningTick(Date.now());
   };
-  const startManualTally = () => {
-    const titleInput = window.prompt('何を数えますか？', '件数クリッカー');
-    if (titleInput === null) return;
-    const title = titleInput.trim() || '件数クリッカー';
-    const input = window.prompt('何件で区切りますか？', '');
-    if (input === null) return;
-    const target = Number.parseInt(input, 10);
+  const startManualTally = async () => {
+    const res = await appForm({
+      title: '件数クリッカー',
+      confirmText: 'スタート',
+      fields: [{
+        key: 'title',
+        label: '何を数えますか？',
+        defaultValue: '件数クリッカー'
+      }, {
+        key: 'count',
+        label: '何件で区切りますか？',
+        type: 'number',
+        placeholder: '例: 10'
+      }]
+    });
+    if (res === null) return;
+    const title = res.title.trim() || '件数クリッカー';
+    const target = Number.parseInt(res.count, 10);
     if (!Number.isFinite(target) || target <= 0) {
       showToast('1以上の整数で指定してください');
       return;
     }
-    timerFiredRef.current = false;
     setRunningTask({
       mode: 'tally',
       taskId: null,
@@ -7912,11 +8276,9 @@ function PatientTriage() {
       targetCount: target,
       currentCount: 0
     });
-    setRunningTick(Date.now());
   };
   const stopRunning = () => {
     setRunningTask(null);
-    timerFiredRef.current = false;
   };
   const pauseToggleRunning = () => {
     setRunningTask(prev => {
@@ -7935,7 +8297,6 @@ function PatientTriage() {
     });
   };
   const resetRunning = () => {
-    timerFiredRef.current = false;
     setRunningTask(prev => prev ? {
       ...prev,
       startedAt: Date.now(),
@@ -7943,14 +8304,12 @@ function PatientTriage() {
       accumulatedPaused: 0,
       currentCount: prev.mode === 'tally' ? 0 : prev.currentCount
     } : prev);
-    setRunningTick(Date.now());
   };
   const addMinuteRunning = () => {
     setRunningTask(prev => prev && prev.mode === 'timer' ? {
       ...prev,
       durationMs: (prev.durationMs || 0) + 60000
     } : prev);
-    timerFiredRef.current = false;
   };
   const incrementRunning = () => {
     setRunningTask(prev => {
@@ -7996,7 +8355,6 @@ function PatientTriage() {
     celebrateSuggestedClear(clear);
     if (focusMode) setLowEnergyNeedsNext(true);
     setRunningTask(null);
-    timerFiredRef.current = false;
   };
   const effectiveHeaderBackdrop = useMemo(() => getHeaderBackdrop(headerBackdropMode, now), [headerBackdropMode, now]);
   const isDailyMode = appMode === 'daily';
@@ -8050,48 +8408,21 @@ function PatientTriage() {
     saveLocal(HEADER_BACKDROP_STORAGE_KEY, headerBackdropMode);
   }, [headerBackdropMode, effectiveHeaderBackdrop]);
   useEffect(() => {
-    const handler = e => {
-      if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
-      if (e.data?.type === '__deactivate_edit_mode') setTweaksOpen(false);
-    };
-    window.addEventListener('message', handler);
-    window.parent.postMessage({
-      type: '__edit_mode_available'
-    }, '*');
-    return () => window.removeEventListener('message', handler);
-  }, []);
-  useEffect(() => {
     const parsed = loadLocal(STORAGE_KEY);
     if (parsed) {
-      setPatients(parsed.patients || []);
-      setDailyPatients(Array.isArray(parsed.dailyPatients) ? parsed.dailyPatients : []);
-      if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
-      setTemplates(Array.isArray(parsed.templates) ? parsed.templates : DEFAULT_TEMPLATES);
-      setQuickPatientPresets(Array.isArray(parsed.quickPatientPresets) ? parsed.quickPatientPresets : Array.isArray(parsed.quickGeneralPresets) ? parsed.quickGeneralPresets : QUICK_PATIENT_TASKS);
-      setQuickGeneralPresets(Array.isArray(parsed.quickGeneralPresets) ? parsed.quickGeneralPresets : QUICK_GENERAL_TASKS);
-      setQuickDailyPresets(Array.isArray(parsed.quickDailyPresets) ? parsed.quickDailyPresets : QUICK_DAILY_TASKS);
-      setDailyTaskSets(Array.isArray(parsed.dailyTaskSets) ? parsed.dailyTaskSets : DEFAULT_DAILY_TASK_SETS);
-      setRoutinePresets(Array.isArray(parsed.routinePresets) ? parsed.routinePresets : DEFAULT_ROUTINE_PRESETS);
-      setDailyLinks(Array.isArray(parsed.dailyLinks) ? parsed.dailyLinks : []);
-      setPatientLinks(Array.isArray(parsed.patientLinks) ? parsed.patientLinks : []);
-      setClosedPatientTasks(Array.isArray(parsed.closedPatientTasks) ? parsed.closedPatientTasks : []);
-      setLastDoneItems(Array.isArray(parsed.lastDoneItems) ? parsed.lastDoneItems : DEFAULT_LAST_DONE_ITEMS);
-      setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
-      setRewards(Array.isArray(parsed.rewards) ? parsed.rewards : []);
-      setPendingPatients(Array.isArray(parsed.pendingPatients) ? parsed.pendingPatients : []);
-      setGeneralTasks(Array.isArray(parsed.generalTasks) ? parsed.generalTasks : []);
-      setDailyGeneralTasks(Array.isArray(parsed.dailyGeneralTasks) ? parsed.dailyGeneralTasks : []);
-      setScheduledEvents(Array.isArray(parsed.scheduledEvents) ? parsed.scheduledEvents : []);
-      setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
-      setWorkItems(Array.isArray(parsed.workItems) ? parsed.workItems.map(normalizeWorkItem) : Array.isArray(parsed.bosses) ? parsed.bosses.map(normalizeWorkItem) : []);
+      applyPayload(parsed, {
+        withDefaults: true
+      });
     } else {
       setTemplates(DEFAULT_TEMPLATES);
     }
     setLoaded(true);
   }, []);
+  const saveFailWarnedRef = React.useRef(0);
   useEffect(() => {
     if (!loaded) return;
-    saveLocal(STORAGE_KEY, {
+    backupMainStore();
+    const ok = saveLocal(STORAGE_KEY, {
       patients,
       stats,
       templates,
@@ -8114,6 +8445,10 @@ function PatientTriage() {
       workModeEnabled,
       workItems
     });
+    if (!ok && Date.now() - saveFailWarnedRef.current > 60000) {
+      saveFailWarnedRef.current = Date.now();
+      showToast('⚠ 端末への保存に失敗しました。空き容量を確認してください');
+    }
   }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
   useEffect(() => {
     if (!loaded) return;
@@ -9428,11 +9763,20 @@ function PatientTriage() {
     ...t,
     ...updates
   } : t));
-  const deleteTemplate = id => {
-    if (window.confirm('このテンプレートを削除しますか?')) setTemplates(prev => prev.filter(t => t.id !== id));
+  const deleteTemplate = async id => {
+    if (await appConfirm({
+      title: 'テンプレートを削除',
+      message: 'このテンプレートを削除しますか?',
+      confirmText: '削除する',
+      danger: true
+    })) setTemplates(prev => prev.filter(t => t.id !== id));
   };
-  const addTemplate = () => {
-    const name = window.prompt('新しいセットの名前:', '');
+  const addTemplate = async () => {
+    const name = await appPrompt({
+      title: '新しいセット',
+      label: '新しいセットの名前',
+      confirmText: '作成'
+    });
     if (name?.trim()) setTemplates(prev => [...prev, {
       id: uid(),
       name: name.trim(),
@@ -9604,6 +9948,7 @@ function PatientTriage() {
     saveGasConfig(cfg);
   };
   const buildPayload = () => ({
+    updatedAt: Date.now(),
     patients,
     stats,
     templates,
@@ -9627,30 +9972,55 @@ function PatientTriage() {
     workItems,
     version: 10
   });
-  const applyPayload = parsed => {
-    if (!parsed || !Array.isArray(parsed.patients)) return false;
-    setPatients(parsed.patients);
+  // データ復元の唯一の入口。初期ロード(withDefaults:true)・インポート・GAS pull・バックアップ復元が共用する。
+  // withDefaults: 欠けている項目を初期値に戻す(初期ロード用)。falseなら欠けている項目は現状維持。
+  const applyPayload = (parsed, opts = {}) => {
+    const withDefaults = opts.withDefaults === true;
+    const hasPatients = Array.isArray(parsed?.patients);
+    if (!parsed || (!hasPatients && !withDefaults)) return false;
+    const apply = (setter, value, fallback) => {
+      if (Array.isArray(value)) setter(value);else if (withDefaults) setter(fallback);
+    };
+    apply(setPatients, parsed.patients, []);
     if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
-    if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
-    if (Array.isArray(parsed.quickPatientPresets)) setQuickPatientPresets(parsed.quickPatientPresets);else if (Array.isArray(parsed.quickGeneralPresets)) setQuickPatientPresets(parsed.quickGeneralPresets);
-    if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
-    if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
-    if (Array.isArray(parsed.dailyTaskSets)) setDailyTaskSets(parsed.dailyTaskSets);
-    if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
-    if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
-    if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
-    if (Array.isArray(parsed.closedPatientTasks)) setClosedPatientTasks(parsed.closedPatientTasks);
-    if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
-    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
-    if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
-    if (Array.isArray(parsed.pendingPatients)) setPendingPatients(parsed.pendingPatients);
-    if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
-    if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
-    if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
-    if (Array.isArray(parsed.scheduledEvents)) setScheduledEvents(parsed.scheduledEvents);
+    apply(setTemplates, parsed.templates, DEFAULT_TEMPLATES);
+    apply(setQuickPatientPresets, Array.isArray(parsed.quickPatientPresets) ? parsed.quickPatientPresets : parsed.quickGeneralPresets, QUICK_PATIENT_TASKS);
+    apply(setQuickGeneralPresets, parsed.quickGeneralPresets, QUICK_GENERAL_TASKS);
+    apply(setQuickDailyPresets, parsed.quickDailyPresets, QUICK_DAILY_TASKS);
+    apply(setDailyTaskSets, parsed.dailyTaskSets, DEFAULT_DAILY_TASK_SETS);
+    apply(setRoutinePresets, parsed.routinePresets, DEFAULT_ROUTINE_PRESETS);
+    apply(setDailyLinks, parsed.dailyLinks, []);
+    apply(setPatientLinks, parsed.patientLinks, []);
+    apply(setClosedPatientTasks, parsed.closedPatientTasks, []);
+    apply(setLastDoneItems, parsed.lastDoneItems, DEFAULT_LAST_DONE_ITEMS);
+    apply(setEndDayLogs, parsed.endDayLogs, []);
+    apply(setRewards, parsed.rewards, []);
+    apply(setPendingPatients, parsed.pendingPatients, []);
+    apply(setGeneralTasks, parsed.generalTasks, []);
+    apply(setDailyPatients, parsed.dailyPatients, []);
+    apply(setDailyGeneralTasks, parsed.dailyGeneralTasks, []);
+    apply(setScheduledEvents, parsed.scheduledEvents, []);
     setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
-    if (Array.isArray(parsed.workItems)) setWorkItems(parsed.workItems.map(normalizeWorkItem));else if (Array.isArray(parsed.bosses)) setWorkItems(parsed.bosses.map(normalizeWorkItem));
+    const workSource = Array.isArray(parsed.workItems) ? parsed.workItems : Array.isArray(parsed.bosses) ? parsed.bosses : null;
+    if (workSource) setWorkItems(workSource.map(normalizeWorkItem));else if (withDefaults) setWorkItems([]);
     return true;
+  };
+  const restoreBackup = async key => {
+    const parsed = loadLocal(key);
+    if (!parsed || !Array.isArray(parsed.patients)) {
+      showToast('バックアップを読み込めませんでした');
+      return;
+    }
+    const label = key.slice(BACKUP_KEY_PREFIX.length);
+    if (!(await appConfirm({
+      title: 'バックアップを復元',
+      message: `${label} 時点のバックアップに戻します。\n現在のデータは上書きされます。続行しますか?`,
+      confirmText: '復元する',
+      danger: true
+    }))) return;
+    rememberUndo('バックアップ復元');
+    applyPayload(parsed);
+    showToast(`${label} のバックアップを復元しました ✓`);
   };
   const gasPush = async () => {
     if (!gasConfig.url || !gasConfig.secret) {
@@ -9662,7 +10032,7 @@ function PatientTriage() {
       const r = await gasFetch(gasConfig, buildPayload());
       if (r.ok) {
         setGasStatus('ok');
-        showToast('GASに保存しました ✓');
+        showToast(r.unverified ? 'GASに送信しました（応答は確認できませんでした）' : 'GASに保存しました ✓');
       } else throw new Error(r.error || 'unknown');
     } catch (e) {
       setGasStatus('error');
@@ -9685,7 +10055,12 @@ function PatientTriage() {
       }
       const count = r.data.patients?.length ?? 0;
       const open = (r.data.patients || []).reduce((s, p) => s + (p.tasks || []).filter(t => t.status !== 'done').length, 0);
-      if (!window.confirm(`GASから読み込む: 患者${count}人 / 未完タスク${open}件\n現在のデータは上書きされます。続行しますか?`)) {
+      if (!(await appConfirm({
+        title: 'GASから読み込む',
+        message: `患者${count}人 / 未完タスク${open}件を読み込みます。\n現在のデータは上書きされます。続行しますか?`,
+        confirmText: '読み込む',
+        danger: true
+      }))) {
         setGasStatus('idle');
         return;
       }
@@ -9704,7 +10079,7 @@ function PatientTriage() {
       isInitialLoad.current = false;
       return;
     }
-    const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).catch(() => {}), 3000);
+    const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).then(r => setGasStatus(r.ok ? 'ok' : 'error')).catch(() => setGasStatus('error')), 3000);
     return () => clearTimeout(t);
   }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
   const buildExportJSON = () => JSON.stringify({
@@ -9766,49 +10141,40 @@ function PatientTriage() {
       setImportDialog(true);
     }
   };
-  const runImport = jsonString => {
+  const runImport = async jsonString => {
     let parsed;
     try {
       parsed = JSON.parse(jsonString);
     } catch (e) {
-      alert('JSONパースエラー: ' + e.message);
+      await appAlert({
+        title: 'インポートできません',
+        message: 'JSONパースエラー: ' + e.message
+      });
       return false;
     }
     if (!parsed.patients || !Array.isArray(parsed.patients)) {
-      alert('無効なデータ形式');
+      await appAlert({
+        title: 'インポートできません',
+        message: '無効なデータ形式です。'
+      });
       return false;
     }
     const count = parsed.patients.length;
     const open = parsed.patients.reduce((s, p) => s + (p.tasks || []).filter(t => t.status !== 'done').length, 0);
-    if (!window.confirm(`読み込む: 患者${count}人 / 未完タスク${open}件\n現在のデータ(患者${patients.length}人)は上書きされます。続行しますか?`)) return false;
-    setPatients(parsed.patients);
-    if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
-    if (Array.isArray(parsed.templates)) setTemplates(parsed.templates);
-    if (Array.isArray(parsed.quickPatientPresets)) setQuickPatientPresets(parsed.quickPatientPresets);else if (Array.isArray(parsed.quickGeneralPresets)) setQuickPatientPresets(parsed.quickGeneralPresets);
-    if (Array.isArray(parsed.quickGeneralPresets)) setQuickGeneralPresets(parsed.quickGeneralPresets);
-    if (Array.isArray(parsed.quickDailyPresets)) setQuickDailyPresets(parsed.quickDailyPresets);
-    if (Array.isArray(parsed.dailyTaskSets)) setDailyTaskSets(parsed.dailyTaskSets);
-    if (Array.isArray(parsed.routinePresets)) setRoutinePresets(parsed.routinePresets);
-    if (Array.isArray(parsed.dailyLinks)) setDailyLinks(parsed.dailyLinks);
-    if (Array.isArray(parsed.patientLinks)) setPatientLinks(parsed.patientLinks);
-    if (Array.isArray(parsed.closedPatientTasks)) setClosedPatientTasks(parsed.closedPatientTasks);
-    if (Array.isArray(parsed.lastDoneItems)) setLastDoneItems(parsed.lastDoneItems);
-    if (Array.isArray(parsed.endDayLogs)) setEndDayLogs(Array.isArray(parsed.endDayLogs) ? parsed.endDayLogs : []);
-    if (Array.isArray(parsed.rewards)) setRewards(parsed.rewards);
-    if (Array.isArray(parsed.pendingPatients)) setPendingPatients(parsed.pendingPatients);
-    if (Array.isArray(parsed.generalTasks)) setGeneralTasks(parsed.generalTasks);
-    if (Array.isArray(parsed.dailyPatients)) setDailyPatients(parsed.dailyPatients);
-    if (Array.isArray(parsed.dailyGeneralTasks)) setDailyGeneralTasks(parsed.dailyGeneralTasks);
-    if (Array.isArray(parsed.scheduledEvents)) setScheduledEvents(parsed.scheduledEvents);
-    setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
-    if (Array.isArray(parsed.workItems)) setWorkItems(parsed.workItems.map(normalizeWorkItem));else if (Array.isArray(parsed.bosses)) setWorkItems(parsed.bosses.map(normalizeWorkItem));
-    return true;
+    if (!(await appConfirm({
+      title: 'データをインポート',
+      message: `患者${count}人 / 未完タスク${open}件を読み込みます。\n現在のデータ(患者${patients.length}人)は上書きされます。続行しますか?`,
+      confirmText: '読み込む',
+      danger: true
+    }))) return false;
+    rememberUndo('インポート');
+    return applyPayload(parsed);
   };
   const importFromFile = file => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = e => {
-      if (runImport(e.target.result)) {
+    reader.onload = async e => {
+      if (await runImport(e.target.result)) {
         setImportDialog(false);
         setImportText('');
         showToast('インポート完了');
@@ -9816,8 +10182,8 @@ function PatientTriage() {
     };
     reader.readAsText(file);
   };
-  const importFromText = () => {
-    if (runImport(importText)) {
+  const importFromText = async () => {
+    if (await runImport(importText)) {
       setImportDialog(false);
       setImportText('');
       showToast('インポート完了');
@@ -10883,7 +11249,9 @@ function PatientTriage() {
       fontSize: 11,
       margin: 0
     }
-  }, "\u203B \u60A3\u8005\u7B26\u4E01\u4EE5\u5916\u306E\u500B\u4EBA\u60C5\u5831\u306F\u5165\u308C\u306A\u3044\u3053\u3068\u3002"))), !isWorkMode && React.createElement("div", {
+  }, "\u203B \u60A3\u8005\u7B26\u4E01\u4EE5\u5916\u306E\u500B\u4EBA\u60C5\u5831\u306F\u5165\u308C\u306A\u3044\u3053\u3068\u3002"), React.createElement(BackupRestoreSection, {
+    onRestore: restoreBackup
+  }))), !isWorkMode && React.createElement("div", {
     style: {
       marginTop: 10,
       marginBottom: 40
@@ -11249,75 +11617,7 @@ function PatientTriage() {
       setImportDialog(false);
       setImportText('');
     }
-  }), tweaksOpen && React.createElement("div", {
-    style: {
-      position: 'fixed',
-      bottom: 24,
-      right: 20,
-      zIndex: 200,
-      background: 'var(--surface)',
-      border: '1.5px solid var(--border)',
-      borderRadius: 16,
-      padding: '16px 18px',
-      boxShadow: 'var(--shadow-lg)',
-      minWidth: 200,
-      animation: 'fadeUp .2s cubic-bezier(.34,1.26,.64,1) both'
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 12,
-      fontWeight: 800,
-      color: 'var(--text)',
-      marginBottom: 12,
-      letterSpacing: '.04em'
-    }
-  }, "Tweaks"), React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--text-3)',
-      fontWeight: 600,
-      marginBottom: 8,
-      letterSpacing: '.04em'
-    }
-  }, "\u30C6\u30FC\u30DE"), React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6
-    }
-  }, THEMES.map(t => React.createElement("button", {
-    key: t.id,
-    onClick: () => setThemeId(t.id),
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      background: themeId === t.id ? 'var(--surface-3)' : 'transparent',
-      border: `1.5px solid ${themeId === t.id ? 'var(--accent)' : 'var(--border)'}`,
-      borderRadius: 99,
-      padding: '6px 12px',
-      cursor: 'pointer',
-      fontFamily: 'var(--font-sans)',
-      fontSize: 12,
-      color: themeId === t.id ? 'var(--accent)' : 'var(--text-2)',
-      fontWeight: themeId === t.id ? 700 : 500,
-      transition: 'all .15s'
-    }
-  }, React.createElement("span", {
-    style: {
-      width: 14,
-      height: 14,
-      borderRadius: '50%',
-      background: t.swatch,
-      flexShrink: 0,
-      boxShadow: '0 1px 4px rgba(0,0,0,.2)'
-    }
-  }), t.label, themeId === t.id && React.createElement("span", {
-    style: {
-      marginLeft: 'auto',
-      fontSize: 10
-    }
-  }, "\u2713"))))), endDayConfirm && React.createElement("div", {
+  }), endDayConfirm && React.createElement("div", {
     className: "dialog-bg",
     onClick: () => setEndDayConfirm(false)
   }, React.createElement("div", {
@@ -11470,7 +11770,6 @@ function PatientTriage() {
     onStartTally: startManualTally
   }), React.createElement(FloatingTimerBar, {
     running: runningTask,
-    now: runningTick,
     onIncrement: incrementRunning,
     onAddMinute: addMinuteRunning,
     onPauseToggle: pauseToggleRunning,
@@ -11479,4 +11778,4 @@ function PatientTriage() {
     onComplete: completeRunning
   })));
 }
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(PatientTriage, null));
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(React.Fragment, null, React.createElement(PatientTriage, null), React.createElement(AppDialogHost, null)));

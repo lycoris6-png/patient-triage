@@ -4,18 +4,21 @@ Patient/task triage app for ward and ER work.
 
 ## Public Entry Points
 
-- `index.html`: GitHub Pages entry point. Same app as the mobile version.
-- `patient-triage_v3.html`: mobile/narrow layout.
-- `patient-triage_v3_desktop.html`: desktop layout.
+- `index.html`: the app (unified version, responsive mobile+desktop, ぺいとり/でいとり/わーとり modes). GitHub Pages entry point.
+- `prototype_unified_triage.html`: redirect stub to `index.html`, kept for old bookmarks and previously installed PWAs.
+
+The old v3 mobile/desktop apps were retired to `backup/` in June 2026. All logic now lives in one place.
 
 ## Runtime Files
 
 These files are required for the app to run:
 
-- `patient-triage_v3.app.js`
-- `patient-triage_v3_desktop.app.js`
+- `prototype_unified_triage.app.js` (referenced by `index.html`)
+- `manifest-unified.webmanifest`
+- `service-worker.js`
 - `patient_triage_vendor/`
 - `chibi_split_pngs/`
+- `pwa-icons/`
 
 Do not delete or rename these unless the matching HTML references are updated.
 
@@ -24,18 +27,19 @@ Do not delete or rename these unless the matching HTML references are updated.
 - Patient priority/classification: `ER`, high, normal, low.
 - ER patients sort above ward patients.
 - Patient `終了` removes a patient from the active list and triggers a toast/chibi reaction.
-- Daily completion stats use a workday boundary of 08:00. Counts from midnight to 07:59 belong to the previous workday.
+- Daily completion stats use a workday boundary: 08:00 in the v3 apps, 06:00 (`WORKDAY_START_HOUR`) in the unified prototype. Counts before the boundary belong to the previous workday.
 - Chibi milestone reactions fire once per workday at 5, 10, 15, 20, 25, and 30 completed tasks.
 - Chibi coach popups include Yushka and existing characters.
 - Data is stored in browser `localStorage` under `patient-triage-v1`.
+- The unified prototype keeps automatic daily backups under `patient-triage-backup-YYYY-MM-DD` (last 3 days, written once per day on the first save). They can be restored from the データ (バックアップ / GAS同期) panel.
 - Optional GAS sync settings are also stored locally.
 
 ## Editing Notes for Future Agents
 
-When changing UI or behavior, edit the appropriate `.app.js` file and keep the matching HTML script reference intact.
+When changing UI or behavior, edit `prototype_unified_triage.app.js` (the only app logic file) and bump `CACHE_NAME` in `service-worker.js`.
 
-- Mobile app logic: `patient-triage_v3.app.js`
-- Desktop app logic: `patient-triage_v3_desktop.app.js`
+- App logic: `prototype_unified_triage.app.js`
+- App HTML/CSS: `index.html`
 - Shared visual/runtime libraries: `patient_triage_vendor/`
 - Character images: `chibi_split_pngs/`
 
@@ -56,6 +60,31 @@ The repository may contain local backup or experimental files. They are not prod
 If GitHub Pages is enabled from the repository root on `master`, the public URL should be:
 
 https://lycoris6-png.github.io/patient-triage/
+
+## GAS Sync Notes
+
+The unified prototype now includes `updatedAt` (epoch ms) at the top of every push payload, and reads the JSON response of the POST when CORS allows it. To protect against a stale device silently overwriting newer data (last-write-wins problem), extend the GAS `doPost(e)` to reject pushes older than what is stored:
+
+```js
+function doPost(e) {
+  const body = JSON.parse(e.postData.contents || '{}');
+  if (body.secret !== SECRET) return json_({ ok: false, error: 'bad secret' });
+  const incoming = body.data || {};
+  const stored = loadStoredData_(); // 既存の読み出し処理
+  if (stored && stored.updatedAt && incoming.updatedAt && incoming.updatedAt < stored.updatedAt) {
+    return json_({ ok: false, error: 'stale push rejected (server has newer data)' });
+  }
+  saveStoredData_(incoming); // 既存の保存処理
+  return json_({ ok: true });
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+```
+
+If the GAS deployment does not return readable CORS responses, the client falls back to the old fire-and-forget push and reports "応答は確認できませんでした".
 
 ## GAS AI Coach Line
 
