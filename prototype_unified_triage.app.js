@@ -10822,7 +10822,20 @@ function PatientTriage() {
     "aria-pressed": erOnly,
     title: erOnly ? "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092ER\u306E\u307F\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092ER\u306E\u307F\u306B\u7D5E\u308A\u8FBC\u3080",
     style: filterButtonStyle(erOnly)
-  }, "ER")), React.createElement("div", {
+  }, "ER"), !isDailyMode && React.createElement("button", {
+    className: `btn-ghost${roundMode ? ' btn-ghost-active' : ''}`,
+    onClick: () => setRoundMode(v => !v),
+    "aria-label": "回診チェック",
+    "aria-pressed": roundMode,
+    title: roundMode ? "回診チェック表示中：未回診が上に並びます" : "回診チェック：回った患者に✓をつけて回り残しを見える化",
+    style: {
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+      ...filterButtonStyle(roundMode)
+    }
+  }, "🚶 ", React.createElement("span", {
+    className: "round-dock-label"
+  }, "回診 "), `${roundedTodayCount}/${roundTargets.length}`)), React.createElement("div", {
     className: "action-cluster"
   }, React.createElement("button", {
     className: `btn-ghost${focusMode ? ' btn-ghost-active' : ''}`,
@@ -10849,13 +10862,7 @@ function PatientTriage() {
     onClick: () => setPatientSortMode(m => m === 'priority' ? 'ward' : 'priority'),
     "aria-label": "\u60A3\u8005\u306E\u4E26\u3079\u66FF\u3048",
     title: patientSortMode === 'ward' ? "\u75C5\u68DF\u9806\u3067\u8868\u793A\u4E2D" : "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D"
-  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806" : "\u512A\u5148\u5EA6\u9806"), !isDailyMode && React.createElement("button", {
-    className: `btn-ghost${roundMode ? ' btn-ghost-active' : ''}`,
-    onClick: () => setRoundMode(v => !v),
-    "aria-label": "\u56DE\u8A3A\u30C1\u30A7\u30C3\u30AF",
-    "aria-pressed": roundMode,
-    title: roundMode ? "\u56DE\u8A3A\u30C1\u30A7\u30C3\u30AF\u8868\u793A\u4E2D\uFF1A\u672A\u56DE\u8A3A\u304C\u4E0A\u306B\u4E26\u3073\u307E\u3059" : "\u56DE\u8A3A\u30C1\u30A7\u30C3\u30AF\uFF1A\u56DE\u3063\u305F\u60A3\u8005\u306B\u2713\u3092\u3064\u3051\u3066\u56DE\u308A\u6B8B\u3057\u3092\u898B\u3048\u308B\u5316"
-  }, `\uD83D\uDEB6 \u56DE\u8A3A ${roundedTodayCount}/${roundTargets.length}`), React.createElement("button", {
+  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806" : "\u512A\u5148\u5EA6\u9806"), React.createElement("button", {
     className: "btn-ghost dock-icon",
     onClick: showFinishEstimate,
     "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",

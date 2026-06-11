@@ -377,6 +377,7 @@ body.work-mode:not(.rpg-mode) {
 .command-dock .btn-rose {
   min-height:30px; padding:6px 10px; font-size:12px;
   box-shadow:none;
+  white-space:nowrap; flex-shrink:0;
 }
 .command-dock .btn-dark { padding-inline:13px; }
 .command-dock .btn-ghost { border-width:1px; }
@@ -390,7 +391,8 @@ body.work-mode:not(.rpg-mode) {
 .command-dock .dock-alert { margin-left:auto; }
 @media (max-width:560px) {
   .command-dock { padding:6px; gap:6px; }
-  .action-cluster { max-width:100%; overflow-x:auto; }
+  .action-cluster { max-width:100%; overflow-x:auto; scrollbar-width:none; }
+  .action-cluster::-webkit-scrollbar { display:none; }
   .action-cluster-tools { margin-left:0; }
 }
 
@@ -443,6 +445,7 @@ body.work-mode:not(.rpg-mode) {
 /* ── 回診スタンプ ── */
 @media (max-width:560px) {
   .round-stamp-time { display:none; }
+  .round-dock-label { display:none; }
 }
 
 /* ── チェックボックス ── */
@@ -1076,7 +1079,7 @@ body.rpg-mode .chibi-coach-bubble {
 <body>
 <div id="root"></div>
 <script src="dialogue.js?v=20260610"></script>
-<script src="prototype_unified_triage.app.js?v=20260611-ward-rounds"></script>
+<script src="prototype_unified_triage.app.js?v=20260611-ward-rounds-dock"></script>
 
 
 
