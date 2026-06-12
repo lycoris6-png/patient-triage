@@ -1202,6 +1202,37 @@ const parseWorkImport = text => {
   }
   return (parsed.works || parsed.bosses).map(normalizeWorkItem);
 };
+const WORK_IMPORT_PROMPT = `あなたはタスク分解アシスタントです。最後に書く「仕事の内容」を、着手しやすい具体的な一手に分解してください。
+
+出力は次の形式のJSONだけを、BEGIN_BOSS_TRIAGE_JSON と END_BOSS_TRIAGE_JSON で挟んで返してください。前後の説明文は不要です。
+
+BEGIN_BOSS_TRIAGE_JSON
+{
+  "schema": "WORK_TRIAGE_IMPORT_V1",
+  "works": [
+    {
+      "title": "仕事の名前",
+      "priority": "urgent / high / normal / low のどれか",
+      "deadline": "YYYY-MM-DD（不明なら空文字）",
+      "outcome": "完了の定義（何ができたら終わりか）",
+      "currentFocus": "いま進めている工程",
+      "nextAction": "最初に着手する一手のタイトル（steps の先頭と同じ文言）",
+      "steps": [
+        { "title": "一手の内容", "estimate": "2 / 5 / 10 / 15 / 30 のどれか（分）", "priority": "normal", "phase": "工程名（任意）" }
+      ]
+    }
+  ]
+}
+END_BOSS_TRIAGE_JSON
+
+ルール:
+- 一手は「〜を3行書く」「〜に電話する」のような、すぐ動ける具体的な行動にする
+- 最初の一手は特に小さくする（5〜10分で終わるもの）
+- 工程が分かれる場合は phase で同じ工程名を付けてグループにする
+- 一手は多くても12個まで。細かすぎるより「次に何をするか迷わない」粒度を優先する
+
+仕事の内容:
+（ここに仕事の内容・背景・締切などを書いてください）`;
 const stuckStepDone = task => Math.min(stuckStepGoal(task), Math.max(0, Number.parseInt(task?.stuckStepDone, 10) || 0));
 function StuckProgress({
   task,
@@ -3372,6 +3403,68 @@ function DailyFocusView({
     style: { fontSize: 11, color: 'var(--accent)', fontWeight: 700, alignSelf: 'center' }
   }, running.mode === 'tally' ? `\u8A08\u6E2C\u4E2D: ${running.currentCount || 0}/${running.targetCount}\u4EF6` : '\u8A08\u6E2C\u4E2D')));
 }
+function BulkAddBox({
+  onBulkAdd
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [text, setText] = React.useState('');
+  const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+  if (!open) return React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setOpen(true),
+    style: {
+      marginTop: 8
+    }
+  }, "📋 まとめて追加（1行=1タスク）");
+  return React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: 'grid',
+      gap: 8
+    }
+  }, React.createElement("textarea", {
+    className: "inp",
+    autoFocus: true,
+    value: text,
+    onChange: e => setText(e.target.value),
+    rows: 4,
+    placeholder: "牛乳を買う\n洗濯を干す\n書類を出す\n（1行が1タスクになります。種類・優先度・分は上で選んだものが付きます）",
+    style: {
+      resize: 'vertical',
+      fontSize: 12,
+      lineHeight: 1.7
+    }
+  }), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      justifyContent: 'flex-end'
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => {
+      setOpen(false);
+      setText('');
+    }
+  }, "キャンセル"), React.createElement("button", {
+    className: "btn-dark",
+    disabled: !lines.length,
+    onClick: () => {
+      if (!lines.length) return;
+      onBulkAdd(lines);
+      setText('');
+      setOpen(false);
+    },
+    style: {
+      padding: '7px 16px',
+      fontSize: 12,
+      opacity: lines.length ? 1 : .45
+    }
+  }, React.createElement(Plus, {
+    size: 13
+  }), lines.length ? `${lines.length}件追加` : "追加")));
+}
 function GeneralTaskSection({
   tasks,
   open,
@@ -3383,6 +3476,7 @@ function GeneralTaskSection({
   onRemove,
   onClearDone,
   onQuickAdd,
+  onBulkAdd,
   quickTasks,
   quickOpen,
   onToggleQuick,
@@ -4047,7 +4141,9 @@ function GeneralTaskSection({
     }
   }, React.createElement(Plus, {
     size: 13
-  }), "\u8FFD\u52A0")))));
+  }), "\u8FFD\u52A0")), dailyMode && onBulkAdd && React.createElement(BulkAddBox, {
+    onBulkAdd: onBulkAdd
+  }))));
 }
 function GasConfigDialog({
   config,
@@ -7948,7 +8044,32 @@ function WorkingTriageView({
       fontWeight: 900,
       color: 'var(--text)'
     }
-  }, "GPT分解JSONを貼り付け"), React.createElement("textarea", {
+  }, "GPT分解JSONを貼り付け"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: async () => {
+      try {
+        await navigator.clipboard.writeText(WORK_IMPORT_PROMPT);
+        showToast('分解依頼プロンプトをコピーしました。AIに貼って、返ってきたJSONをここへ');
+      } catch {
+        showToast('コピーに失敗しました');
+      }
+    },
+    title: "AI（Claude/ChatGPTなど）に貼ると、ここに取り込めるJSONを作ってくれる依頼文をコピーします"
+  }, "📋 分解依頼プロンプトをコピー"), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, "①コピーしてAIに貼る → ②仕事の内容を書き足す → ③返ってきたJSONを下へ")), React.createElement("textarea", {
     className: "inp",
     value: jsonText,
     onChange: e => setJsonText(e.target.value),
@@ -8154,7 +8275,11 @@ function PatientTriage() {
   const [newPatientPri, setNewPatientPri] = useState('normal');
   const [newPatientWard, setNewPatientWard] = useState('');
   const [addPatientDialog, setAddPatientDialog] = useState(false);
-  const [appMode, setAppMode] = useState('patient');
+  const [appMode, setAppMode] = useState(() => {
+    const d = new Date();
+    const isWeekday = d.getDay() >= 1 && d.getDay() <= 5;
+    return isWeekday && d.getHours() >= 8 && d.getHours() < 20 ? 'patient' : 'daily';
+  });
   const [dailyPatients, setDailyPatients] = useState([]);
   const [dailyGeneralTasks, setDailyGeneralTasks] = useState([]);
   const [dailyExpandedPatients, setDailyExpandedPatients] = useState({});
@@ -8974,8 +9099,25 @@ function PatientTriage() {
       } : t)
     } : p));
   };
+  const syncLastDoneWithTask = title => {
+    const t = String(title || '').trim();
+    if (!t) return;
+    const today = todayStr();
+    const hits = lastDoneItems.filter(item => item.label && t.includes(item.label) && item.lastDone !== today);
+    if (!hits.length) return;
+    setLastDoneItems(prev => prev.map(item => hits.some(hit => hit.id === item.id) ? {
+      ...item,
+      lastDone: today
+    } : item));
+    showToast(`🧺 「${hits.map(hit => hit.label).join('」「')}」の前回実施日を今日にしました`);
+  };
   const completeTask = (patientId, taskId) => {
     rememberUndo('タスク完了');
+    if (isDailyMode) {
+      const patient = activePatients.find(p => p.id === patientId);
+      const task = patient && (patient.tasks || []).find(t => t.id === taskId);
+      if (task) syncLastDoneWithTask(task.title);
+    }
     updateTask(patientId, taskId, {
       status: 'done',
       completedAt: Date.now()
@@ -9402,6 +9544,26 @@ function PatientTriage() {
     }));
     setGeneralOpen(true);
   };
+  const addGeneralTasksBulk = titles => {
+    const clean = (titles || []).map(t => String(t || '').trim()).filter(Boolean);
+    if (!clean.length) return;
+    rememberUndo('まとめて追加');
+    const now = Date.now();
+    const tasks = clean.map((title, i) => ({
+      id: uid(),
+      title,
+      type: generalForm.type || (isDailyMode ? 'home' : 'docs'),
+      estimate: generalForm.estimate || '5',
+      dueDate: null,
+      dailyPriority: isDailyMode ? generalForm.dailyPriority || 'normal' : undefined,
+      status: 'todo',
+      createdAt: now + i,
+      general: true
+    }));
+    setActiveGeneralTasks(prev => [...prev, ...tasks]);
+    setGeneralOpen(true);
+    showToast(`${tasks.length}件まとめて追加しました`);
+  };
   const addQuickGeneralTask = preset => {
     const task = {
       id: uid(),
@@ -9420,6 +9582,10 @@ function PatientTriage() {
   };
   const updateGeneralTask = (taskId, updates) => {
     if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('すきまタスク状態変更');
+    if (isDailyMode && updates && updates.status === 'done') {
+      const target = activeGeneralTasks.find(t => t.id === taskId);
+      if (target) syncLastDoneWithTask(target.title);
+    }
     const patch = withTaskStatusDefaults(updates);
     setActiveGeneralTasks(prev => prev.map(t => t.id === taskId ? {
       ...t,
@@ -10794,7 +10960,9 @@ function PatientTriage() {
     setItems: setWorkItems,
     showToast: showToast,
     onBeforeChange: rememberUndo
-  }), !isWorkMode && React.createElement("div", {
+  }), isWorkMode && toast && React.createElement("div", {
+    className: "toast"
+  }, toast), !isWorkMode && React.createElement("div", {
     className: "command-dock",
     "aria-label": "タスク操作"
   }, React.createElement("div", {
@@ -10959,6 +11127,7 @@ function PatientTriage() {
     onRemove: removeGeneralTask,
     onClearDone: clearDoneGeneralTasks,
     onQuickAdd: addQuickGeneralTask,
+    onBulkAdd: addGeneralTasksBulk,
     quickTasks: quickDailyPresets,
     quickOpen: quickDailyOpen,
     onToggleQuick: () => setQuickDailyOpen(v => !v),

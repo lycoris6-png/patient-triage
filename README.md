@@ -31,6 +31,9 @@ Do not delete or rename these unless the matching HTML references are updated.
 - Daily completion stats use a workday boundary: 08:00 in the v3 apps, 06:00 (`WORKDAY_START_HOUR`) in the unified prototype. Counts before the boundary belong to the previous workday.
 - Chibi milestone reactions fire once per workday at 5, 10, 15, 20, 25, and 30 completed tasks.
 - Chibi coach popups include Yushka and existing characters.
+- Initial app mode is time-based: weekdays 08:00–19:59 start in ぺいとり, otherwise でいとり (mode is not persisted; the title button still cycles modes).
+- でいとり: completing a task whose title contains a 最後にやった日 item's label auto-updates that item's date (e.g. finishing 「洗濯を干す」 stamps 「洗濯」). The task form also has 📋まとめて追加 (one line = one task, using the currently selected type/priority/estimate).
+- わーとり: the JSON import panel has a 「分解依頼プロンプトをコピー」 button (`WORK_IMPORT_PROMPT`) that copies an AI prompt producing `WORK_TRIAGE_IMPORT_V1` JSON. Toasts are rendered separately for work mode (the shared toast element lives inside a `!isWorkMode` block).
 - Data is stored in browser `localStorage` under `patient-triage-v1`.
 - The unified prototype keeps automatic daily backups under `patient-triage-backup-YYYY-MM-DD` (last 3 days, written once per day on the first save). They can be restored from the データ (バックアップ / GAS同期) panel.
 - Optional GAS sync settings are also stored locally.
