@@ -893,13 +893,50 @@ const priMeta = id => PRIORITIES.find(p => p.id === id) || PRIORITIES.find(p => 
 const getWard = p => WARDS.some(w => w.id === (p?.ward || '')) ? p?.ward || '' : '';
 const wardLabel = id => (WARDS.find(w => w.id === (id || '')) || WARDS[0]).label;
 const isRoundTarget = p => !!p && getPri(p) !== 'planned';
-const isRoundedToday = p => !!p && p.roundedDate === todayStr();
-function RoundPanel({
+const PATIENT_CHECK_MODES = {
+  round: {
+    icon: '🚶',
+    label: '回診',
+    dateField: 'roundedDate',
+    atField: 'roundedAt',
+    hint: '未回診の患者が上に並んでいます。回ったらカードの「🚶 回診」をタップ。翌朝6時に自動リセットされます',
+    allDoneMsg: '全員回りました！お疲れさまです',
+    completeToast: '🎉 回診コンプリート！全員回りました',
+    completeChibi: '🚶 回診コンプリート！全員ちゃんと回れたよ、えらい！',
+    stampHint: '回診したらタップ',
+    stampDoneHint: '回診済み',
+    resetLabel: '今日の回診チェックを全て外す',
+    toggleOnTitle: '回診チェック表示中：未回診が上に並びます',
+    toggleOffTitle: '回診チェック：回った患者に✓をつけて回り残しを見える化'
+  },
+  chart: {
+    icon: '📝',
+    label: 'カルテ',
+    dateField: 'chartedDate',
+    atField: 'chartedAt',
+    hint: '未記載の患者が上に並んでいます。カルテを書いたらカードの「📝 カルテ」をタップ。翌朝6時に自動リセットされます',
+    allDoneMsg: '全員分書けました！お疲れさまです',
+    completeToast: '🎉 カルテコンプリート！全員分書けました',
+    completeChibi: '📝 カルテ全員分コンプリート！今日の記録は隙なしだよ！',
+    stampHint: 'カルテを書いたらタップ',
+    stampDoneHint: 'カルテ記載済み',
+    resetLabel: '今日のカルテチェックを全て外す',
+    toggleOnTitle: 'カルテチェック表示中：未記載が上に並びます',
+    toggleOffTitle: 'カルテチェック：書いた患者に✓をつけて書き残しを見える化'
+  }
+};
+const isCheckedToday = (p, kind) => {
+  const meta = PATIENT_CHECK_MODES[kind];
+  return !!(p && meta) && p[meta.dateField] === todayStr();
+};
+function CheckPanel({
+  mode,
   summary,
   total,
   done,
   onReset
 }) {
+  const meta = PATIENT_CHECK_MODES[mode] || PATIENT_CHECK_MODES.round;
   const allDone = total > 0 && done >= total;
   const pct = total ? Math.round(done / total * 100) : 0;
   return React.createElement("div", {
@@ -923,7 +960,7 @@ function RoundPanel({
       fontWeight: 800,
       color: allDone ? 'var(--done)' : 'var(--accent)'
     }
-  }, "🚶 回診チェック"), React.createElement("span", {
+  }, `${meta.icon} ${meta.label}チェック`), React.createElement("span", {
     style: {
       fontSize: 12,
       fontWeight: 800,
@@ -936,7 +973,7 @@ function RoundPanel({
     style: {
       marginLeft: 'auto'
     },
-    title: "今日の回診チェックを全て外す"
+    title: meta.resetLabel
   }, React.createElement(RotateCcw, {
     size: 11
   }), "リセット")), React.createElement("div", {
@@ -978,13 +1015,13 @@ function RoundPanel({
       fontWeight: 700,
       color: 'var(--done)'
     }
-  }, "全員回りました！お疲れさまです") : React.createElement("div", {
+  }, meta.allDoneMsg) : React.createElement("div", {
     style: {
       fontSize: 11,
       color: 'var(--text-3)',
       fontWeight: 600
     }
-  }, "未回診の患者が上に並んでいます。回ったらカードの「🚶 回診」をタップ。翌朝6時に自動リセットされます"));
+  }, meta.hint));
 }
 const estimateMinutes = task => Number.parseInt(task?.estimate, 10) || 0;
 const formatDuration = minutes => {
@@ -2400,9 +2437,9 @@ function PatientCard({
   onSetWard,
   onToggleAlert,
   showAlerts = true,
-  roundEnabled = false,
+  checkMode = '',
   dimmed = false,
-  onToggleRounded,
+  onToggleChecked,
   onRename,
   onMemoChange,
   templates,
@@ -2461,8 +2498,10 @@ function PatientCard({
     return (a.createdAt || 0) - (b.createdAt || 0);
   });
   const allDone = open.length === 0 && patient.tasks.length > 0;
-  const showRoundStamp = roundEnabled && isRoundTarget(patient);
-  const rounded = showRoundStamp && isRoundedToday(patient);
+  const checkMeta = checkMode ? PATIENT_CHECK_MODES[checkMode] : null;
+  const showCheckStamp = !!checkMeta && isRoundTarget(patient);
+  const checked = showCheckStamp && isCheckedToday(patient, checkMode);
+  const checkedAt = showCheckStamp ? patient[checkMeta.atField] : null;
   return React.createElement("div", {
     className: `card ${pri.cls}`,
     style: {
@@ -2581,21 +2620,21 @@ function PatientCard({
       padding: allDone ? '2px 8px' : '0',
       borderRadius: allDone ? '99px' : '0'
     }
-  }, allDone ? '✓ 完了' : `未 ${open.length}`, done.length > 0 && open.length > 0 && ` / 済 ${done.length}`), showRoundStamp && React.createElement("button", {
+  }, allDone ? '✓ 完了' : `未 ${open.length}`, done.length > 0 && open.length > 0 && ` / 済 ${done.length}`), showCheckStamp && React.createElement("button", {
     onClick: e => {
       e.stopPropagation();
-      onToggleRounded && onToggleRounded();
+      onToggleChecked && onToggleChecked();
     },
-    title: rounded ? `\u56DE\u8A3A\u6E08\u307F${patient.roundedAt ? ' ' + formatHHMM(patient.roundedAt) : ''}\uFF08\u30BF\u30C3\u30D7\u3067\u53D6\u308A\u6D88\u3057\uFF09` : "\u56DE\u8A3A\u3057\u305F\u3089\u30BF\u30C3\u30D7",
-    "aria-pressed": rounded,
+    title: checked ? `${checkMeta.stampDoneHint}${checkedAt ? ' ' + formatHHMM(checkedAt) : ''}\uFF08\u30BF\u30C3\u30D7\u3067\u53D6\u308A\u6D88\u3057\uFF09` : checkMeta.stampHint,
+    "aria-pressed": checked,
     style: {
       marginLeft: 'auto',
       display: 'flex',
       alignItems: 'center',
       gap: 4,
-      background: rounded ? 'rgba(22,163,74,.12)' : 'transparent',
-      border: rounded ? '1.5px solid rgba(22,163,74,.45)' : '1.5px dashed var(--border-2)',
-      color: rounded ? '#15803D' : 'var(--text-3)',
+      background: checked ? 'rgba(22,163,74,.12)' : 'transparent',
+      border: checked ? '1.5px solid rgba(22,163,74,.45)' : '1.5px dashed var(--border-2)',
+      color: checked ? '#15803D' : 'var(--text-3)',
       borderRadius: 9,
       cursor: 'pointer',
       padding: '4px 7px',
@@ -2605,16 +2644,16 @@ function PatientCard({
       whiteSpace: 'nowrap',
       transition: 'all .12s'
     }
-  }, rounded ? '\u2713 \u56DE\u8A3A' : '\uD83D\uDEB6 \u56DE\u8A3A', rounded && patient.roundedAt && React.createElement("span", {
+  }, checked ? `\u2713 ${checkMeta.label}` : `${checkMeta.icon} ${checkMeta.label}`, checked && checkedAt && React.createElement("span", {
     className: "round-stamp-time"
-  }, ' ' + formatHHMM(patient.roundedAt))), React.createElement("button", {
+  }, ' ' + formatHHMM(checkedAt))), !showCheckStamp && React.createElement("button", {
     onClick: e => {
       e.stopPropagation();
       onRemove();
     },
     title: "\u7D42\u4E86",
     style: {
-      marginLeft: showRoundStamp ? 6 : 'auto',
+      marginLeft: 'auto',
       display: 'flex',
       alignItems: 'center',
       gap: 4,
@@ -8291,7 +8330,7 @@ function PatientTriage() {
   const [lowEnergyNeedsNext, setLowEnergyNeedsNext] = useState(false);
   const [quickOnly, setQuickOnly] = useState(false);
   const [erOnly, setErOnly] = useState(false);
-  const [roundMode, setRoundMode] = useState(false);
+  const [checkMode, setCheckMode] = useState('');
   const [stuckDialog, setStuckDialog] = useState(null);
   const [stuckForm, setStuckForm] = useState({
     reason: '',
@@ -8758,11 +8797,15 @@ function PatientTriage() {
     });
   }, [activePatients, patientSortMode]);
   const visiblePatients = useMemo(() => erOnly && !isDailyMode ? sortedPatients.filter(p => getPri(p) === 'er') : sortedPatients, [sortedPatients, erOnly, isDailyMode]);
-  const roundTargets = useMemo(() => isDailyMode ? [] : activePatients.filter(isRoundTarget), [activePatients, isDailyMode]);
-  const roundedTodayCount = useMemo(() => roundTargets.filter(isRoundedToday).length, [roundTargets, now]);
-  const roundWardSummary = useMemo(() => {
+  const checkTargets = useMemo(() => isDailyMode ? [] : activePatients.filter(isRoundTarget), [activePatients, isDailyMode]);
+  const checkedCounts = useMemo(() => ({
+    round: checkTargets.filter(p => isCheckedToday(p, 'round')).length,
+    chart: checkTargets.filter(p => isCheckedToday(p, 'chart')).length
+  }), [checkTargets, now]);
+  const checkWardSummary = useMemo(() => {
+    if (!checkMode) return [];
     const map = new Map();
-    roundTargets.forEach(p => {
+    checkTargets.forEach(p => {
       const ward = getWard(p);
       if (!map.has(ward)) map.set(ward, {
         ward,
@@ -8771,11 +8814,11 @@ function PatientTriage() {
       });
       const entry = map.get(ward);
       entry.total += 1;
-      if (isRoundedToday(p)) entry.done += 1;
+      if (isCheckedToday(p, checkMode)) entry.done += 1;
     });
     return [...map.values()].sort((a, b) => (WARD_ORDER[a.ward] ?? 0) - (WARD_ORDER[b.ward] ?? 0));
-  }, [roundTargets, now]);
-  const displayPatients = useMemo(() => roundMode && !isDailyMode ? [...visiblePatients].sort((a, b) => (isRoundedToday(a) ? 1 : 0) - (isRoundedToday(b) ? 1 : 0)) : visiblePatients, [visiblePatients, roundMode, isDailyMode, now]);
+  }, [checkTargets, checkMode, now]);
+  const displayPatients = useMemo(() => checkMode && !isDailyMode ? [...visiblePatients].sort((a, b) => (isCheckedToday(a, checkMode) ? 1 : 0) - (isCheckedToday(b, checkMode) ? 1 : 0)) : visiblePatients, [visiblePatients, checkMode, isDailyMode, now]);
   const flatTasks = useMemo(() => activePatients.flatMap(p => p.tasks.map(t => ({
     ...t,
     patientId: p.id,
@@ -8980,40 +9023,44 @@ function PatientTriage() {
     ...p,
     ward
   } : p));
-  const toggleRounded = id => {
+  const toggleChecked = (kind, id) => {
+    const meta = PATIENT_CHECK_MODES[kind];
+    if (!meta) return;
     const target = activePatients.find(p => p.id === id);
     if (!target) return;
-    const marking = !isRoundedToday(target);
+    const marking = !isCheckedToday(target, kind);
     setActivePatients(prev => prev.map(p => p.id === id ? marking ? {
       ...p,
-      roundedDate: todayStr(),
-      roundedAt: Date.now()
+      [meta.dateField]: todayStr(),
+      [meta.atField]: Date.now()
     } : {
       ...p,
-      roundedDate: null,
-      roundedAt: null
+      [meta.dateField]: null,
+      [meta.atField]: null
     } : p));
     if (marking) {
-      const remaining = activePatients.filter(p => p.id !== id && isRoundTarget(p) && !isRoundedToday(p)).length;
+      const remaining = activePatients.filter(p => p.id !== id && isRoundTarget(p) && !isCheckedToday(p, kind)).length;
       if (remaining === 0) {
-        showToast('🎉 回診コンプリート！全員回りました');
+        showToast(meta.completeToast);
         window.dispatchEvent(new CustomEvent('chibi-coach', {
           detail: {
             kind: 'allclear',
-            text: '🚶 回診コンプリート！全員ちゃんと回れたよ、えらい！'
+            text: meta.completeChibi
           }
         }));
       }
     }
   };
-  const resetRounds = () => {
-    rememberUndo('回診チェックリセット');
-    setActivePatients(prev => prev.map(p => p.roundedDate || p.roundedAt ? {
+  const resetChecks = kind => {
+    const meta = PATIENT_CHECK_MODES[kind];
+    if (!meta) return;
+    rememberUndo(`${meta.label}チェックリセット`);
+    setActivePatients(prev => prev.map(p => p[meta.dateField] || p[meta.atField] ? {
       ...p,
-      roundedDate: null,
-      roundedAt: null
+      [meta.dateField]: null,
+      [meta.atField]: null
     } : p));
-    showToast('回診チェックをリセットしました');
+    showToast(`${meta.label}チェックをリセットしました`);
   };
   const togglePatientAlert = (id, alertId) => {
     rememberUndo('患者アラート変更');
@@ -10990,20 +11037,25 @@ function PatientTriage() {
     "aria-pressed": erOnly,
     title: erOnly ? "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092ER\u306E\u307F\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092ER\u306E\u307F\u306B\u7D5E\u308A\u8FBC\u3080",
     style: filterButtonStyle(erOnly)
-  }, "ER"), !isDailyMode && React.createElement("button", {
-    className: `btn-ghost${roundMode ? ' btn-ghost-active' : ''}`,
-    onClick: () => setRoundMode(v => !v),
-    "aria-label": "回診チェック",
-    "aria-pressed": roundMode,
-    title: roundMode ? "回診チェック表示中：未回診が上に並びます" : "回診チェック：回った患者に✓をつけて回り残しを見える化",
-    style: {
-      whiteSpace: 'nowrap',
-      flexShrink: 0,
-      ...filterButtonStyle(roundMode)
-    }
-  }, "🚶 ", React.createElement("span", {
-    className: "round-dock-label"
-  }, "回診 "), `${roundedTodayCount}/${roundTargets.length}`)), React.createElement("div", {
+  }, "ER"), !isDailyMode && ['round', 'chart'].map(kind => {
+    const meta = PATIENT_CHECK_MODES[kind];
+    const active = checkMode === kind;
+    return React.createElement("button", {
+      key: kind,
+      className: `btn-ghost${active ? ' btn-ghost-active' : ''}`,
+      onClick: () => setCheckMode(m => m === kind ? '' : kind),
+      "aria-label": `${meta.label}チェック`,
+      "aria-pressed": active,
+      title: active ? meta.toggleOnTitle : meta.toggleOffTitle,
+      style: {
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        ...filterButtonStyle(active)
+      }
+    }, `${meta.icon} `, React.createElement("span", {
+      className: "round-dock-label"
+    }, `${meta.label} `), `${checkedCounts[kind]}/${checkTargets.length}`);
+  })), React.createElement("div", {
     className: "action-cluster"
   }, React.createElement("button", {
     className: `btn-ghost${focusMode ? ' btn-ghost-active' : ''}`,
@@ -11239,11 +11291,12 @@ function PatientTriage() {
       flexDirection: 'column',
       gap: 10
     }
-  }, !isDailyMode && roundMode && React.createElement(RoundPanel, {
-    summary: roundWardSummary,
-    total: roundTargets.length,
-    done: roundedTodayCount,
-    onReset: resetRounds
+  }, !isDailyMode && checkMode && React.createElement(CheckPanel, {
+    mode: checkMode,
+    summary: checkWardSummary,
+    total: checkTargets.length,
+    done: checkedCounts[checkMode] || 0,
+    onReset: () => resetChecks(checkMode)
   }), visiblePatients.length === 0 && React.createElement("div", {
     style: {
       textAlign: 'center',
@@ -11267,9 +11320,9 @@ function PatientTriage() {
     onSetWard: ward => setPatientWard(p.id, ward),
     onToggleAlert: alertId => togglePatientAlert(p.id, alertId),
     showAlerts: !isDailyMode,
-    roundEnabled: !isDailyMode && roundMode,
-    dimmed: roundMode && !isDailyMode && isRoundedToday(p),
-    onToggleRounded: () => toggleRounded(p.id),
+    checkMode: !isDailyMode ? checkMode : '',
+    dimmed: !!checkMode && !isDailyMode && isCheckedToday(p, checkMode),
+    onToggleChecked: () => toggleChecked(checkMode, p.id),
     onRename: name => renamePatient(p.id, name),
     onMemoChange: memo => updatePatientMemo(p.id, memo),
     templates: templates,

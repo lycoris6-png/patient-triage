@@ -25,7 +25,7 @@ Do not delete or rename these unless the matching HTML references are updated.
 ## Main Features
 
 - Patient priority/classification: `ER`, high, normal, low.
-- Ward rounds check (回診チェック): the command dock (ぺいとり mode) shows `回診 n/N`; toggling it opens a per-ward progress panel, sorts unvisited patients first, dims visited ones, and shows a 🚶 回診 stamp button on each non-`予` patient card (hidden outside round mode to keep mobile cards uncluttered). The stamp stores `roundedDate`/`roundedAt` on the patient; checks auto-reset at the 06:00 workday boundary (`roundedDate !== todayStr()`).
+- Patient check modes (回診チェック / カルテチェック): the command dock (ぺいとり mode) shows two toggles, `🚶 回診 n/N` and `📝 カルテ n/N` (mutually exclusive, defined in `PATIENT_CHECK_MODES`). While a mode is active it opens a per-ward progress panel, sorts unchecked patients first, dims checked ones, and **replaces the 終了 button on each non-`予` patient card with the check stamp** (予 patients keep 終了). Stamps store `roundedDate`/`roundedAt` (round) or `chartedDate`/`chartedAt` (chart) on the patient; checks auto-reset at the 06:00 workday boundary. Checking the last patient fires a completion toast + chibi line.
 - ER patients sort above ward patients.
 - Patient `終了` removes a patient from the active list and triggers a toast/chibi reaction.
 - Daily completion stats use a workday boundary: 08:00 in the v3 apps, 06:00 (`WORKDAY_START_HOUR`) in the unified prototype. Counts before the boundary belong to the previous workday.
