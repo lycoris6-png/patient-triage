@@ -64,7 +64,8 @@
     .chibi-coach[data-actor="mentor"],
     .chibi-coach[data-actor="spark"],
     .chibi-coach[data-actor="butler"],
-    .chibi-coach[data-actor="yushka"] { --chibi-scale: 1; }
+    .chibi-coach[data-actor="yushka"],
+    .chibi-coach[data-actor="adjutant"] { --chibi-scale: 1; }
     .chibi-coach-bubble {
       position: relative;
       margin-bottom: 12px;
@@ -1077,8 +1078,8 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260612"></script>
-<script src="prototype_unified_triage.app.js?v=20260612-stamp-time"></script>
+<script src="dialogue.js?v=20260614-najine-random"></script>
+<script src="prototype_unified_triage.app.js?v=20260614-najine-random"></script>
 
 
 
@@ -1110,21 +1111,44 @@ body.rpg-mode .chibi-coach-bubble {
     yushka: {
       alt: '赤い髪と角のユシュカ',
       img: { neutral: 'yushka_01_neutral.png', thumb: 'yushka_02_thumbsup.png', cheer: 'yushka_03_cheer.png', thinking: 'yushka_04_thinking.png', hurry: 'yushka_05_hurrying.png', clipboard: 'yushka_06_laptop.png', done: 'yushka_07_paper.png', sleep: 'yushka_08_sleeping.png', smug: 'yushka_09_smug.png' }
+    },
+    adjutant: {
+      alt: '紫髪の補佐官ナジーン',
+      img: { neutral: 'purple_adjutant_01_neutral.png', thumb: 'purple_adjutant_02_thumbsup.png', cheer: 'purple_adjutant_03_cheer.png', thinking: 'purple_adjutant_04_thinking.png', hurry: 'purple_adjutant_05_hurrying.png', clipboard: 'purple_adjutant_06_clipboard.png', done: 'purple_adjutant_07_completed.png', bow: 'purple_adjutant_08_sleeping.png', sleep: 'purple_adjutant_08_sleeping.png' }
     }
   };
 
+  const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
+  const DEFAULT_CAST_ENABLED = Object.freeze({ mentor: true, spark: true, butler: true, yushka: true, adjutant: true });
+  function normalizeEnabledCast(value){
+    const next = { ...DEFAULT_CAST_ENABLED, ...(value && typeof value === 'object' ? value : {}) };
+    const hasEnabled = Object.keys(DEFAULT_CAST_ENABLED).some(id => next[id] !== false);
+    return hasEnabled ? next : { ...DEFAULT_CAST_ENABLED };
+  }
+  function readEnabledCast(){
+    try { return normalizeEnabledCast(JSON.parse(localStorage.getItem(COACH_CAST_STORAGE_KEY) || 'null')); }
+    catch { return { ...DEFAULT_CAST_ENABLED }; }
+  }
+  let enabledCast = readEnabledCast();
+  const isActorEnabled = who => !!cast[who] && enabledCast[who] !== false;
+  const enabledEntries = entries => {
+    const valid = (entries || []).filter(([who]) => cast[who]);
+    const filtered = valid.filter(([who]) => isActorEnabled(who));
+    return filtered.length ? filtered : valid;
+  };
+
   const flows = {
-    start: [['mentor','neutral'], ['butler','neutral'], ['spark','ready'], ['spark','cheer'], ['yushka','neutral']],
-    suggest: [['spark','thinking'], ['mentor','clipboard'], ['mentor','pointing'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking']],
-    estimate: [['mentor','clipboard'], ['butler','clipboard'], ['spark','thinking'], ['yushka','clipboard'], ['yushka','thinking']],
-    add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer']],
-    done: [['spark','done'], ['spark','certificate'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug']],
-    tally: [['spark','cheer'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['spark','thumb'], ['yushka','thumb']],
-    allclear: [['spark','certificate'], ['spark','cheer'], ['mentor','done'], ['butler','done'], ['yushka','smug'], ['yushka','done']],
-    endday: [['mentor','sleep'], ['butler','bow'], ['butler','done'], ['spark','certificate'], ['spark','cheer'], ['yushka','smug'], ['yushka','done']],
-    stuck: [['mentor','thinking'], ['mentor','pointing'], ['butler','thinking'], ['spark','hurry'], ['spark','ready'], ['yushka','hurry'], ['yushka','thinking']],
-    daydream: [['mentor','thinking'], ['butler','thinking'], ['spark','thinking'], ['yushka','sleep'], ['yushka','thinking']],
-    idle: [['mentor','neutral'], ['butler','neutral'], ['butler','bow'], ['spark','ready'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep']]
+    start: [['mentor','neutral'], ['butler','neutral'], ['spark','ready'], ['spark','cheer'], ['yushka','neutral'], ['adjutant','neutral']],
+    suggest: [['spark','thinking'], ['mentor','clipboard'], ['mentor','pointing'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking'], ['adjutant','clipboard'], ['adjutant','thinking']],
+    estimate: [['mentor','clipboard'], ['butler','clipboard'], ['spark','thinking'], ['yushka','clipboard'], ['yushka','thinking'], ['adjutant','clipboard'], ['adjutant','thinking']],
+    add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer'], ['adjutant','clipboard']],
+    done: [['spark','done'], ['spark','certificate'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug'], ['adjutant','done'], ['adjutant','thumb']],
+    tally: [['spark','cheer'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['spark','thumb'], ['yushka','thumb'], ['adjutant','clipboard']],
+    allclear: [['spark','certificate'], ['spark','cheer'], ['mentor','done'], ['butler','done'], ['yushka','smug'], ['yushka','done'], ['adjutant','done']],
+    endday: [['mentor','sleep'], ['butler','bow'], ['butler','done'], ['spark','certificate'], ['spark','cheer'], ['yushka','smug'], ['yushka','done'], ['adjutant','done'], ['adjutant','bow']],
+    stuck: [['mentor','thinking'], ['mentor','pointing'], ['butler','thinking'], ['spark','hurry'], ['spark','ready'], ['yushka','hurry'], ['yushka','thinking'], ['adjutant','thinking']],
+    daydream: [['mentor','thinking'], ['butler','thinking'], ['spark','thinking'], ['yushka','sleep'], ['yushka','thinking'], ['adjutant','thinking']],
+    idle: [['mentor','neutral'], ['butler','neutral'], ['butler','bow'], ['spark','ready'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep'], ['adjutant','neutral']]
   };
   const estimateFor = (who, mode, meta) => {
     const group = (D.estimate || {})[mode === 'daily' ? 'daily' : 'patient'] || {};
@@ -1171,20 +1195,64 @@ body.rpg-mode .chibi-coach-bubble {
     const tpl = when ? (rewardCfg.withWhen || '🎁 ご褒美：{text}（{when}）') : (rewardCfg.noWhen || '🎁 ご褒美：{text}');
     return fmt(tpl, { text: r.text || '', when });
   }
-  const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['spark','certificate']];
+  const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['adjutant','thumb'], ['spark','certificate']];
   let el, img, textEl, hideTimer, lastShown = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false;
   const headerCastClasses = ['', 'header-cast-b', 'header-cast-c'];
+  const headerCastSets = [
+    [['yushka','yushka_09_smug.png'], ['spark','red_antler_girl_03_cheer.png'], ['adjutant','purple_adjutant_01_neutral.png'], ['butler','bat_wing_girl_01_neutral.png'], ['mentor','blue_white_girl_06_clipboard.png']],
+    [['mentor','blue_white_girl_07_completed.png'], ['yushka','yushka_06_laptop.png'], ['adjutant','purple_adjutant_06_clipboard.png'], ['spark','red_antler_girl_02_thumbsup.png']],
+    [['butler','bat_wing_girl_02_thumbsup.png'], ['spark','red_antler_girl_06_clipboard.png'], ['adjutant','purple_adjutant_04_thinking.png'], ['yushka','yushka_03_cheer.png'], ['mentor','blue_white_girl_01_neutral.png']]
+  ];
+  let headerCastStyle = null, headerLastSelectionKey = '';
+  const headerCastMedia = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;
+  function ensureHeaderCastStyle(){
+    if (headerCastStyle) return headerCastStyle;
+    headerCastStyle = document.createElement('style');
+    document.head.appendChild(headerCastStyle);
+    return headerCastStyle;
+  }
+  function cssUrl(file){ return 'url("' + CHIBI_BASE + file + '")'; }
+  function shuffleHeaderEntries(entries, limit){
+    const valid = (entries || []).filter(([who]) => cast[who]);
+    const enabled = valid.filter(([who]) => isActorEnabled(who));
+    const pool = (enabled.length ? enabled : valid).slice();
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const selected = pool.slice(0, Math.min(limit, pool.length));
+    const key = selected.map(([who]) => who).join('|');
+    if (selected.length > 1 && key === headerLastSelectionKey) {
+      selected.push(selected.shift());
+    }
+    headerLastSelectionKey = selected.map(([who]) => who).join('|');
+    return selected;
+  }
+  function updateHeaderCastImages(){
+    const style = ensureHeaderCastStyle();
+    const entries = headerCastSets[headerCastIndex] || headerCastSets[0];
+    const mobile = !!headerCastMedia?.matches;
+    const selected = shuffleHeaderEntries(entries, mobile ? 2 : 4);
+    const positions = mobile
+      ? ['right 4px bottom 12px', 'right 82px bottom 13px']
+      : ['right 18px bottom -8px', 'right 128px bottom -6px', 'right 238px bottom -7px', 'right 348px bottom -7px'];
+    const sizes = selected.map((_, i) => mobile ? (i === 0 ? 'auto 96px' : 'auto 94px') : 'auto 124px');
+    style.textContent = '.app-header::before{background-image:' + selected.map(([, file]) => cssUrl(file)).join(',') + '!important;background-size:' + sizes.join(',') + '!important;background-position:' + positions.slice(0, selected.length).join(',') + '!important;}';
+  }
+  if (headerCastMedia?.addEventListener) headerCastMedia.addEventListener('change', updateHeaderCastImages);
   function rotateHeaderCast(force){
     if (document.hidden && !force) return;
     document.body.classList.remove('header-cast-b', 'header-cast-c');
     headerCastIndex = (headerCastIndex + 1) % headerCastClasses.length;
     const next = headerCastClasses[headerCastIndex];
     if (next) document.body.classList.add(next);
+    updateHeaderCastImages();
   }
   function pickCastEntry(entries){
-    if (!entries || !entries.length) return ['mentor', 'neutral'];
-    const pool = entries.length > 1 ? entries.filter(([who]) => who !== lastActor) : entries;
-    const entry = pick(pool.length ? pool : entries);
+    const usable = enabledEntries(entries);
+    if (!usable.length) return ['mentor', 'neutral'];
+    const pool = usable.length > 1 ? usable.filter(([who]) => who !== lastActor) : usable;
+    const entry = pick(pool.length ? pool : usable);
     lastActor = entry[0];
     return entry;
   }
@@ -1241,7 +1309,7 @@ body.rpg-mode .chibi-coach-bubble {
     const flowKey = (kind === 'reward') ? 'reward' : effectiveKind;
     const flowList = (flowKey === 'reward') ? rewardFlow : (flows[flowKey] || flows.idle);
     let who, pose;
-    if (forcedActor && cast[forcedActor]) {
+    if (forcedActor && cast[forcedActor] && isActorEnabled(forcedActor)) {
       who = forcedActor;
       pose = forcedPose || (flowList.find(([entryWho]) => entryWho === who) || [who, 'neutral'])[1];
       lastActor = who;
@@ -1285,6 +1353,15 @@ body.rpg-mode .chibi-coach-bubble {
   });
   window.addEventListener('triage-running-change', event => {
     runningToolActive = !!event.detail?.active;
+  });
+  window.addEventListener('triage-coach-cast-change', event => {
+    enabledCast = normalizeEnabledCast(event.detail?.cast);
+    updateHeaderCastImages();
+  });
+  window.addEventListener('storage', event => {
+    if (event.key !== COACH_CAST_STORAGE_KEY) return;
+    enabledCast = readEnabledCast();
+    updateHeaderCastImages();
   });
 
   window.addEventListener('load', () => {

@@ -117,13 +117,32 @@
   document.head.appendChild(s);
 })();
 
-const CHARS = ['mentor', 'spark', 'butler', 'yushka'];
+let CHARS = [];
 const CHAR_IMG = {
   mentor: 'chibi_split_pngs/blue_white_girl_01_neutral.png',
   spark: 'chibi_split_pngs/red_antler_girl_01_neutral.png',
   butler: 'chibi_split_pngs/bat_wing_girl_01_neutral.png',
-  yushka: 'chibi_split_pngs/yushka_01_neutral.png'
+  yushka: 'chibi_split_pngs/yushka_01_neutral.png',
+  adjutant: 'chibi_split_pngs/purple_adjutant_01_neutral.png'
 };
+const CHAR_IMG_DEFAULT = CHAR_IMG.mentor;
+const DEFAULT_CHAR_ORDER = ['mentor', 'spark', 'butler', 'yushka', 'adjutant'];
+const getCharImage = id => CHAR_IMG[id] || CHAR_IMG_DEFAULT;
+function getDialogueCharacters(D) {
+  const ids = new Set([
+    ...DEFAULT_CHAR_ORDER,
+    ...Object.keys(D.characters || {}),
+    ...Object.keys(D.patient || {}),
+    ...Object.keys(D.daily || {}),
+    ...Object.keys(D.work || {}),
+    ...Object.keys((D.estimate || {}).patient || {}),
+    ...Object.keys((D.estimate || {}).daily || {})
+  ]);
+  return [...ids].filter(id => {
+    if (!id) return false;
+    return D.characters?.[id] || D.patient?.[id] || D.daily?.[id] || D.work?.[id] || D.estimate?.patient?.[id] || D.estimate?.daily?.[id];
+  });
+}
 const MODES = { patient: 'ぺいとり（患者モード）', daily: 'でいとり（生活モード）', work: 'わーとり（大仕事モード）' };
 const SCENES = {
   start:    ['起動・モード切替', 'アプリを開いたとき / モードを切り替えたとき'],
@@ -142,6 +161,7 @@ const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 function init(){
   const D = window.APP_DIALOGUE;
   if (!D) { document.getElementById('app').innerHTML = '<div class="err">window.APP_DIALOGUE が見つかりません。dialogue.js の形式を確認してください。</div>'; return; }
+  CHARS = getDialogueCharacters(D);
   let html = '';
 
   // プレビュー
@@ -150,7 +170,7 @@ function init(){
     + '<select id="pv-char">' + CHARS.map(c => `<option value="${c}">${esc((D.characters?.[c] || {}).name || c)}</option>`).join('') + '</select>'
     + '<select id="pv-scene">' + Object.entries(SCENES).map(([k, [label]]) => `<option value="${k}">${label}</option>`).join('') + '</select>'
     + '<button class="btn-sub" id="pv-btn">🎲 試しに表示</button>'
-    + '</div><div class="bubble-area"><img id="pv-img" src="' + CHAR_IMG.mentor + '" alt=""><div class="bubble" id="pv-bubble">ここにセリフが出ます（編集中の内容から抽選）</div></div></div>';
+    + '</div><div class="bubble-area"><img id="pv-img" src="' + getCharImage(CHARS[0]) + '" alt=""><div class="bubble" id="pv-bubble">ここにセリフが出ます（編集中の内容から抽選）</div></div></div>';
 
   // キャラ設定
   html += '<details><summary>キャラクター設定（人物像・口調ルール ※AI一言生成にも使われる）</summary><div class="body">';
@@ -215,7 +235,7 @@ function init(){
   document.getElementById('app').addEventListener('input', () => setStatus('未保存の編集あり'));
   document.getElementById('pv-btn').addEventListener('click', previewLine);
   document.getElementById('pv-char').addEventListener('change', () => {
-    document.getElementById('pv-img').src = CHAR_IMG[document.getElementById('pv-char').value];
+    document.getElementById('pv-img').src = getCharImage(document.getElementById('pv-char').value);
   });
   document.getElementById('btn-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(buildFile()); setStatus('コピーしました ✓'); }

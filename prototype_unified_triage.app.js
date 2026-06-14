@@ -619,6 +619,23 @@ const TIME_STATES = {
 };
 const STORAGE_KEY = 'patient-triage-v1';
 const GAS_CONFIG_KEY = 'patient-triage-gas-config';
+const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
+const COACH_CAST_OPTIONS = [
+  { id: 'mentor', label: 'エスト' },
+  { id: 'spark', label: 'ナディア' },
+  { id: 'butler', label: 'ジーン' },
+  { id: 'yushka', label: 'ユシュカ' },
+  { id: 'adjutant', label: 'ナジーン' }
+];
+const DEFAULT_COACH_CAST = Object.freeze(COACH_CAST_OPTIONS.reduce((acc, item) => {
+  acc[item.id] = true;
+  return acc;
+}, {}));
+function normalizeCoachCast(value) {
+  const next = { ...DEFAULT_COACH_CAST, ...(value && typeof value === 'object' ? value : {}) };
+  const hasEnabled = COACH_CAST_OPTIONS.some(item => next[item.id] !== false);
+  return hasEnabled ? next : { ...DEFAULT_COACH_CAST };
+}
 const AI_COACH_START_STORAGE_KEY = 'patient-triage-ai-coach-start-date';
 const ROUTINE_PROMPT_STORAGE_KEY = 'patient-triage-routine-prompt-date';
 const THEMES = [{
@@ -8420,6 +8437,7 @@ function PatientTriage() {
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
   const [gasStatus, setGasStatus] = useState('idle');
   const [gasDialog, setGasDialog] = useState(false);
+  const [coachCast, setCoachCast] = useState(() => normalizeCoachCast(loadLocal(COACH_CAST_STORAGE_KEY)));
   const [themeId, setThemeId] = useState(() => loadLocal(THEME_STORAGE_KEY) || 'lavender');
   const [rpgMode, setRpgMode] = useState(() => loadLocal(RPG_MODE_STORAGE_KEY) === true);
   const [timedAlertMode, setTimedAlertMode] = useState(() => loadLocal(TIMED_ALERT_MODE_STORAGE_KEY) === 'near' ? 'near' : 'all');
@@ -8693,6 +8711,13 @@ function PatientTriage() {
     saveLocal(RPG_MODE_STORAGE_KEY, rpgMode);
   }, [rpgMode]);
   useEffect(() => {
+    const normalized = normalizeCoachCast(coachCast);
+    saveLocal(COACH_CAST_STORAGE_KEY, normalized);
+    window.dispatchEvent(new CustomEvent('triage-coach-cast-change', {
+      detail: { cast: normalized }
+    }));
+  }, [coachCast]);
+  useEffect(() => {
     saveLocal(TIMED_ALERT_MODE_STORAGE_KEY, timedAlertMode);
   }, [timedAlertMode]);
   useEffect(() => {
@@ -8736,13 +8761,14 @@ function PatientTriage() {
       dailyGeneralTasks,
       scheduledEvents,
       workModeEnabled,
-      workItems
+      workItems,
+      coachCast
     });
     if (!ok && Date.now() - saveFailWarnedRef.current > 60000) {
       saveFailWarnedRef.current = Date.now();
       showToast('⚠ 端末への保存に失敗しました。空き容量を確認してください');
     }
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, coachCast, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -10365,7 +10391,8 @@ function PatientTriage() {
     scheduledEvents,
     workModeEnabled,
     workItems,
-    version: 10
+    coachCast,
+    version: 11
   });
   // データ復元の唯一の入口。初期ロード(withDefaults:true)・インポート・GAS pull・バックアップ復元が共用する。
   // withDefaults: 欠けている項目を初期値に戻す(初期ロード用)。falseなら欠けている項目は現状維持。
@@ -10396,6 +10423,7 @@ function PatientTriage() {
     apply(setDailyGeneralTasks, parsed.dailyGeneralTasks, []);
     apply(setScheduledEvents, parsed.scheduledEvents, []);
     setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
+    if (parsed.coachCast && typeof parsed.coachCast === 'object') setCoachCast(normalizeCoachCast(parsed.coachCast));else if (withDefaults) setCoachCast(normalizeCoachCast(loadLocal(COACH_CAST_STORAGE_KEY)));
     const workSource = Array.isArray(parsed.workItems) ? parsed.workItems : Array.isArray(parsed.bosses) ? parsed.bosses : null;
     if (workSource) setWorkItems(workSource.map(normalizeWorkItem));else if (withDefaults) setWorkItems([]);
     return true;
@@ -10476,7 +10504,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).then(r => setGasStatus(r.ok ? 'ok' : 'error')).catch(() => setGasStatus('error')), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, coachCast, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -10499,7 +10527,8 @@ function PatientTriage() {
     scheduledEvents,
     workModeEnabled,
     workItems,
-    version: 10,
+    coachCast,
+    version: 11,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -11597,7 +11626,44 @@ function PatientTriage() {
       padding: '4px 8px',
       opacity: !gasConfig.url || !gasConfig.secret || !gasAiCoach.enabled ? .45 : 1
     }
-  }, "テスト")), gasConfig.url ? React.createElement("div", {
+  }, "テスト")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      margin: '0 0 10px'
+    }
+  }, React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 800
+    }
+  }, "登場キャラ"), COACH_CAST_OPTIONS.map(c => React.createElement("label", {
+    key: c.id,
+    className: "tag",
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      cursor: 'pointer',
+      border: '1px solid var(--border)',
+      background: coachCast[c.id] !== false ? 'rgba(108,62,248,.10)' : 'var(--surface)',
+      color: coachCast[c.id] !== false ? 'var(--accent)' : 'var(--text-3)'
+    }
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: coachCast[c.id] !== false,
+    onChange: e => setCoachCast(prev => normalizeCoachCast({
+      ...prev,
+      [c.id]: e.target.checked
+    })),
+    style: {
+      margin: 0,
+      accentColor: 'var(--accent)'
+    }
+  }), c.label))), gasConfig.url ? React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8,

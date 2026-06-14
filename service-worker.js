@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patient-triage-pwa-v83';
+const CACHE_NAME = 'patient-triage-pwa-v86';
 const APP_SHELL = [
   './',
   './index.html',
@@ -24,7 +24,15 @@ const APP_SHELL = [
   './chibi_split_pngs/blue_white_girl_06_clipboard.png',
   './chibi_split_pngs/red_antler_girl_03_cheer.png',
   './chibi_split_pngs/bat_wing_girl_01_neutral.png',
-  './chibi_split_pngs/yushka_09_smug.png'
+  './chibi_split_pngs/yushka_09_smug.png',
+  './chibi_split_pngs/purple_adjutant_01_neutral.png',
+  './chibi_split_pngs/purple_adjutant_02_thumbsup.png',
+  './chibi_split_pngs/purple_adjutant_03_cheer.png',
+  './chibi_split_pngs/purple_adjutant_04_thinking.png',
+  './chibi_split_pngs/purple_adjutant_05_hurrying.png',
+  './chibi_split_pngs/purple_adjutant_06_clipboard.png',
+  './chibi_split_pngs/purple_adjutant_07_completed.png',
+  './chibi_split_pngs/purple_adjutant_08_sleeping.png'
 ];
 
 self.addEventListener('install', event => {
