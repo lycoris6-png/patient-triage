@@ -93,6 +93,9 @@
       border-bottom: 1.5px solid rgba(120, 96, 180, .18);
       transform: rotate(45deg);
     }
+    .chibi-coach-text {
+      white-space: pre-line;
+    }
     @keyframes chibiFloat {
       0%, 100% { transform: translateY(0) scale(var(--chibi-scale, 1)); }
       50% { transform: translateY(-4px) scale(var(--chibi-scale, 1)); }
@@ -1078,8 +1081,8 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260614-najine-random"></script>
-<script src="prototype_unified_triage.app.js?v=20260614-najine-random"></script>
+<script src="dialogue.js?v=20260615-banter"></script>
+<script src="prototype_unified_triage.app.js?v=20260615-banter"></script>
 
 
 
@@ -1156,6 +1159,33 @@ body.rpg-mode .chibi-coach-bubble {
     if (!set) return '';
     return fmt(meta && meta.count ? set.some : set.none, meta || {});
   };
+  const banterFor = mode => ((D.banter || {})[mode === 'work' ? 'work' : mode === 'daily' ? 'daily' : 'patient'] || []);
+  const banterChanceFor = kind => {
+    if (kind === 'estimate' || kind === 'reward') return 0;
+    if (kind === 'idle' || kind === 'daydream') return 0.12;
+    if (kind === 'start') return 0.04;
+    if (kind === 'done' || kind === 'allclear' || kind === 'endday') return 0.08;
+    return 0.05;
+  };
+  function pickBanter(kind, mode){
+    const chance = banterChanceFor(kind);
+    if (!chance || Math.random() >= chance) return null;
+    const candidates = banterFor(mode).filter(item =>
+      item &&
+      Array.isArray(item.lines) &&
+      item.lines.length &&
+      (item.actors || []).every(isActorEnabled)
+    );
+    if (!candidates.length) return null;
+    const item = pick(candidates);
+    const preferredActor = item.actor && isActorEnabled(item.actor) ? item.actor : (item.actors || []).find(isActorEnabled);
+    if (!preferredActor || !cast[preferredActor]) return null;
+    return {
+      actor: preferredActor,
+      pose: item.pose || 'neutral',
+      text: pick(item.lines)
+    };
+  }
 
 
 
@@ -1306,10 +1336,15 @@ body.rpg-mode .chibi-coach-bubble {
     if (!customText && !rewardOverride && kind === 'idle' && Math.random() < 0.08) {
       effectiveKind = 'daydream';
     }
+    const banter = (!customText && !rewardOverride) ? pickBanter(effectiveKind, currentMode) : null;
     const flowKey = (kind === 'reward') ? 'reward' : effectiveKind;
     const flowList = (flowKey === 'reward') ? rewardFlow : (flows[flowKey] || flows.idle);
     let who, pose;
-    if (forcedActor && cast[forcedActor] && isActorEnabled(forcedActor)) {
+    if (banter) {
+      who = banter.actor;
+      pose = banter.pose;
+      lastActor = who;
+    } else if (forcedActor && cast[forcedActor] && isActorEnabled(forcedActor)) {
       who = forcedActor;
       pose = forcedPose || (flowList.find(([entryWho]) => entryWho === who) || [who, 'neutral'])[1];
       lastActor = who;
@@ -1321,7 +1356,7 @@ body.rpg-mode .chibi-coach-bubble {
     img.src = CHIBI_BASE + (actor.img[pose] || actor.img.neutral);
     img.alt = actor.alt;
     const lines = linesFor(who, currentMode);
-    textEl.textContent = customText || rewardOverride || (effectiveKind === 'estimate' ? (estimateFor(who, currentMode, meta) || pick(lines.idle || FALLBACK_LINES)) : pick(lines[effectiveKind] || lines.idle || FALLBACK_LINES));
+    textEl.textContent = customText || rewardOverride || (banter ? banter.text : (effectiveKind === 'estimate' ? (estimateFor(who, currentMode, meta) || pick(lines.idle || FALLBACK_LINES)) : pick(lines[effectiveKind] || lines.idle || FALLBACK_LINES)));
     clearTimeout(hideTimer);
     el.classList.add('show');
     hideTimer = setTimeout(() => el.classList.remove('show'), kind === 'allclear' ? 5200 : (kind === 'start' || kind === 'reward') ? 4200 : 3300);
