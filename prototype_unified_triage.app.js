@@ -1143,6 +1143,7 @@ const normalizeWorkStep = (step = {}, parent = {}) => ({
   status: normalizeWorkStepStatus(step.status),
   blockType: ['waiting', 'resistant'].includes(step.blockType) ? step.blockType : '',
   blockNote: String(step.blockNote || '').trim(),
+  memo: String(step.memo || step.note || '').trim(),
   blockedAt: Number(step.blockedAt) || null,
   phase: step.phase || step.category || '',
   parentId: step.parentId || step.parentStepId || null,
@@ -1273,7 +1274,7 @@ BEGIN_BOSS_TRIAGE_JSON
       "currentFocus": "いま進めている工程",
       "nextAction": "最初に着手する一手のタイトル（steps の先頭と同じ文言）",
       "steps": [
-        { "title": "一手の内容", "estimate": "2 / 5 / 10 / 15 / 30 のどれか（分）", "priority": "normal", "phase": "工程名（任意）" }
+        { "title": "一手の内容", "estimate": "2 / 5 / 10 / 15 / 30 のどれか（分）", "priority": "normal", "phase": "工程名（任意）", "memo": "補足メモ（任意）" }
       ]
     }
   ]
@@ -1284,6 +1285,7 @@ END_BOSS_TRIAGE_JSON
 - 一手は「〜を3行書く」「〜に電話する」のような、すぐ動ける具体的な行動にする
 - 最初の一手は特に小さくする（5〜10分で終わるもの）
 - 工程が分かれる場合は phase で同じ工程名を付けてグループにする
+- 補足がある一手だけ memo に短いメモを入れる。不要なら空文字か省略でよい
 - 一手は多くても12個まで。細かすぎるより「次に何をするか迷わない」粒度を優先する
 
 仕事の内容:
@@ -6745,7 +6747,8 @@ function WorkingTriageView({
     title: '',
     estimate: '10',
     priority: 'normal',
-    phase: ''
+    phase: '',
+    memo: ''
   });
   const [editingWorkId, setEditingWorkId] = React.useState(null);
   const [workDraft, setWorkDraft] = React.useState({
@@ -7161,7 +7164,8 @@ function WorkingTriageView({
       title: step.title || '',
       estimate: step.estimate || '10',
       priority: step.priority || item.priority || 'normal',
-      phase: step.phase || ''
+      phase: step.phase || '',
+      memo: step.memo || ''
     });
   };
   const saveStepEdit = () => {
@@ -7174,7 +7178,8 @@ function WorkingTriageView({
         title: stepDraft.title.trim(),
         estimate: normalizeWorkEstimate(stepDraft.estimate),
         priority: normalizeWorkPriority(stepDraft.priority),
-        phase: stepDraft.phase.trim()
+        phase: stepDraft.phase.trim(),
+        memo: stepDraft.memo.trim()
       } : step),
       updatedAt: Date.now(),
       logs: [...(item.logs || []), workLog(`一手編集: ${stepDraft.title.trim()}`)]
@@ -7393,7 +7398,20 @@ function WorkingTriageView({
         padding: '5px 6px',
         fontSize: 12
       }
-    })) : React.createElement(React.Fragment, null, step.estimate, "分", step.phase ? ` / ${step.phase}` : '', isSkipped ? ' / 今は無理' : step.blockType ? ` / ${step.blockType === 'waiting' ? '待ち' : '抵抗あり'}` : '')))), isEditing ? React.createElement("div", {
+    }), React.createElement("input", {
+      className: "inp",
+      value: stepDraft.memo,
+      onChange: e => setStepDraft(prev => ({
+        ...prev,
+        memo: e.target.value
+      })),
+      placeholder: "メモ",
+      style: {
+        gridColumn: '1 / -1',
+        padding: '5px 6px',
+        fontSize: 12
+      }
+    })) : React.createElement(React.Fragment, null, step.estimate, "分", step.phase ? ` / ${step.phase}` : '', step.memo ? ` / ${step.memo}` : '', isSkipped ? ' / 今は無理' : step.blockType ? ` / ${step.blockType === 'waiting' ? '待ち' : '抵抗あり'}` : '')))), isEditing ? React.createElement("div", {
       style: {
         display: 'flex',
         gap: 6,
@@ -7454,12 +7472,12 @@ function WorkingTriageView({
     }, "…"), React.createElement("div", {
       style: {
         position: 'absolute',
-        right: 0,
+        left: 0,
         top: 'calc(100% + 6px)',
         zIndex: 20,
         display: 'grid',
         gap: 4,
-        minWidth: 156,
+        width: 'min(176px, calc(100vw - 32px))',
         padding: 8,
         background: 'var(--surface)',
         border: '1.5px solid var(--border)',
