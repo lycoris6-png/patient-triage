@@ -1148,7 +1148,8 @@ const normalizeWorkStep = (step = {}, parent = {}) => ({
   parentId: step.parentId || step.parentStepId || null,
   isGroup: step.isGroup === true,
   createdAt: Number(step.createdAt) || Date.now(),
-  completedAt: step.completedAt || null
+  completedAt: step.completedAt || null,
+  skippedAt: Number(step.skippedAt) || null
 });
 const normalizeWorkItem = (item = {}) => {
   const now = Date.now();
@@ -6835,7 +6836,7 @@ function WorkingTriageView({
         changed = false;
         steps = steps.map(s => {
           const children = steps.filter(child => child.parentId === s.id);
-          if (children.length && s.status !== 'done' && children.every(child => child.status === 'done' || child.status === 'skipped')) {
+          if (children.length && s.status !== 'done' && children.every(child => child.status === 'done')) {
             changed = true;
             return {
               ...s,
@@ -6875,13 +6876,37 @@ function WorkingTriageView({
         steps: (item.steps || []).map(s => reopenIds.has(s.id) ? {
           ...s,
           status: 'open',
-          completedAt: null
+          completedAt: null,
+          skippedAt: null
         } : s),
         nextAction: step?.title || item.nextAction,
         updatedAt: Date.now(),
         logs: [...(item.logs || []), workLog(`未完に戻す: ${step?.title || ''}`)]
       };
     });
+  };
+  const skipStepForNow = (itemId, stepId) => {
+    rememberWorkChange('わーとり一手保留');
+    updateItem(itemId, item => {
+      const step = (item.steps || []).find(s => s.id === stepId);
+      if (!step) return item;
+      return {
+        ...item,
+        steps: (item.steps || []).map(s => s.id === stepId ? {
+          ...s,
+          status: 'skipped',
+          blockType: '',
+          blockNote: '',
+          blockedAt: null,
+          skippedAt: Date.now()
+        } : s),
+        nextAction: item.nextAction === step.title ? '' : item.nextAction,
+        updatedAt: Date.now(),
+        logs: [...(item.logs || []), workLog(`今は無理: ${step.title}`)]
+      };
+    });
+    setCandidateIndex(i => i + 1);
+    showToast('今は無理として一手を保留しました');
   };
   const completeStepTree = (itemId, stepId) => {
     rememberWorkChange('わーとり一手まとめて完了');
@@ -6901,7 +6926,7 @@ function WorkingTriageView({
         changed = false;
         steps = steps.map(s => {
           const children = steps.filter(child => child.parentId === s.id);
-          if (children.length && s.status !== 'done' && children.every(child => child.status === 'done' || child.status === 'skipped')) {
+          if (children.length && s.status !== 'done' && children.every(child => child.status === 'done')) {
             changed = true;
             return {
               ...s,
@@ -6935,7 +6960,8 @@ function WorkingTriageView({
         steps: (item.steps || []).map(s => reopenIds.has(s.id) ? {
           ...s,
           status: 'open',
-          completedAt: null
+          completedAt: null,
+          skippedAt: null
         } : s),
         nextAction: step?.title || item.nextAction,
         updatedAt: Date.now(),
@@ -7236,7 +7262,8 @@ function WorkingTriageView({
     const descendantLeaves = hasChildren ? workLeafSteps({
       steps: (item.steps || []).filter(s => descendantIds.includes(s.id))
     }) : [];
-    const isChecked = hasChildren ? descendantLeaves.length > 0 && descendantLeaves.every(s => s.status === 'done' || s.status === 'skipped') : step.status === 'done';
+    const isSkipped = step.status === 'skipped';
+    const isChecked = hasChildren ? descendantLeaves.length > 0 && descendantLeaves.every(s => s.status === 'done') : step.status === 'done';
     return React.createElement("div", {
       key: step.id,
       style: {
@@ -7245,7 +7272,8 @@ function WorkingTriageView({
         borderRadius: 12,
         padding: 10,
         marginLeft: depth ? 14 : 0,
-        background: hasChildren ? isChecked ? 'rgba(22,163,74,.08)' : 'var(--surface-2)' : step.status === 'done' ? 'rgba(22,163,74,.08)' : step.blockType === 'waiting' ? 'rgba(59,130,246,.08)' : step.blockType === 'resistant' ? 'rgba(239,68,68,.08)' : 'var(--surface)'
+        background: hasChildren ? isChecked ? 'rgba(22,163,74,.08)' : 'var(--surface-2)' : step.status === 'done' ? 'rgba(22,163,74,.08)' : isSkipped ? 'rgba(148,163,184,.12)' : step.blockType === 'waiting' ? 'rgba(59,130,246,.08)' : step.blockType === 'resistant' ? 'rgba(239,68,68,.08)' : 'var(--surface)',
+        opacity: isSkipped ? .68 : 1
       }
     }, React.createElement("div", {
       style: {
@@ -7254,12 +7282,12 @@ function WorkingTriageView({
         alignItems: 'flex-start'
       }
     }, React.createElement("button", {
-      className: `check-circle${isChecked ? ' done' : step.blockType ? ' stuck' : ''}`,
-      onClick: () => hasChildren ? isChecked ? reopenStepTree(item.id, step.id) : completeStepTree(item.id, step.id) : step.status === 'done' ? reopenStep(item.id, step.id) : completeStep(item.id, step.id),
+      className: `check-circle${isChecked ? ' done' : step.blockType || isSkipped ? ' stuck' : ''}`,
+      onClick: () => hasChildren ? isChecked ? reopenStepTree(item.id, step.id) : completeStepTree(item.id, step.id) : step.status === 'done' || isSkipped ? reopenStep(item.id, step.id) : completeStep(item.id, step.id),
       style: {
         marginTop: 1
       },
-      title: hasChildren ? isChecked ? '配下を未完に戻す' : '配下をまとめて完了にする' : step.status === 'done' ? 'クリックで未完に戻す' : '完了にする'
+      title: hasChildren ? isChecked ? '配下を未完に戻す' : '配下をまとめて完了にする' : step.status === 'done' ? 'クリックで未完に戻す' : isSkipped ? '候補に戻す' : '完了にする'
     }, isChecked && React.createElement(Check, {
       size: 11,
       color: "#fff"
@@ -7365,7 +7393,7 @@ function WorkingTriageView({
         padding: '5px 6px',
         fontSize: 12
       }
-    })) : React.createElement(React.Fragment, null, step.estimate, "分", step.phase ? ` / ${step.phase}` : '', step.blockType ? ` / ${step.blockType === 'waiting' ? '待ち' : '抵抗あり'}` : '')))), isEditing ? React.createElement("div", {
+    })) : React.createElement(React.Fragment, null, step.estimate, "分", step.phase ? ` / ${step.phase}` : '', isSkipped ? ' / 今は無理' : step.blockType ? ` / ${step.blockType === 'waiting' ? '待ち' : '抵抗あり'}` : '')))), isEditing ? React.createElement("div", {
       style: {
         display: 'flex',
         gap: 6,
@@ -7394,7 +7422,14 @@ function WorkingTriageView({
         marginTop: 8,
         alignItems: 'center'
       }
-    }, step.status !== 'done' && hasChildren && React.createElement("button", {
+    }, isSkipped && React.createElement("button", {
+      className: "btn-ghost",
+      onClick: () => reopenStep(item.id, step.id),
+      style: {
+        padding: '6px 10px',
+        fontSize: 12
+      }
+    }, "戻す"), step.status !== 'done' && !isSkipped && hasChildren && React.createElement("button", {
       className: "btn-ghost",
       onClick: () => addStep(item.id, step.id),
       style: {
@@ -7431,7 +7466,7 @@ function WorkingTriageView({
         borderRadius: 10,
         boxShadow: 'var(--shadow)'
       }
-    }, step.status !== 'done' && !hasChildren && React.createElement("button", {
+    }, step.status !== 'done' && !isSkipped && !hasChildren && React.createElement("button", {
       className: "btn-sm",
       onClick: () => markBlock(item.id, step.id, 'waiting'),
       style: {
@@ -7439,7 +7474,7 @@ function WorkingTriageView({
         padding: '7px 9px',
         fontSize: 12
       }
-    }, "待ちにする"), step.status !== 'done' && !hasChildren && React.createElement("button", {
+    }, "待ちにする"), step.status !== 'done' && !isSkipped && !hasChildren && React.createElement("button", {
       className: "btn-sm",
       onClick: () => markBlock(item.id, step.id, 'resistant'),
       style: {
@@ -7448,7 +7483,16 @@ function WorkingTriageView({
         fontSize: 12,
         color: '#DC2626'
       }
-    }, "抵抗あり"), React.createElement("button", {
+    }, "抵抗あり"), step.status !== 'done' && !isSkipped && !hasChildren && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => skipStepForNow(item.id, step.id),
+      style: {
+        justifyContent: 'flex-start',
+        padding: '7px 9px',
+        fontSize: 12,
+        color: 'var(--text-3)'
+      }
+    }, "今は無理"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => addStep(item.id, step.id),
       style: {
@@ -8219,14 +8263,30 @@ function WorkingTriageView({
       fontWeight: 800,
       minWidth: 0
     }
-  }, selectedCandidate.item.title), candidates.length > 1 && React.createElement("button", {
-    className: "btn-sm",
-    onClick: () => setCandidateIndex(i => i + 1),
+  }, selectedCandidate.item.title), React.createElement("div", {
     style: {
-      fontSize: 12,
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      justifyContent: 'flex-end',
       flexShrink: 0
     }
-  }, "別のを")), renderStep(selectedCandidate.item, selectedCandidate.step)), blockedSteps.length > 0 && React.createElement("section", {
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => skipStepForNow(selectedCandidate.item.id, selectedCandidate.step.id),
+    style: {
+      padding: '6px 10px',
+      fontSize: 12,
+      color: 'var(--text-3)'
+    }
+  }, "今は無理"), candidates.length > 1 && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => setCandidateIndex(i => i + 1),
+    style: {
+      padding: '6px 10px',
+      fontSize: 12
+    }
+  }, "別のを"))), renderStep(selectedCandidate.item, selectedCandidate.step)), blockedSteps.length > 0 && React.createElement("section", {
     style: {
       background: 'var(--surface)',
       border: '1.5px solid var(--border)',
