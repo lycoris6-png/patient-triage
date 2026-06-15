@@ -53,13 +53,57 @@
       pointer-events: auto;
       cursor: pointer;
     }
-    .chibi-coach img {
+    .chibi-coach-cast {
+      position: relative;
+      width: 124px;
+      height: 124px;
+    }
+    .chibi-coach-img {
+      position: absolute;
+      bottom: 0;
+      left: 0;
       width: 124px;
       height: 124px;
       object-fit: contain;
       transform-origin: center bottom;
       filter: drop-shadow(0 8px 16px rgba(52, 38, 99, .22));
       animation: chibiFloat 1.9s ease-in-out infinite;
+    }
+    .chibi-coach-img-partner {
+      display: none;
+    }
+    .chibi-coach.banter {
+      grid-template-columns: 174px minmax(190px, 300px);
+    }
+    .chibi-coach.banter .chibi-coach-cast {
+      width: 174px;
+    }
+    .chibi-coach.banter .chibi-coach-img {
+      width: 118px;
+      height: 118px;
+    }
+    .chibi-coach.banter .chibi-coach-img-main {
+      left: 0;
+      z-index: 2;
+    }
+    .chibi-coach.banter .chibi-coach-img-partner {
+      display: block;
+      left: 56px;
+      z-index: 1;
+      opacity: .96;
+      animation-delay: .18s;
+    }
+    .chibi-coach-banter-turn {
+      display: block;
+    }
+    .chibi-coach-banter-turn + .chibi-coach-banter-turn {
+      margin-top: 4px;
+    }
+    .chibi-coach-speaker {
+      color: #6C3EF8;
+      font-weight: 900;
+      margin-right: .45em;
+      white-space: nowrap;
     }
     .chibi-coach[data-actor="mentor"],
     .chibi-coach[data-actor="spark"],
@@ -107,14 +151,35 @@
         grid-template-columns: 96px minmax(0, 1fr);
         max-width: calc(100vw - 20px);
       }
-      .chibi-coach img {
+      .chibi-coach-cast {
         width: 96px;
         height: 96px;
+      }
+      .chibi-coach-img {
+        width: 96px;
+        height: 96px;
+      }
+      .chibi-coach.banter {
+        grid-template-columns: 124px minmax(0, 1fr);
+      }
+      .chibi-coach.banter .chibi-coach-cast {
+        width: 124px;
+        height: 96px;
+      }
+      .chibi-coach.banter .chibi-coach-img {
+        width: 86px;
+        height: 86px;
+      }
+      .chibi-coach.banter .chibi-coach-img-partner {
+        left: 38px;
       }
       .chibi-coach-bubble {
         max-width: calc(100vw - 138px);
         padding: 9px 10px;
         font-size: 11px;
+      }
+      .chibi-coach.banter .chibi-coach-bubble {
+        max-width: calc(100vw - 156px);
       }
     }
     .pwa-install-button {
@@ -1081,8 +1146,8 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260615-banter"></script>
-<script src="prototype_unified_triage.app.js?v=20260615-work-phase-memo"></script>
+<script src="dialogue.js?v=20260616-check-lines"></script>
+<script src="prototype_unified_triage.app.js?v=20260616-check-lines"></script>
 
 
 
@@ -1159,6 +1224,10 @@ body.rpg-mode .chibi-coach-bubble {
     if (!set) return '';
     return fmt(meta && meta.count ? set.some : set.none, meta || {});
   };
+  const patientCheckLineFor = (who, checkKind) => {
+    const set = ((D.patientChecks || {})[checkKind] || {})[who];
+    return Array.isArray(set) && set.length ? pick(set) : '';
+  };
   const banterFor = mode => ((D.banter || {})[mode === 'work' ? 'work' : mode === 'daily' ? 'daily' : 'patient'] || []);
   const banterChanceFor = kind => {
     if (kind === 'estimate' || kind === 'reward') return 0;
@@ -1174,15 +1243,23 @@ body.rpg-mode .chibi-coach-bubble {
       item &&
       Array.isArray(item.lines) &&
       item.lines.length &&
+      Array.isArray(item.actors) &&
+      item.actors.length >= 2 &&
       (item.actors || []).every(isActorEnabled)
     );
     if (!candidates.length) return null;
     const item = pick(candidates);
     const preferredActor = item.actor && isActorEnabled(item.actor) ? item.actor : (item.actors || []).find(isActorEnabled);
     if (!preferredActor || !cast[preferredActor]) return null;
+    const orderedActors = [preferredActor, ...item.actors.filter(who => who !== preferredActor)].slice(0, 2);
+    const poses = item.poses && typeof item.poses === 'object' ? item.poses : {};
     return {
       actor: preferredActor,
       pose: item.pose || 'neutral',
+      actors: orderedActors.map((who, index) => ({
+        actor: who,
+        pose: poses[who] || (who === preferredActor ? (item.pose || 'neutral') : (index === 0 ? 'neutral' : 'thumb'))
+      })),
       text: pick(item.lines)
     };
   }
@@ -1226,7 +1303,7 @@ body.rpg-mode .chibi-coach-bubble {
     return fmt(tpl, { text: r.text || '', when });
   }
   const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['adjutant','thumb'], ['spark','certificate']];
-  let el, img, textEl, hideTimer, lastShown = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false;
+  let el, img, partnerImg, textEl, hideTimer, lastShown = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false;
   const headerCastClasses = ['', 'header-cast-b', 'header-cast-c'];
   const headerCastSets = [
     [['yushka','yushka_09_smug.png'], ['spark','red_antler_girl_03_cheer.png'], ['adjutant','purple_adjutant_01_neutral.png'], ['butler','bat_wing_girl_01_neutral.png'], ['mentor','blue_white_girl_06_clipboard.png']],
@@ -1306,13 +1383,56 @@ body.rpg-mode .chibi-coach-bubble {
     el.setAttribute('aria-live', 'polite');
     el.setAttribute('role', 'button');
     el.setAttribute('title', 'つつくとご褒美をくれる');
-    el.innerHTML = '<img decoding="async" loading="eager" alt=""><div class="chibi-coach-bubble"><span class="chibi-coach-text"></span></div>';
+    el.innerHTML = '<div class="chibi-coach-cast"><img class="chibi-coach-img chibi-coach-img-main" decoding="async" loading="eager" alt=""><img class="chibi-coach-img chibi-coach-img-partner" decoding="async" loading="eager" alt="" hidden></div><div class="chibi-coach-bubble"><span class="chibi-coach-text"></span></div>';
     document.body.appendChild(el);
-    img = el.querySelector('img');
+    img = el.querySelector('.chibi-coach-img-main');
+    partnerImg = el.querySelector('.chibi-coach-img-partner');
     textEl = el.querySelector('.chibi-coach-text');
     el.addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('chibi-coach', { detail: { kind: 'reward' } }));
     });
+  }
+
+  function escapeHtml(value){
+    return String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+  function renderBanterText(line){
+    const turns = String(line || '').split('\n').map(part => {
+      const trimmed = part.trim();
+      const match = trimmed.match(/^([^「」]+)「(.+)」$/);
+      return match ? { speaker: match[1], text: match[2] } : { speaker: '', text: trimmed };
+    }).filter(turn => turn.text);
+    if (!turns.length) {
+      textEl.textContent = line || '';
+      return;
+    }
+    textEl.innerHTML = turns.map(turn =>
+      '<span class="chibi-coach-banter-turn">' +
+      (turn.speaker ? '<span class="chibi-coach-speaker">' + escapeHtml(turn.speaker) + '</span>' : '') +
+      '<span>' + escapeHtml(turn.text) + '</span></span>'
+    ).join('');
+  }
+  function renderCoachImages(entries){
+    const valid = (entries || []).filter(entry => entry && cast[entry.actor]);
+    const primary = valid[0];
+    const secondary = valid[1];
+    if (!primary) return;
+    const primaryActor = cast[primary.actor];
+    img.src = CHIBI_BASE + (primaryActor.img[primary.pose] || primaryActor.img.neutral);
+    img.alt = primaryActor.alt;
+    el.dataset.actor = primary.actor;
+    if (secondary) {
+      const secondaryActor = cast[secondary.actor];
+      partnerImg.src = CHIBI_BASE + (secondaryActor.img[secondary.pose] || secondaryActor.img.neutral);
+      partnerImg.alt = secondaryActor.alt;
+      partnerImg.hidden = false;
+      el.classList.add('banter');
+    } else {
+      partnerImg.hidden = true;
+      partnerImg.removeAttribute('src');
+      partnerImg.alt = '';
+      el.classList.remove('banter');
+    }
   }
 
   function show(kind, force, customText, meta, forcedActor, forcedPose){
@@ -1336,7 +1456,7 @@ body.rpg-mode .chibi-coach-bubble {
     if (!customText && !rewardOverride && kind === 'idle' && Math.random() < 0.08) {
       effectiveKind = 'daydream';
     }
-    const banter = (!customText && !rewardOverride) ? pickBanter(effectiveKind, currentMode) : null;
+    const banter = (!customText && !rewardOverride && !meta?.checkKind) ? pickBanter(effectiveKind, currentMode) : null;
     const flowKey = (kind === 'reward') ? 'reward' : effectiveKind;
     const flowList = (flowKey === 'reward') ? rewardFlow : (flows[flowKey] || flows.idle);
     let who, pose;
@@ -1348,15 +1468,21 @@ body.rpg-mode .chibi-coach-bubble {
       who = forcedActor;
       pose = forcedPose || (flowList.find(([entryWho]) => entryWho === who) || [who, 'neutral'])[1];
       lastActor = who;
+    } else if (customText && isActorEnabled('mentor')) {
+      who = 'mentor';
+      pose = forcedPose || (flowList.find(([entryWho]) => entryWho === who) || [who, 'neutral'])[1];
+      lastActor = who;
     } else {
       [who, pose] = pickCastEntry(flowList);
     }
-    const actor = cast[who];
-    el.dataset.actor = who;
-    img.src = CHIBI_BASE + (actor.img[pose] || actor.img.neutral);
-    img.alt = actor.alt;
+    renderCoachImages(banter?.actors || [{ actor: who, pose }]);
     const lines = linesFor(who, currentMode);
-    textEl.textContent = customText || rewardOverride || (banter ? banter.text : (effectiveKind === 'estimate' ? (estimateFor(who, currentMode, meta) || pick(lines.idle || FALLBACK_LINES)) : pick(lines[effectiveKind] || lines.idle || FALLBACK_LINES)));
+    if (banter) {
+      renderBanterText(banter.text);
+    } else {
+      const checkLine = effectiveKind === 'allclear' && meta?.checkKind ? patientCheckLineFor(who, meta.checkKind) : '';
+      textEl.textContent = customText || rewardOverride || checkLine || (effectiveKind === 'estimate' ? (estimateFor(who, currentMode, meta) || pick(lines.idle || FALLBACK_LINES)) : pick(lines[effectiveKind] || lines.idle || FALLBACK_LINES));
+    }
     clearTimeout(hideTimer);
     el.classList.add('show');
     hideTimer = setTimeout(() => el.classList.remove('show'), kind === 'allclear' ? 5200 : (kind === 'start' || kind === 'reward') ? 4200 : 3300);

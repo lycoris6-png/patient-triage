@@ -919,7 +919,6 @@ const PATIENT_CHECK_MODES = {
     hint: '未回診の患者が上に並んでいます。回ったらカードの「🚶 回診」をタップ。翌朝6時に自動リセットされます',
     allDoneMsg: '全員回りました！お疲れさまです',
     completeToast: '🎉 回診コンプリート！全員回りました',
-    completeChibi: '🚶 回診コンプリート！全員ちゃんと回れたよ、えらい！',
     stampHint: '回診したらタップ',
     stampDoneHint: '回診済み',
     resetLabel: '今日の回診チェックを全て外す',
@@ -934,7 +933,6 @@ const PATIENT_CHECK_MODES = {
     hint: '未記載の患者が上に並んでいます。カルテを書いたらカードの「📝 カルテ」をタップ。翌朝6時に自動リセットされます',
     allDoneMsg: '全員分書けました！お疲れさまです',
     completeToast: '🎉 カルテコンプリート！全員分書けました',
-    completeChibi: '📝 カルテ全員分コンプリート！今日の記録は隙なしだよ！',
     stampHint: 'カルテを書いたらタップ',
     stampDoneHint: 'カルテ記載済み',
     resetLabel: '今日のカルテチェックを全て外す',
@@ -6127,7 +6125,9 @@ function FloatingTimerBar({
       window.dispatchEvent(new CustomEvent('chibi-coach', {
         detail: {
           kind: 'done',
-          text: `⏰ ${running.title} の見積もり時間です`
+          text: `⏰ ${running.title} の見積もり時間です`,
+          actor: 'mentor',
+          pose: 'clipboard'
         }
       }));
     } else if (!over && firedRef.current) {
@@ -6864,7 +6864,9 @@ function WorkingTriageView({
     window.dispatchEvent(new CustomEvent('chibi-coach', {
       detail: {
         kind: 'done',
-        text: '一手進みました。重たい仕事も、分ければ動きます。'
+        text: '一手進みました。重たい仕事も、分ければ動きます。',
+        actor: 'mentor',
+        pose: 'done'
       }
     }));
   };
@@ -8712,7 +8714,9 @@ function PatientTriage() {
         window.dispatchEvent(new CustomEvent('chibi-coach', {
           detail: {
             kind: 'done',
-            text: `🎉 ${prev.title} ${prev.targetCount}件達成！`
+            text: `🎉 ${prev.title} ${prev.targetCount}件達成！`,
+            actor: 'spark',
+            pose: 'cheer'
           }
         }));
       } else {
@@ -9149,7 +9153,9 @@ function PatientTriage() {
         window.dispatchEvent(new CustomEvent('chibi-coach', {
           detail: {
             kind: 'allclear',
-            text: meta.completeChibi
+            estimate: {
+              checkKind: kind
+            }
           }
         }));
       }
