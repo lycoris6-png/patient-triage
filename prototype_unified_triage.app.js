@@ -1481,12 +1481,14 @@ const appPrompt = async ({
   defaultValue,
   type,
   placeholder,
-  confirmText
+  confirmText,
+  cancelText
 }) => {
   const res = await appForm({
     title,
     message,
     confirmText,
+    cancelText,
     fields: [{
       key: 'value',
       label,
@@ -2183,6 +2185,7 @@ function TaskRow({
   onClearTime,
   onSetTime,
   onUpdate,
+  onAdvanceStuckStep,
   muted
 }) {
   const {
@@ -2376,10 +2379,35 @@ function TaskRow({
       marginTop: 2,
       opacity: .85
     }
-  }, "\u2192 \u4E00\u6B69: ", task.tinyStep), React.createElement(StuckProgress, {
+  }, "\u2192 \u4E00\u6B69: ", task.tinyStep), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 4,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement(StuckProgress, {
     task: task,
     compact: true
-  })), !isDone && React.createElement("div", {
+  }), onAdvanceStuckStep && React.createElement("button", {
+    className: "btn-sm",
+    onClick: e => {
+      e.stopPropagation();
+      onAdvanceStuckStep();
+    },
+    title: "この一歩を進める",
+    style: {
+      padding: '2px 7px',
+      minHeight: 0,
+      lineHeight: 1.2,
+      fontSize: 10,
+      borderRadius: 999,
+      color: '#9A3412',
+      borderColor: '#FED7AA',
+      background: 'rgba(255,255,255,.72)'
+    }
+  }, "+1"))), !isDone && React.createElement("div", {
     style: {
       display: 'flex',
       gap: 10,
@@ -2476,6 +2504,7 @@ function PatientCard({
   onTaskTodo,
   onTaskRemove,
   onUnstick,
+  onAdvanceStuckStep,
   onUpdateTask,
   onClearDone,
   typeMeta,
@@ -2843,6 +2872,7 @@ function PatientCard({
     onDoing: () => onTaskDoing(t.id),
     onTodo: () => onTaskTodo(t.id),
     onUnstick: () => onUnstick(t.id),
+    onAdvanceStuckStep: () => onAdvanceStuckStep && onAdvanceStuckStep(t.id),
     onRemove: () => onTaskRemove(t.id),
     onUpdate: updates => onUpdateTask(t.id, updates),
     onClearTime: () => onUpdateTask(t.id, {
@@ -9351,7 +9381,7 @@ function PatientTriage() {
   const unstick = (patientId, taskId) => updateTask(patientId, taskId, {
     status: 'todo'
   });
-  const advanceStuckStep = (patientId, taskId) => {
+  const advanceStuckStep = async (patientId, taskId, opts = {}) => {
     const task = activePatients.find(p => p.id === patientId)?.tasks.find(t => t.id === taskId);
     if (!task) return;
     const goal = stuckStepGoal(task);
@@ -9361,19 +9391,47 @@ function PatientTriage() {
       at: Date.now()
     };
     const nextLog = [...(Array.isArray(task.stuckStepLog) ? task.stuckStepLog : []), entry].slice(-8);
-    updateTask(patientId, taskId, {
+    const progressPatch = {
       stuckStepDone: next,
       stuckStepLog: nextLog
-    });
+    };
+    updateTask(patientId, taskId, progressPatch);
     setSuggestion(prev => prev?.task?.id === taskId ? {
       ...prev,
       task: {
         ...prev.task,
-        stuckStepDone: next,
-        stuckStepLog: nextLog
+        ...progressPatch
       }
     } : prev);
     showToast(next >= goal ? `2分の一歩 ${next}/${goal}。解除できそうです` : `2分の一歩 ${next}/${goal}`);
+    if (opts.askNext !== true) return;
+    const input = await appPrompt({
+      title: next >= goal ? '次の一歩を続ける？' : '次の一歩を置く',
+      message: next >= goal ? '解除できそうなら空欄で閉じてOK。まだ分けたいなら、次にできる小さな一歩を書いてください。' : 'いま終えた一歩の次に、2分以内でできることがあれば書いてください。空欄ならここで閉じます。',
+      label: '次の一歩',
+      defaultValue: '',
+      placeholder: '例: 結果を1行メモする / 次に確認する画面を開く',
+      confirmText: '次の一歩にする',
+      cancelText: 'ここまで'
+    });
+    const tinyStep = String(input || '').trim();
+    if (!tinyStep) return;
+    const nextGoal = next >= goal ? next + 1 : goal;
+    const nextPatch = {
+      status: 'stuck',
+      tinyStep,
+      stuckStepGoal: nextGoal
+    };
+    updateTask(patientId, taskId, nextPatch);
+    setSuggestion(prev => prev?.task?.id === taskId ? {
+      ...prev,
+      task: {
+        ...prev.task,
+        ...nextPatch
+      },
+      fromStuck: true
+    } : prev);
+    showToast('次の一歩を置きました');
   };
   const clearDoneTasks = patientId => {
     rememberUndo('完了済みタスク消去');
@@ -10140,10 +10198,16 @@ function PatientTriage() {
       }
     })), 280);
   };
-  const completeSuggestedStep = () => {
+  const completeSuggestedStep = async () => {
     if (!suggestion?.task) return;
-    const clear = !suggestion.fromStuck && willClearSuggestedTasks();
-    if (suggestion.fromStuck) advanceStuckStep(suggestion.task.patientId, suggestion.task.id);else if (suggestion.fromGeneral) completeGeneralTask(suggestion.task.id);else completeTask(suggestion.task.patientId, suggestion.task.id);
+    if (suggestion.fromStuck) {
+      await advanceStuckStep(suggestion.task.patientId, suggestion.task.id, {
+        askNext: true
+      });
+      return;
+    }
+    const clear = willClearSuggestedTasks();
+    if (suggestion.fromGeneral) completeGeneralTask(suggestion.task.id);else completeTask(suggestion.task.patientId, suggestion.task.id);
     celebrateSuggestedClear(clear);
     if (focusMode) setLowEnergyNeedsNext(true);
   };
@@ -11472,6 +11536,9 @@ function PatientTriage() {
     }),
     onTaskRemove: tid => removeTask(p.id, tid),
     onUnstick: tid => unstick(p.id, tid),
+    onAdvanceStuckStep: tid => advanceStuckStep(p.id, tid, {
+      askNext: true
+    }),
     onUpdateTask: (tid, upd) => updateTask(p.id, tid, upd),
     onClearDone: () => clearDoneTasks(p.id),
     typeMeta: typeMeta,
