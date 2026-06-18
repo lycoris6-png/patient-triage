@@ -2519,6 +2519,8 @@ function PatientCard({
   const ward = getWard(patient);
   const isPlannedPatient = getPri(patient) === 'planned';
   const open = patient.tasks.filter(t => t.status !== 'done');
+  const todayOpen = open.filter(isActionableTask);
+  const deferred = open.filter(t => t.status === 'hold');
   const done = patient.tasks.filter(t => t.status === 'done');
   const activeAlerts = showAlerts ? getPatientAlerts(patient) : [];
   const [editingName, setEditingName] = useState(false);
@@ -2544,7 +2546,7 @@ function PatientCard({
     if (a.scheduledTime && b.scheduledTime) return a.scheduledTime.localeCompare(b.scheduledTime);
     return (a.createdAt || 0) - (b.createdAt || 0);
   });
-  const allDone = open.length === 0 && patient.tasks.length > 0;
+  const allDone = todayOpen.length === 0 && patient.tasks.length > 0;
   const checkMeta = checkMode ? PATIENT_CHECK_MODES[checkMode] : null;
   const showCheckStamp = !!checkMeta && isRoundTarget(patient);
   const checked = showCheckStamp && isCheckedToday(patient, checkMode);
@@ -2667,7 +2669,7 @@ function PatientCard({
       padding: allDone ? '2px 8px' : '0',
       borderRadius: allDone ? '99px' : '0'
     }
-  }, allDone ? '✓ 完了' : `未 ${open.length}`, done.length > 0 && open.length > 0 && ` / 済 ${done.length}`), showCheckStamp && React.createElement("button", {
+  }, allDone ? `完了${deferred.length > 0 ? `/後${deferred.length}` : ''}` : `未${todayOpen.length}${deferred.length > 0 ? `/後${deferred.length}` : ''}${done.length > 0 ? `/済${done.length}` : ''}`), showCheckStamp && React.createElement("button", {
     onClick: e => {
       e.stopPropagation();
       onToggleChecked && onToggleChecked();

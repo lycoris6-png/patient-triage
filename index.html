@@ -85,16 +85,20 @@
     .chibi-coach.banter .chibi-coach-img-main {
       left: 0;
       z-index: 2;
+      animation: chibiBanterLead 5.6s ease-in-out both;
     }
     .chibi-coach.banter .chibi-coach-img-partner {
       display: block;
       left: 56px;
       z-index: 1;
       opacity: .96;
-      animation-delay: .18s;
+      animation: chibiBanterReply 5.6s ease-in-out both;
     }
     .chibi-coach-banter-turn {
       display: block;
+      padding: 2px 4px;
+      border-radius: 6px;
+      transition: color .2s ease, background .2s ease;
     }
     .chibi-coach-banter-turn + .chibi-coach-banter-turn {
       margin-top: 4px;
@@ -104,6 +108,12 @@
       font-weight: 900;
       margin-right: .45em;
       white-space: nowrap;
+    }
+    .chibi-coach-banter-turn:nth-child(1) {
+      animation: chibiBanterLineLead 5.6s ease-in-out both;
+    }
+    .chibi-coach-banter-turn:nth-child(2) {
+      animation: chibiBanterLineReply 5.6s ease-in-out both;
     }
     .chibi-coach[data-actor="mentor"],
     .chibi-coach[data-actor="spark"],
@@ -143,6 +153,26 @@
     @keyframes chibiFloat {
       0%, 100% { transform: translateY(0) scale(var(--chibi-scale, 1)); }
       50% { transform: translateY(-4px) scale(var(--chibi-scale, 1)); }
+    }
+    @keyframes chibiBanterLead {
+      0%, 42% { transform: translateY(-5px) scale(1.06); opacity: 1; filter: drop-shadow(0 10px 18px rgba(52,38,99,.28)); }
+      52%, 100% { transform: translateY(1px) scale(.94); opacity: .76; filter: drop-shadow(0 6px 12px rgba(52,38,99,.16)); }
+    }
+    @keyframes chibiBanterReply {
+      0%, 42% { transform: translateY(1px) scale(.94); opacity: .76; filter: drop-shadow(0 6px 12px rgba(52,38,99,.16)); }
+      52%, 100% { transform: translateY(-5px) scale(1.06); opacity: 1; filter: drop-shadow(0 10px 18px rgba(52,38,99,.28)); }
+    }
+    @keyframes chibiBanterLineLead {
+      0%, 42% { background: rgba(108,62,248,.09); color: var(--text, #31264A); }
+      52%, 100% { background: transparent; color: var(--text-3, #786F8E); }
+    }
+    @keyframes chibiBanterLineReply {
+      0%, 42% { background: transparent; color: var(--text-3, #786F8E); }
+      52%, 100% { background: rgba(108,62,248,.09); color: var(--text, #31264A); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .chibi-coach.banter .chibi-coach-img,
+      .chibi-coach-banter-turn { animation: none !important; }
     }
     @media (max-width: 560px) {
       .chibi-coach {
@@ -1146,8 +1176,8 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260616-check-lines"></script>
-<script src="prototype_unified_triage.app.js?v=20260616-check-lines"></script>
+<script src="dialogue.js?v=20260618-banter-day-edges"></script>
+<script src="prototype_unified_triage.app.js?v=20260618-banter-day-edges"></script>
 
 
 
@@ -1232,8 +1262,9 @@ body.rpg-mode .chibi-coach-bubble {
   const banterChanceFor = kind => {
     if (kind === 'estimate' || kind === 'reward') return 0;
     if (kind === 'idle' || kind === 'daydream') return 0.12;
-    if (kind === 'start') return 0.04;
-    if (kind === 'done' || kind === 'allclear' || kind === 'endday') return 0.08;
+    if (kind === 'start') return 0.24;
+    if (kind === 'endday') return 0.32;
+    if (kind === 'done' || kind === 'allclear') return 0.08;
     return 0.05;
   };
   function pickBanter(kind, mode){
@@ -1251,16 +1282,19 @@ body.rpg-mode .chibi-coach-bubble {
     const item = pick(candidates);
     const preferredActor = item.actor && isActorEnabled(item.actor) ? item.actor : (item.actors || []).find(isActorEnabled);
     if (!preferredActor || !cast[preferredActor]) return null;
-    const orderedActors = [preferredActor, ...item.actors.filter(who => who !== preferredActor)].slice(0, 2);
+    const text = pick(item.lines);
+    const firstSpeaker = (String(text).match(/^([^「」\n]+)「/) || [])[1] || '';
+    const firstActor = item.actors.find(who => (charMeta(who).name || '') === firstSpeaker) || preferredActor;
+    const orderedActors = [firstActor, ...item.actors.filter(who => who !== firstActor)].slice(0, 2);
     const poses = item.poses && typeof item.poses === 'object' ? item.poses : {};
     return {
-      actor: preferredActor,
-      pose: item.pose || 'neutral',
+      actor: firstActor,
+      pose: firstActor === preferredActor ? (item.pose || 'neutral') : (poses[firstActor] || 'neutral'),
       actors: orderedActors.map((who, index) => ({
         actor: who,
         pose: poses[who] || (who === preferredActor ? (item.pose || 'neutral') : (index === 0 ? 'neutral' : 'thumb'))
       })),
-      text: pick(item.lines)
+      text
     };
   }
 
@@ -1485,7 +1519,7 @@ body.rpg-mode .chibi-coach-bubble {
     }
     clearTimeout(hideTimer);
     el.classList.add('show');
-    hideTimer = setTimeout(() => el.classList.remove('show'), kind === 'allclear' ? 5200 : (kind === 'start' || kind === 'reward') ? 4200 : 3300);
+    hideTimer = setTimeout(() => el.classList.remove('show'), banter ? 5600 : kind === 'allclear' ? 5200 : (kind === 'start' || kind === 'reward') ? 4200 : 3300);
   }
 
   function classifyButton(button){
