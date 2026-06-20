@@ -1663,6 +1663,28 @@ function AppDialogHost() {
     }
   }, req.confirmText || 'OK'))));
 }
+const DEFAULT_NTFY_SETTINGS = Object.freeze({
+  enabled: false,
+  weekdaysOnly: true,
+  slots: [
+    { id: 'morning', label: '朝', enabled: true, time: '09:00' },
+    { id: 'day', label: '昼', enabled: true, time: '13:00' },
+    { id: 'evening', label: '夕', enabled: true, time: '18:00' }
+  ]
+});
+const normalizeNtfySettings = value => {
+  const source = value && typeof value === 'object' ? value : {};
+  const byId = new Map((Array.isArray(source.slots) ? source.slots : []).map(slot => [slot?.id, slot]));
+  return {
+    enabled: source.enabled === true,
+    weekdaysOnly: source.weekdaysOnly !== false,
+    slots: DEFAULT_NTFY_SETTINGS.slots.map(defaultSlot => {
+      const slot = byId.get(defaultSlot.id) || {};
+      const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(slot.time || '')) ? String(slot.time) : defaultSlot.time;
+      return { ...defaultSlot, ...slot, id: defaultSlot.id, label: defaultSlot.label, time, enabled: slot.enabled !== false };
+    })
+  };
+};
 const DEFAULT_GAS_CONFIG = {
   url: '',
   secret: '',
@@ -1815,6 +1837,11 @@ function gasCoachLine(cfg, context) {
   return gasJsonp(cfg, {
     action: 'coachLine',
     payload: JSON.stringify(context || {})
+  });
+}
+function gasNtfyTest(cfg) {
+  return gasJsonp(cfg, {
+    action: 'ntfyTest'
   });
 }
 const aiCoachResponseText = response => {
@@ -4259,6 +4286,7 @@ function GeneralTaskSection({
 }
 function GasConfigDialog({
   config,
+  ntfySettings,
   onSave,
   onCancel
 }) {
@@ -4269,7 +4297,12 @@ function GasConfigDialog({
   const [url, setUrl] = useState(cfg.url || '');
   const [secret, setSecret] = useState(cfg.secret || '');
   const [aiCoach, setAiCoach] = useState(cfg.aiCoach || DEFAULT_GAS_CONFIG.aiCoach);
+  const [ntfy, setNtfy] = useState(normalizeNtfySettings(ntfySettings));
   const updateAiCoach = updates => setAiCoach(prev => ({ ...prev, ...updates }));
+  const updateNtfySlot = (id, updates) => setNtfy(prev => ({
+    ...prev,
+    slots: prev.slots.map(slot => slot.id === id ? { ...slot, ...updates } : slot)
+  }));
   return React.createElement("div", {
     className: "dialog-bg",
     onClick: onCancel
@@ -4405,6 +4438,88 @@ function GasConfigDialog({
   }))), React.createElement("div", {
     style: {
       background: 'var(--surface-2)',
+      borderRadius: 12,
+      padding: '12px 14px',
+      marginBottom: 14,
+      border: '1px solid var(--border)'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 8
+    }
+  }, React.createElement("strong", {
+    style: { color: 'var(--text)', fontSize: 13 }
+  }, "ntfy キャラ通知"), React.createElement("button", {
+    className: `btn-sm${ntfy.enabled ? ' btn-ghost-active' : ''}`,
+    onClick: () => setNtfy(prev => ({ ...prev, enabled: !prev.enabled })),
+    style: {
+      fontSize: 12,
+      color: ntfy.enabled ? 'var(--accent)' : 'var(--text-3)'
+    }
+  }, ntfy.enabled ? "ON" : "OFF")), React.createElement("p", {
+    style: {
+      margin: '0 0 9px',
+      color: 'var(--text-3)',
+      fontSize: 11,
+      lineHeight: 1.6
+    }
+  }, "GASが固定セリフをntfyへ送ります。患者名・タスク名・病棟は送信しません。"), React.createElement("label", {
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      fontSize: 11,
+      color: 'var(--text-2)',
+      marginBottom: 9,
+      cursor: 'pointer'
+    }
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: ntfy.weekdaysOnly,
+    onChange: e => setNtfy(prev => ({ ...prev, weekdaysOnly: e.target.checked })),
+    style: { accentColor: 'var(--accent)' }
+  }), "平日のみ"), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+      gap: 7
+    }
+  }, ntfy.slots.map(slot => React.createElement("label", {
+    key: slot.id,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'auto 1fr',
+      alignItems: 'center',
+      gap: 5,
+      minWidth: 0,
+      fontSize: 11,
+      color: slot.enabled ? 'var(--text-2)' : 'var(--text-3)'
+    }
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: slot.enabled,
+    onChange: e => updateNtfySlot(slot.id, { enabled: e.target.checked }),
+    style: { margin: 0, accentColor: 'var(--accent)' }
+  }), React.createElement("span", null, slot.label), React.createElement("input", {
+    type: "time",
+    value: slot.time,
+    disabled: !slot.enabled,
+    onChange: e => updateNtfySlot(slot.id, { time: e.target.value }),
+    className: "inp",
+    style: {
+      gridColumn: '1 / -1',
+      padding: '5px 6px',
+      fontSize: 11,
+      minWidth: 0,
+      opacity: slot.enabled ? 1 : .55
+    }
+  }))))), React.createElement("div", {
+    style: {
+      background: 'var(--surface-2)',
       borderRadius: 10,
       padding: '10px 14px',
       marginBottom: 18,
@@ -4435,7 +4550,7 @@ function GasConfigDialog({
         latitude: (aiCoach.latitude || '').trim(),
         longitude: (aiCoach.longitude || '').trim()
       }
-    }),
+    }, normalizeNtfySettings(ntfy)),
     disabled: !url.trim() || !secret.trim(),
     style: {
       opacity: !url.trim() || !secret.trim() ? .4 : 1
@@ -8661,6 +8776,7 @@ function PatientTriage() {
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
   const [gasStatus, setGasStatus] = useState('idle');
   const [gasDialog, setGasDialog] = useState(false);
+  const [ntfySettings, setNtfySettings] = useState(() => normalizeNtfySettings());
   const [coachCast, setCoachCast] = useState(() => normalizeCoachCast(loadLocal(COACH_CAST_STORAGE_KEY)));
   const [themeId, setThemeId] = useState(() => loadLocal(THEME_STORAGE_KEY) || 'lavender');
   const [rpgMode, setRpgMode] = useState(() => loadLocal(RPG_MODE_STORAGE_KEY) === true);
@@ -8988,13 +9104,14 @@ function PatientTriage() {
       scheduledEvents,
       workModeEnabled,
       workItems,
+      ntfySettings,
       coachCast
     });
     if (!ok && Date.now() - saveFailWarnedRef.current > 60000) {
       saveFailWarnedRef.current = Date.now();
       showToast('⚠ 端末への保存に失敗しました。空き容量を確認してください');
     }
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, coachCast, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -10655,8 +10772,9 @@ function PatientTriage() {
     scheduledEvents,
     workModeEnabled,
     workItems,
+    ntfySettings,
     coachCast,
-    version: 11
+    version: 12
   });
   // データ復元の唯一の入口。初期ロード(withDefaults:true)・インポート・GAS pull・バックアップ復元が共用する。
   // withDefaults: 欠けている項目を初期値に戻す(初期ロード用)。falseなら欠けている項目は現状維持。
@@ -10686,6 +10804,7 @@ function PatientTriage() {
     apply(setDailyPatients, parsed.dailyPatients, []);
     apply(setDailyGeneralTasks, parsed.dailyGeneralTasks, []);
     apply(setScheduledEvents, parsed.scheduledEvents, []);
+    if (parsed.ntfySettings && typeof parsed.ntfySettings === 'object') setNtfySettings(normalizeNtfySettings(parsed.ntfySettings));else if (withDefaults) setNtfySettings(normalizeNtfySettings());
     setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
     if (parsed.coachCast && typeof parsed.coachCast === 'object') setCoachCast(normalizeCoachCast(parsed.coachCast));else if (withDefaults) setCoachCast(normalizeCoachCast(loadLocal(COACH_CAST_STORAGE_KEY)));
     const workSource = Array.isArray(parsed.workItems) ? parsed.workItems : Array.isArray(parsed.bosses) ? parsed.bosses : null;
@@ -10768,7 +10887,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).then(r => setGasStatus(r.ok ? 'ok' : 'error')).catch(() => setGasStatus('error')), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, coachCast, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -10791,8 +10910,9 @@ function PatientTriage() {
     scheduledEvents,
     workModeEnabled,
     workItems,
+    ntfySettings,
     coachCast,
-    version: 11,
+    version: 12,
     exportedAt: new Date().toISOString()
   }, null, 2);
   const exportToFile = () => {
@@ -10905,6 +11025,7 @@ function PatientTriage() {
   };
   const gasC = gasStatusColor[gasStatus] || gasStatusColor.idle;
   const gasAiCoach = normalizeGasConfig(gasConfig).aiCoach;
+  const normalizedNtfySettings = normalizeNtfySettings(ntfySettings);
   const filterButtonStyle = active => active ? {
     background: 'var(--accent)',
     borderColor: 'var(--accent)',
@@ -11893,7 +12014,37 @@ function PatientTriage() {
       padding: '4px 8px',
       opacity: !gasConfig.url || !gasConfig.secret || !gasAiCoach.enabled ? .45 : 1
     }
-  }, "テスト")), React.createElement("div", {
+  }, "テスト")), gasConfig.url && React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      margin: '0 0 10px'
+    }
+  }, React.createElement("span", {
+    className: "tag",
+    style: {
+      background: normalizedNtfySettings.enabled ? 'rgba(14,165,233,.13)' : 'var(--surface)',
+      color: normalizedNtfySettings.enabled ? '#0369A1' : 'var(--text-3)',
+      border: '1px solid var(--border)'
+    }
+  }, "ntfy ", normalizedNtfySettings.enabled ? "ON" : "OFF"), React.createElement("span", {
+    style: { color: 'var(--text-3)', fontSize: 11 }
+  }, normalizedNtfySettings.slots.filter(slot => slot.enabled).map(slot => slot.time).join(' / ') || '時刻なし'), React.createElement("button", {
+    className: "btn-sm",
+    onClick: async () => {
+      showToast('ntfyへテスト送信中…');
+      try {
+        const result = await gasNtfyTest(gasConfig);
+        showToast(result?.ok ? 'ntfyへテスト通知を送りました' : 'ntfy通知失敗: ' + (result?.error || 'GAS設定を確認してください'));
+      } catch (e) {
+        showToast('ntfy通知失敗: ' + (e?.message || 'GAS通信エラー'));
+      }
+    },
+    disabled: !gasConfig.url || !gasConfig.secret,
+    style: { fontSize: 11, padding: '4px 8px' }
+  }, "通知テスト")), React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -12254,8 +12405,10 @@ function PatientTriage() {
     }
   }, "\u5165\u529B\u3059\u308B"))))), gasDialog && React.createElement(GasConfigDialog, {
     config: gasConfig,
-    onSave: cfg => {
+    ntfySettings: ntfySettings,
+    onSave: (cfg, nextNtfySettings) => {
       setGasConfig(cfg);
+      setNtfySettings(normalizeNtfySettings(nextNtfySettings));
       setGasDialog(false);
       showToast('GAS設定を保存しました');
     },

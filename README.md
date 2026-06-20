@@ -101,6 +101,29 @@ function json_(obj) {
 
 If the GAS deployment does not return readable CORS responses, the client falls back to the old fire-and-forget push and reports "応答は確認できませんでした".
 
+## ntfy Character Notifications
+
+The unified app can sync a lightweight notification schedule to GAS. GAS sends only a character name and a generic fixed line to ntfy; patient names, wards, task titles, and clinical details are never sent to ntfy.
+
+1. Add `gas-ntfy-addon.gs` to the same Apps Script project as the sync backend.
+2. In Apps Script **Script properties**, add:
+   - `NTFY_TOPIC` (required): a long, hard-to-guess private topic name.
+   - `NTFY_SERVER` (optional): defaults to `https://ntfy.sh`.
+   - `NTFY_TOKEN` (optional): ntfy access token when authentication is enabled.
+   - `NTFY_CLICK_URL` (optional): the installed app / GitHub Pages URL opened when the notification is tapped.
+3. In the existing `doGet(e)`, after validating `SECRET` and defining `p` / `callback`, add this before the normal sync response:
+
+```js
+if (p.action === 'ntfyTest') return ntfyTest_(callback);
+```
+
+4. Set the Apps Script project timezone to **Asia/Tokyo**.
+5. Run `installNtfyTrigger()` once from the Apps Script editor and approve the requested permissions. It installs one five-minute trigger and removes older duplicates first.
+6. Deploy a new web-app version. In the app, open **データ → GAS設定**, enable ntfy, choose the times, save, and press **通知テスト**.
+7. Install the ntfy Android app and subscribe to the same `NTFY_TOPIC`.
+
+The schedule and enabled cast are read from the latest GAS-synced app data. A per-slot send key prevents duplicate notifications when the time trigger runs more than once near the configured time.
+
 ## GAS AI Coach Line
 
 The unified prototype can ask the existing GAS endpoint for a generated chibi coach line on app startup and when `今日はおしまい！` runs. The browser sends only coarse context: trigger, app mode, selected character voice guide, season, time band, fixed location label, rounded end-time label / whether the end time is after 20:00, and Open-Meteo weather summary. It does not send patient names, wards, task titles, or clinical details.
