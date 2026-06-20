@@ -343,12 +343,35 @@ const DEFAULT_DAILY_TASK_SETS = [{
     dailyPriority: 'normal'
   }]
 }];
+const LAST_DONE_CYCLES = [{
+  id: 'days',
+  label: '数日',
+  due: 4
+}, {
+  id: 'weekly',
+  label: '毎週',
+  due: 8
+}, {
+  id: 'monthly',
+  label: '毎月',
+  due: 32
+}, {
+  id: 'months',
+  label: '数ヶ月',
+  due: 95
+}];
+const DEFAULT_LAST_DONE_CYCLE = 'days';
+function lastDoneCycle(id) {
+  return LAST_DONE_CYCLES.find(c => c.id === id) || LAST_DONE_CYCLES[0];
+}
 const DEFAULT_LAST_DONE_ITEMS = [{
   id: 'laundry',
-  label: '洗濯'
+  label: '洗濯',
+  cycle: 'days'
 }, {
   id: 'bath-clean',
-  label: '風呂洗い'
+  label: '風呂洗い',
+  cycle: 'weekly'
 }];
 const DAILY_TASK_PRIORITIES = [{
   id: 'urgent',
@@ -5407,13 +5430,17 @@ function DailyLinkSection({
       opacity: !form.title.trim() || !form.url.trim() ? .45 : 1
     }
   }, "追加"))));
-}function lastDoneLabel(date) {
-  if (!date) return '未記録';
+}function lastDoneDays(date) {
+  if (!date) return null;
   const today = todayStr();
-  if (date === today) return '今日';
+  if (date === today) return 0;
   const base = new Date(today + 'T00:00:00');
   const past = new Date(date + 'T00:00:00');
-  const days = Math.max(0, Math.round((base - past) / 86400000));
+  return Math.max(0, Math.round((base - past) / 86400000));
+}
+function lastDoneLabel(date) {
+  const days = lastDoneDays(date);
+  if (days === null) return '未記録';
   if (days === 0) return '今日';
   if (days === 1) return '昨日';
   return `${days}日前`;
@@ -5431,18 +5458,21 @@ function LastDoneSection({
   onClear
 }) {
   const [editingId, setEditingId] = React.useState(null);
-  const [draft, setDraft] = React.useState({ label: '', lastDone: '' });
+  const [draft, setDraft] = React.useState({ label: '', lastDone: '', cycle: DEFAULT_LAST_DONE_CYCLE });
+  const [collapsedOverrides, setCollapsedOverrides] = React.useState({});
   const startEdit = item => {
     setEditingId(item.id);
     setDraft({
       label: item.label || '',
-      lastDone: item.lastDone || ''
+      lastDone: item.lastDone || '',
+      cycle: item.cycle || DEFAULT_LAST_DONE_CYCLE
     });
   };
   const saveEdit = id => {
     onUpdate(id, {
       label: draft.label,
-      lastDone: draft.lastDone
+      lastDone: draft.lastDone,
+      cycle: draft.cycle || DEFAULT_LAST_DONE_CYCLE
     });
     setEditingId(null);
   };
@@ -5466,20 +5496,40 @@ function LastDoneSection({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   };
-  const badgeStyleFor = item => ({
+  const dueInfo = item => {
+    const days = lastDoneDays(item.lastDone);
+    const cyc = lastDoneCycle(item.cycle);
+    return {
+      days,
+      cyc,
+      unrecorded: days === null,
+      due: days !== null && days > cyc.due
+    };
+  };
+  const badgeStyleFor = info => ({
     flex: '0 0 auto',
-    minWidth: 64,
+    minWidth: 60,
     textAlign: 'center',
     padding: '4px 10px',
     borderRadius: 999,
-    background: item.lastDone ? 'rgba(20,184,166,.14)' : 'var(--surface-2)',
-    color: item.lastDone ? '#0F766E' : 'var(--text-3)',
+    background: info.unrecorded ? 'var(--surface-2)' : info.due ? 'rgba(245,158,11,.16)' : 'rgba(20,184,166,.14)',
+    color: info.unrecorded ? 'var(--text-3)' : info.due ? '#92400E' : '#0F766E',
     border: '1px solid var(--border)',
     fontSize: 12,
     fontWeight: 800,
     letterSpacing: '.02em',
     whiteSpace: 'nowrap'
   });
+  const soonPillStyle = {
+    flex: '0 0 auto',
+    padding: '3px 8px',
+    borderRadius: 999,
+    background: 'rgba(245,158,11,.14)',
+    color: '#92400E',
+    fontSize: 10,
+    fontWeight: 800,
+    whiteSpace: 'nowrap'
+  };
   const doBtnStyle = {
     flex: '0 0 auto',
     padding: '6px 16px',
@@ -5508,6 +5558,94 @@ function LastDoneSection({
     flex: '0 0 auto',
     padding: '6px 9px',
     fontSize: 12
+  };
+  const cyclePicker = (value, onPick) => React.createElement("div", {
+    style: { display: 'flex', gap: 5, flexWrap: 'wrap', flex: '1 1 100%', marginTop: 2 }
+  }, LAST_DONE_CYCLES.map(c => {
+    const sel = (value || DEFAULT_LAST_DONE_CYCLE) === c.id;
+    return React.createElement("button", {
+      key: c.id,
+      type: 'button',
+      onClick: () => onPick(c.id),
+      style: {
+        padding: '3px 11px',
+        fontSize: 11,
+        fontWeight: 800,
+        borderRadius: 999,
+        cursor: 'pointer',
+        border: '1px solid ' + (sel ? '#14B8A6' : 'var(--border)'),
+        background: sel ? 'rgba(20,184,166,.16)' : 'transparent',
+        color: sel ? '#0F766E' : 'var(--text-3)'
+      }
+    }, c.label);
+  }));
+  const sortItems = arr => [...arr].sort((a, b) => {
+    const da = lastDoneDays(a.lastDone);
+    const db = lastDoneDays(b.lastDone);
+    if (da === null && db === null) return 0;
+    if (da === null) return -1;
+    if (db === null) return 1;
+    return db - da;
+  });
+  const renderItemRow = item => {
+    if (editingId === item.id) {
+      return React.createElement("div", {
+        key: item.id,
+        style: rowStyle
+      }, React.createElement("input", {
+        value: draft.label,
+        onChange: e => setDraft(prev => ({ ...prev, label: e.target.value })),
+        className: "inp",
+        style: editInputStyle,
+        "aria-label": "項目名"
+      }), React.createElement("input", {
+        type: "date",
+        value: draft.lastDone || '',
+        onChange: e => setDraft(prev => ({ ...prev, lastDone: e.target.value })),
+        className: "inp",
+        style: editDateStyle,
+        "aria-label": "前回の日付"
+      }), React.createElement("button", {
+        className: "btn-sm",
+        onClick: () => saveEdit(item.id),
+        style: { color: 'var(--accent)' }
+      }, "保存"), React.createElement("button", {
+        className: "btn-sm",
+        onClick: () => setEditingId(null)
+      }, "戻す"), React.createElement("button", {
+        className: "btn-sm",
+        onClick: () => onRemove(item.id),
+        style: { color: 'var(--stuck-fg)' }
+      }, "削除"), cyclePicker(draft.cycle, id => setDraft(prev => ({ ...prev, cycle: id }))));
+    }
+    const info = dueInfo(item);
+    return React.createElement("div", {
+      key: item.id,
+      style: rowStyle,
+      title: item.lastDone ? `前回: ${item.lastDone}` : '未記録'
+    }, React.createElement("strong", {
+      style: labelStyle
+    }, item.label), React.createElement("span", {
+      style: badgeStyleFor(info)
+    }, lastDoneLabel(item.lastDone)), React.createElement("button", {
+      className: "btn-green",
+      onClick: () => onMarkToday(item.id),
+      style: doBtnStyle,
+      "aria-label": `${item.label} を今日やったとして記録`
+    }, "Do"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => startEdit(item),
+      style: editBtnStyle
+    }, "編集"));
+  };
+  const groups = LAST_DONE_CYCLES.map(cyc => ({
+    cyc,
+    rows: sortItems(items.filter(it => (it.cycle || DEFAULT_LAST_DONE_CYCLE) === cyc.id))
+  })).filter(g => g.rows.length > 0);
+  const isGroupOpen = (cycleId, hasDue) => {
+    if (cycleId in collapsedOverrides) return collapsedOverrides[cycleId];
+    if (hasDue) return true;
+    return cycleId === 'days' || cycleId === 'weekly';
   };
   return React.createElement("div", {
     className: "card",
@@ -5546,62 +5684,36 @@ function LastDoneSection({
       padding: '10px 16px 16px',
       borderTop: '1px solid var(--border)',
       display: 'grid',
-      gap: 8
+      gap: 10
     }
-  }, items.map(item => {
-    const editing = editingId === item.id;
-    if (editing) {
-      return React.createElement("div", {
-        key: item.id,
-        style: rowStyle
-      }, React.createElement("input", {
-        value: draft.label,
-        onChange: e => setDraft(prev => ({ ...prev, label: e.target.value })),
-        className: "inp",
-        style: editInputStyle,
-        "aria-label": "項目名"
-      }), React.createElement("input", {
-        type: "date",
-        value: draft.lastDone || '',
-        onChange: e => setDraft(prev => ({ ...prev, lastDone: e.target.value })),
-        className: "inp",
-        style: editDateStyle,
-        "aria-label": "前回の日付"
-      }), React.createElement("button", {
-        className: "btn-sm",
-        onClick: () => saveEdit(item.id),
-        style: { color: 'var(--accent)' }
-      }, "保存"), React.createElement("button", {
-        className: "btn-sm",
-        onClick: () => setEditingId(null)
-      }, "戻す"), React.createElement("button", {
-        className: "btn-sm",
-        onClick: () => onRemove(item.id),
-        style: { color: 'var(--stuck-fg)' }
-      }, "削除"));
-    }
+  }, groups.map(group => {
+    const dueCount = group.rows.filter(it => dueInfo(it).due).length;
+    const groupOpen = isGroupOpen(group.cyc.id, dueCount > 0);
     return React.createElement("div", {
-      key: item.id,
-      style: rowStyle,
-      title: item.lastDone ? `前回: ${item.lastDone}` : '未記録'
-    }, React.createElement("strong", {
-      style: labelStyle
-    }, item.label), React.createElement("span", {
-      style: badgeStyleFor(item)
-    }, lastDoneLabel(item.lastDone)), React.createElement("button", {
-      className: "btn-green",
-      onClick: () => onMarkToday(item.id),
-      style: doBtnStyle,
-      "aria-label": `${item.label} を今日やったとして記録`
-    }, "Do"), React.createElement("button", {
-      className: "btn-sm",
-      onClick: () => startEdit(item),
-      style: editBtnStyle
-    }, "編集"));
+      key: group.cyc.id,
+      style: { display: 'grid', gap: 6 }
+    }, React.createElement("div", {
+      onClick: () => setCollapsedOverrides(prev => ({ ...prev, [group.cyc.id]: !groupOpen })),
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        cursor: 'pointer',
+        padding: '2px 2px'
+      }
+    }, groupOpen ? React.createElement(ChevronDown, { size: 13 }) : React.createElement(ChevronRight, { size: 13 }), React.createElement("strong", {
+      style: { fontSize: 12, color: 'var(--text-2)', letterSpacing: '.04em' }
+    }, group.cyc.label), React.createElement("span", {
+      style: { fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
+    }, group.rows.length, "件"), dueCount > 0 ? React.createElement("span", {
+      style: { ...soonPillStyle, marginLeft: 'auto' }
+    }, "そろそろ ", dueCount) : null), groupOpen ? React.createElement("div", {
+      style: { display: 'grid', gap: 6 }
+    }, group.rows.map(renderItemRow)) : null);
   }), React.createElement("div", {
     style: {
       ...rowStyle,
-      marginTop: 6,
+      marginTop: 4,
       background: 'transparent',
       border: '1px dashed var(--border)'
     }
@@ -5632,7 +5744,7 @@ function LastDoneSection({
       fontSize: 12,
       flex: '0 0 auto'
     }
-  }, "追加"))));
+  }, "追加"), cyclePicker(form.cycle, id => setForm(prev => ({ ...prev, cycle: id }))))));
 }
 function EndDayLogSection({
   logs,
@@ -8495,7 +8607,7 @@ function PatientTriage() {
   const [closedPatientTasks, setClosedPatientTasks] = useState([]);
   const [lastDoneItems, setLastDoneItems] = useState(DEFAULT_LAST_DONE_ITEMS);
   const [lastDoneOpen, setLastDoneOpen] = useState(false);
-  const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr() });
+  const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr(), cycle: DEFAULT_LAST_DONE_CYCLE });
   const [endDayLogs, setEndDayLogs] = useState([]);
   const [missedEndDayPrompt, setMissedEndDayPrompt] = useState(null);
   const [rolloverLogsPromptOpen, setRolloverLogsPromptOpen] = useState(false);
@@ -9945,11 +10057,13 @@ function PatientTriage() {
     setLastDoneItems(prev => [...prev, {
       id: uid(),
       label,
-      lastDone: lastDoneForm.lastDone || ''
+      lastDone: lastDoneForm.lastDone || '',
+      cycle: lastDoneForm.cycle || DEFAULT_LAST_DONE_CYCLE
     }]);
     setLastDoneForm({
       label: '',
-      lastDone: todayStr()
+      lastDone: todayStr(),
+      cycle: lastDoneForm.cycle || DEFAULT_LAST_DONE_CYCLE
     });
     setLastDoneOpen(true);
   };
