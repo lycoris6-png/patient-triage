@@ -148,7 +148,7 @@ function installNtfyTrigger() {
 
 function ntfyPublish_(title, message) {
   const properties = PropertiesService.getScriptProperties();
-  const server = (properties.getProperty('NTFY_SERVER') || 'https://ntfy.sh').replace(/\/+$/, '');
+  const server = String(properties.getProperty('NTFY_SERVER') || 'https://ntfy.sh').trim().replace(/\/+$/, '');
   const topic = String(properties.getProperty('NTFY_TOPIC') || '').trim();
   const token = String(properties.getProperty('NTFY_TOKEN') || '').trim();
   const clickUrl = String(properties.getProperty('NTFY_CLICK_URL') || '').trim();
@@ -170,7 +170,7 @@ function ntfyPublish_(title, message) {
     muteHttpExceptions: true,
     headers: token ? { Authorization: 'Bearer ' + token } : {}
   };
-  const response = UrlFetchApp.fetch(server, options);
+  const response = UrlFetchApp.fetch(server + '/', options);
   const status = response.getResponseCode();
   if (status < 200 || status >= 300) {
     throw new Error('ntfy HTTP ' + status + ': ' + response.getContentText().slice(0, 160));
