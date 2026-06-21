@@ -12037,7 +12037,7 @@ function PatientTriage() {
       showToast('ntfyへテスト送信中…');
       try {
         const result = await gasNtfyTest(gasConfig);
-        showToast(result?.ok ? 'ntfyへテスト通知を送りました' : 'ntfy通知失敗: ' + (result?.error || 'GAS設定を確認してください'));
+        showToast(result?.ok && result?.sent === true ? 'ntfyへテスト通知を送りました' : 'ntfy通知失敗: ' + (result?.error || 'GASがntfyテスト処理を返していません。doGetと再デプロイを確認してください'));
       } catch (e) {
         showToast('ntfy通知失敗: ' + (e?.message || 'GAS通信エラー'));
       }

@@ -118,7 +118,7 @@ if (p.action === 'ntfyTest') return ntfyTest_(callback);
 ```
 
 4. Set the Apps Script project timezone to **Asia/Tokyo**.
-5. Run `installNtfyTrigger()` once from the Apps Script editor and approve the requested permissions. It installs one five-minute trigger and removes older duplicates first.
+5. Run `installNtfyTrigger()` once from the Apps Script editor and approve the requested permissions. It installs one five-minute trigger and removes older duplicates first. For a direct send test, select the public `runNtfyTest` function (private helper names ending in `_` are not shown in the GAS function picker).
 6. Deploy a new web-app version. In the app, open **データ → GAS設定**, enable ntfy, choose the times, save, and press **通知テスト**.
 7. Install the ntfy Android app and subscribe to the same `NTFY_TOPIC`.
 

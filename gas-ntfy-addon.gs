@@ -89,6 +89,11 @@ const NTFY_LINES_ = {
   }
 };
 
+// GASエディタから手動テストするための公開ラッパー。
+function runNtfyTest() {
+  return ntfyTest_('');
+}
+
 function ntfyTest_(callback) {
   try {
     const data = ntfyStoredData_();
@@ -96,7 +101,7 @@ function ntfyTest_(callback) {
     const band = ntfyTimeBand_(new Date());
     const message = ntfyPick_(character[band] || character.day);
     ntfyPublish_(character.name + 'からの一言', message);
-    return ntfyJsonp_(callback, { ok: true, character: character.name });
+    return ntfyJsonp_(callback, { ok: true, sent: true, character: character.name });
   } catch (err) {
     return ntfyJsonp_(callback, { ok: false, error: String(err && err.message || err) });
   }
