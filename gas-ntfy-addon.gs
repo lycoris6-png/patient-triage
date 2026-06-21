@@ -154,30 +154,28 @@ function ntfyPublish_(title, message) {
   const clickUrl = String(properties.getProperty('NTFY_CLICK_URL') || '').trim();
   if (!topic) throw new Error('スクリプトプロパティ NTFY_TOPIC が未設定です');
 
-  const payload = {
-    topic: topic,
-    title: title,
-    message: message,
-    priority: 3,
-    tags: ['bell']
+  const headers = {
+    Title: '=?UTF-8?B?' + Utilities.base64Encode(title, Utilities.Charset.UTF_8) + '?=',
+    Priority: '3',
+    Tags: 'bell'
   };
-  if (clickUrl) payload.click = clickUrl;
+  if (token) headers.Authorization = 'Bearer ' + token;
+  if (clickUrl) headers.Click = clickUrl;
 
-  const options = {
+  const endpoint = server + '/' + encodeURIComponent(topic);
+  const response = UrlFetchApp.fetch(endpoint, {
     method: 'post',
-    contentType: 'application/json; charset=utf-8',
-    payload: JSON.stringify(payload),
+    contentType: 'text/plain; charset=utf-8',
+    payload: String(message || ''),
     muteHttpExceptions: true,
-    headers: token ? { Authorization: 'Bearer ' + token } : {}
-  };
-  const response = UrlFetchApp.fetch(server + '/', options);
+    headers: headers
+  });
   const status = response.getResponseCode();
   if (status < 200 || status >= 300) {
     throw new Error('ntfy HTTP ' + status + ': ' + response.getContentText().slice(0, 160));
   }
   return response.getContentText();
 }
-
 function ntfyStoredData_() {
   const raw = PropertiesService.getUserProperties().getProperty(PROP_KEY);
   if (!raw) return {};
