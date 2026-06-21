@@ -90,8 +90,10 @@ const NTFY_LINES_ = {
 };
 
 // GASエディタから手動テストするための公開ラッパー。
+// エラーを捕捉しないので、失敗理由が実行ログへそのまま表示される。
 function runNtfyTest() {
-  return ntfyTest_('');
+  const responseText = ntfyPublish_('ぺいとり！通知テスト', 'GASからntfyへのテスト通知です。');
+  console.log('ntfy response: ' + responseText);
 }
 
 function ntfyTest_(callback) {
@@ -173,6 +175,7 @@ function ntfyPublish_(title, message) {
   if (status < 200 || status >= 300) {
     throw new Error('ntfy HTTP ' + status + ': ' + response.getContentText().slice(0, 160));
   }
+  return response.getContentText();
 }
 
 function ntfyStoredData_() {
