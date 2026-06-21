@@ -159,7 +159,7 @@ function ntfyPublish_(title, message) {
     Priority: '3',
     Tags: 'bell'
   };
-  if (token) headers.Authorization = 'Bearer ' + token;
+  if (token) headers.Authorization = 'Basic ' + Utilities.base64Encode(':' + token);
   if (clickUrl) headers.Click = clickUrl;
 
   const endpoint = server + '/' + encodeURIComponent(topic);
