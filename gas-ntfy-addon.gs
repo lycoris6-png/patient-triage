@@ -130,12 +130,17 @@ function ntfyScheduledTick() {
     if (Math.abs(currentMinutes - slotMinutes) > 6) return;
 
     const sendKey = dateKey + '|' + slot.id + '|' + slot.time;
-    if (properties.getProperty('NTFY_LAST_SENT_SLOT') === sendKey) return;
+    if (ntfyWasSent_(properties, dateKey, sendKey)) return;
 
-    const character = ntfyPickCharacter_(data.coachCast || {});
-    const band = slot.id === 'morning' ? 'morning' : slot.id === 'evening' ? 'evening' : 'day';
-    ntfyPublish_(character.name + 'からの一言', ntfyPick_(character[band] || character.day));
-    properties.setProperty('NTFY_LAST_SENT_SLOT', sendKey);
+    const customMessage = String(slot.message || '').trim();
+    if (customMessage) {
+      ntfyPublish_(String(slot.title || '').trim() || 'ぺいとり！通知', customMessage);
+    } else {
+      const character = ntfyPickCharacter_(data.coachCast || {});
+      const band = ntfyTimeBandFromSlot_(slot);
+      ntfyPublish_(character.name + 'からの一言', ntfyPick_(character[band] || character.day));
+    }
+    ntfyMarkSent_(properties, dateKey, sendKey);
   });
 }
 
@@ -193,15 +198,26 @@ function ntfyNormalizeSettings_(value) {
     { id: 'evening', enabled: true, time: '18:00' }
   ];
   const source = value && typeof value === 'object' ? value : {};
-  const incoming = Array.isArray(source.slots) ? source.slots : [];
+  const incoming = Array.isArray(source.slots) && source.slots.length ? source.slots : defaults;
+  const seen = {};
+  const slots = incoming.map(function(item, index) {
+    const sourceSlot = item && typeof item === 'object' ? item : {};
+    const id = String(sourceSlot.id || '').trim() || ('slot_' + index);
+    if (seen[id]) return null;
+    seen[id] = true;
+    const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(sourceSlot.time || '')) ? String(sourceSlot.time) : '09:00';
+    return {
+      id: id,
+      enabled: sourceSlot.enabled !== false,
+      time: time,
+      message: String(sourceSlot.message || '').slice(0, 1024),
+      title: String(sourceSlot.title || '').slice(0, 250)
+    };
+  }).filter(Boolean);
   return {
     enabled: source.enabled === true,
     weekdaysOnly: source.weekdaysOnly !== false,
-    slots: defaults.map(function(def) {
-      const item = incoming.find(function(slot) { return slot && slot.id === def.id; }) || {};
-      const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(item.time || '')) ? String(item.time) : def.time;
-      return { id: def.id, enabled: item.enabled !== false, time: time };
-    })
+    slots: slots
   };
 }
 
@@ -215,6 +231,37 @@ function ntfyTimeBand_(date) {
   const timezone = Session.getScriptTimeZone() || 'Asia/Tokyo';
   const hour = Number(Utilities.formatDate(date, timezone, 'H'));
   return hour < 11 ? 'morning' : hour < 17 ? 'day' : 'evening';
+}
+
+function ntfyTimeBandFromSlot_(slot) {
+  if (slot.id === 'morning') return 'morning';
+  if (slot.id === 'evening') return 'evening';
+  const hour = Number(String(slot.time || '09:00').split(':')[0]);
+  return hour < 11 ? 'morning' : hour < 17 ? 'day' : 'evening';
+}
+
+function ntfyReadSentKeys_(properties, dateKey) {
+  const raw = properties.getProperty('NTFY_SENT_SLOT_KEYS') || '[]';
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(function(key) {
+      return String(key).indexOf(dateKey + '|') === 0;
+    }) : [];
+  } catch (_) {
+    const legacy = properties.getProperty('NTFY_LAST_SENT_SLOT');
+    return legacy && String(legacy).indexOf(dateKey + '|') === 0 ? [legacy] : [];
+  }
+}
+
+function ntfyWasSent_(properties, dateKey, sendKey) {
+  return ntfyReadSentKeys_(properties, dateKey).indexOf(sendKey) >= 0;
+}
+
+function ntfyMarkSent_(properties, dateKey, sendKey) {
+  const keys = ntfyReadSentKeys_(properties, dateKey);
+  if (keys.indexOf(sendKey) < 0) keys.push(sendKey);
+  properties.setProperty('NTFY_SENT_SLOT_KEYS', JSON.stringify(keys.slice(-80)));
+  properties.setProperty('NTFY_LAST_SENT_SLOT', sendKey);
 }
 
 function ntfyPick_(items) {

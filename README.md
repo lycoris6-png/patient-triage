@@ -103,7 +103,7 @@ If the GAS deployment does not return readable CORS responses, the client falls 
 
 ## ntfy Character Notifications
 
-The unified app can sync a lightweight notification schedule to GAS. GAS sends only a character name and a generic fixed line to ntfy; patient names, wards, task titles, and clinical details are never sent to ntfy.
+The unified app can sync a lightweight notification schedule to GAS. Each ntfy slot can have its own time, enabled state, optional title, and optional custom message. If the message is blank, GAS falls back to a character name and a generic fixed line. Patient names, wards, task titles, and clinical details are never sent to ntfy.
 
 1. Add `gas-ntfy-addon.gs` to the same Apps Script project as the sync backend.
 2. In Apps Script **Script properties**, add:
@@ -119,10 +119,10 @@ if (p.action === 'ntfyTest') return ntfyTest_(callback);
 
 4. Set the Apps Script project timezone to **Asia/Tokyo**.
 5. Run `installNtfyTrigger()` once from the Apps Script editor and approve the requested permissions. It installs one five-minute trigger and removes older duplicates first. For a direct send test, select the public `runNtfyTest` function (private helper names ending in `_` are not shown in the GAS function picker).
-6. Deploy a new web-app version. In the app, open **データ → GAS設定**, enable ntfy, choose the times, save, and press **通知テスト**.
+6. Deploy a new web-app version. In the app, open **データ → GAS設定**, enable ntfy, add or edit notification slots, save, and press **通知テスト**.
 7. Install the ntfy Android app and subscribe to the same `NTFY_TOPIC`.
 
-The schedule and enabled cast are read from the latest GAS-synced app data. A per-slot send key prevents duplicate notifications when the time trigger runs more than once near the configured time.
+The schedule and enabled cast are read from the latest GAS-synced app data. A same-day sent-key list prevents duplicate notifications when the time trigger runs more than once near the configured time, while still allowing multiple different slots in the same five-minute trigger window.
 
 ## GAS AI Coach Line
 

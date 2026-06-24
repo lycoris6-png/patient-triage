@@ -1672,18 +1672,60 @@ const DEFAULT_NTFY_SETTINGS = Object.freeze({
     { id: 'evening', label: '夕', enabled: true, time: '18:00' }
   ]
 });
+const NTFY_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const NTFY_MESSAGE_MAX = 1024;
+const NTFY_TITLE_MAX = 250;
+const makeNtfySlotId = () => {
+  try {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  } catch (_) {}
+  return `slot_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+};
+const normalizeNtfySlot = (slot, index = 0) => {
+  const source = slot && typeof slot === 'object' ? slot : {};
+  const id = String(source.id || '').trim() || makeNtfySlotId();
+  const defaultSlot = DEFAULT_NTFY_SETTINGS.slots.find(item => item.id === id);
+  const time = NTFY_TIME_RE.test(String(source.time || '')) ? String(source.time) : defaultSlot?.time || '09:00';
+  const message = String(source.message || '').slice(0, NTFY_MESSAGE_MAX);
+  const title = String(source.title || '').slice(0, NTFY_TITLE_MAX);
+  return {
+    id,
+    label: String(source.label || defaultSlot?.label || `枠${index + 1}`),
+    enabled: source.enabled !== false,
+    time,
+    message,
+    title
+  };
+};
 const normalizeNtfySettings = value => {
   const source = value && typeof value === 'object' ? value : {};
-  const byId = new Map((Array.isArray(source.slots) ? source.slots : []).map(slot => [slot?.id, slot]));
+  const incoming = Array.isArray(source.slots) ? source.slots : DEFAULT_NTFY_SETTINGS.slots;
+  const seen = new Set();
+  const slots = incoming.map((slot, index) => normalizeNtfySlot(slot, index)).filter(slot => {
+    if (seen.has(slot.id)) return false;
+    seen.add(slot.id);
+    return true;
+  });
   return {
     enabled: source.enabled === true,
     weekdaysOnly: source.weekdaysOnly !== false,
-    slots: DEFAULT_NTFY_SETTINGS.slots.map(defaultSlot => {
-      const slot = byId.get(defaultSlot.id) || {};
-      const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(slot.time || '')) ? String(slot.time) : defaultSlot.time;
-      return { ...defaultSlot, ...slot, id: defaultSlot.id, label: defaultSlot.label, time, enabled: slot.enabled !== false };
-    })
+    slots
   };
+};
+const validateNtfySettings = value => {
+  const source = value && typeof value === 'object' ? value : {};
+  const slots = Array.isArray(source.slots) ? source.slots : [];
+  const seen = new Set();
+  for (const slot of slots) {
+    const id = String(slot?.id || '').trim();
+    if (!id) return '通知枠のIDが空です。枠を追加し直してください。';
+    if (seen.has(id)) return '通知枠のIDが重複しています。枠を追加し直してください。';
+    seen.add(id);
+    if (!NTFY_TIME_RE.test(String(slot?.time || ''))) return '通知時刻は HH:MM の24時間表記で入力してください。';
+    if (String(slot?.message || '').length > NTFY_MESSAGE_MAX) return `通知本文は${NTFY_MESSAGE_MAX}文字以内にしてください。`;
+    if (String(slot?.title || '').length > NTFY_TITLE_MAX) return `通知タイトルは${NTFY_TITLE_MAX}文字以内にしてください。`;
+  }
+  return '';
 };
 const DEFAULT_GAS_CONFIG = {
   url: '',
@@ -4298,11 +4340,42 @@ function GasConfigDialog({
   const [secret, setSecret] = useState(cfg.secret || '');
   const [aiCoach, setAiCoach] = useState(cfg.aiCoach || DEFAULT_GAS_CONFIG.aiCoach);
   const [ntfy, setNtfy] = useState(normalizeNtfySettings(ntfySettings));
+  const [ntfyError, setNtfyError] = useState('');
   const updateAiCoach = updates => setAiCoach(prev => ({ ...prev, ...updates }));
   const updateNtfySlot = (id, updates) => setNtfy(prev => ({
     ...prev,
     slots: prev.slots.map(slot => slot.id === id ? { ...slot, ...updates } : slot)
   }));
+  const addNtfySlot = () => setNtfy(prev => ({
+    ...prev,
+    slots: [...prev.slots, normalizeNtfySlot({
+      id: makeNtfySlotId(),
+      enabled: true,
+      time: '12:00',
+      message: '',
+      title: ''
+    }, prev.slots.length)]
+  }));
+  const removeNtfySlot = id => setNtfy(prev => ({
+    ...prev,
+    slots: prev.slots.filter(slot => slot.id !== id)
+  }));
+  const saveSettings = () => {
+    const validationError = validateNtfySettings(ntfy);
+    setNtfyError(validationError);
+    if (validationError) return;
+    const normalized = normalizeNtfySettings(ntfy);
+    onSave({
+      url: url.trim(),
+      secret: secret.trim(),
+      aiCoach: {
+        ...aiCoach,
+        locationLabel: (aiCoach.locationLabel || '').trim() || '職場',
+        latitude: (aiCoach.latitude || '').trim(),
+        longitude: (aiCoach.longitude || '').trim()
+      }
+    }, normalized);
+  };
   return React.createElement("div", {
     className: "dialog-bg",
     onClick: onCancel
@@ -4467,14 +4540,22 @@ function GasConfigDialog({
       fontSize: 11,
       lineHeight: 1.6
     }
-  }, "GASが固定セリフをntfyへ送ります。患者名・タスク名・病棟は送信しません。"), React.createElement("label", {
+  }, "任意の時刻にntfyへ送ります。本文が空ならキャラクターのおまかせメッセージになります。患者名・タスク名・病棟は送信しません。"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 9,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("label", {
     style: {
       display: 'inline-flex',
       alignItems: 'center',
       gap: 6,
       fontSize: 11,
       color: 'var(--text-2)',
-      marginBottom: 9,
       cursor: 'pointer'
     }
   }, React.createElement("input", {
@@ -4482,42 +4563,130 @@ function GasConfigDialog({
     checked: ntfy.weekdaysOnly,
     onChange: e => setNtfy(prev => ({ ...prev, weekdaysOnly: e.target.checked })),
     style: { accentColor: 'var(--accent)' }
-  }), "平日のみ"), React.createElement("div", {
+  }), "平日のみ"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: addNtfySlot,
+    style: {
+      fontSize: 11,
+      padding: '5px 9px'
+    }
+  }, React.createElement(Plus, { size: 12 }), "枠を追加")), React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-      gap: 7
+      gap: 8
     }
-  }, ntfy.slots.map(slot => React.createElement("label", {
+  }, ntfy.slots.length === 0 ? React.createElement("p", {
+    style: {
+      margin: 0,
+      color: 'var(--text-3)',
+      fontSize: 11,
+      lineHeight: 1.6,
+      border: '1px dashed var(--border)',
+      borderRadius: 10,
+      padding: '9px 10px',
+      background: 'var(--surface)'
+    }
+  }, "通知枠が0件です。保存するとGAS側ではデフォルト3枠に戻ります。") : ntfy.slots.map((slot, index) => React.createElement("div", {
     key: slot.id,
     style: {
       display: 'grid',
-      gridTemplateColumns: 'auto 1fr',
+      gridTemplateColumns: 'auto minmax(82px, 98px) minmax(0, 1fr) auto',
+      gap: 6,
       alignItems: 'center',
-      gap: 5,
-      minWidth: 0,
-      fontSize: 11,
-      color: slot.enabled ? 'var(--text-2)' : 'var(--text-3)'
+      padding: '8px',
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      background: 'var(--surface)',
+      opacity: slot.enabled ? 1 : .68
+    }
+  }, React.createElement("label", {
+    title: "この枠を送信する",
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 24,
+      height: 24,
+      cursor: 'pointer'
     }
   }, React.createElement("input", {
     type: "checkbox",
     checked: slot.enabled,
     onChange: e => updateNtfySlot(slot.id, { enabled: e.target.checked }),
     style: { margin: 0, accentColor: 'var(--accent)' }
-  }), React.createElement("span", null, slot.label), React.createElement("input", {
+  })), React.createElement("input", {
     type: "time",
     value: slot.time,
     disabled: !slot.enabled,
     onChange: e => updateNtfySlot(slot.id, { time: e.target.value }),
     className: "inp",
     style: {
-      gridColumn: '1 / -1',
       padding: '5px 6px',
       fontSize: 11,
-      minWidth: 0,
-      opacity: slot.enabled ? 1 : .55
+      minWidth: 0
     }
-  }))))), React.createElement("div", {
+  }), React.createElement("input", {
+    value: slot.title || '',
+    disabled: !slot.enabled,
+    onChange: e => updateNtfySlot(slot.id, { title: e.target.value.slice(0, NTFY_TITLE_MAX) }),
+    maxLength: NTFY_TITLE_MAX,
+    className: "inp",
+    placeholder: `タイトル 任意 ${slot.label || `枠${index + 1}`}`,
+    style: {
+      padding: '5px 7px',
+      fontSize: 11,
+      minWidth: 0
+    }
+  }), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => removeNtfySlot(slot.id),
+    title: "通知枠を削除",
+    style: {
+      padding: '5px 7px',
+      color: '#BE123C'
+    }
+  }, React.createElement(Trash2, { size: 13 })), React.createElement("textarea", {
+    value: slot.message || '',
+    disabled: !slot.enabled,
+    onChange: e => updateNtfySlot(slot.id, { message: e.target.value.slice(0, NTFY_MESSAGE_MAX) }),
+    maxLength: NTFY_MESSAGE_MAX,
+    className: "inp",
+    rows: 2,
+    placeholder: "本文 任意。空欄ならキャラクターのおまかせメッセージ",
+    style: {
+      gridColumn: '1 / -1',
+      padding: '6px 8px',
+      fontSize: 11,
+      lineHeight: 1.45,
+      minWidth: 0,
+      resize: 'vertical'
+    }
+  }), React.createElement("div", {
+    style: {
+      gridColumn: '1 / -1',
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 8,
+      color: 'var(--text-3)',
+      fontSize: 10,
+      lineHeight: 1.4
+    }
+  }, React.createElement("span", null, slot.message ? "この本文を送信します" : "本文未入力時はキャラクターのおまかせ"), React.createElement("span", null, String(slot.message || '').length, "/", NTFY_MESSAGE_MAX))))), React.createElement("p", {
+    style: {
+      margin: '9px 0 0',
+      color: 'var(--text-3)',
+      fontSize: 10,
+      lineHeight: 1.55
+    }
+  }, "時刻が近すぎる枠はGAS側の送信ガード設定に影響される場合があります。今回の同梱GASでは同じ時間帯の複数枠にも対応しています。"), ntfyError && React.createElement("p", {
+    style: {
+      margin: '8px 0 0',
+      color: '#BE123C',
+      fontSize: 11,
+      fontWeight: 700,
+      lineHeight: 1.5
+    }
+  }, ntfyError)), React.createElement("div", {
     style: {
       background: 'var(--surface-2)',
       borderRadius: 10,
@@ -4541,16 +4710,7 @@ function GasConfigDialog({
     }
   }, "\u30AD\u30E3\u30F3\u30BB\u30EB"), React.createElement("button", {
     className: "btn-dark",
-    onClick: () => onSave({
-      url: url.trim(),
-      secret: secret.trim(),
-      aiCoach: {
-        ...aiCoach,
-        locationLabel: (aiCoach.locationLabel || '').trim() || '職場',
-        latitude: (aiCoach.latitude || '').trim(),
-        longitude: (aiCoach.longitude || '').trim()
-      }
-    }, normalizeNtfySettings(ntfy)),
+    onClick: saveSettings,
     disabled: !url.trim() || !secret.trim(),
     style: {
       opacity: !url.trim() || !secret.trim() ? .4 : 1
