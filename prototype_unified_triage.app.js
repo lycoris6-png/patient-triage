@@ -642,6 +642,8 @@ const TIME_STATES = {
 };
 const STORAGE_KEY = 'patient-triage-v1';
 const GAS_CONFIG_KEY = 'patient-triage-gas-config';
+const GAS_SINGLE_PROPERTY_LIMIT_BYTES = 9000;
+const GAS_TOTAL_SAFE_BYTES = 450000;
 const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
 const COACH_CAST_OPTIONS = [
   { id: 'mentor', label: 'エスト' },
@@ -659,6 +661,17 @@ function normalizeCoachCast(value) {
   const hasEnabled = COACH_CAST_OPTIONS.some(item => next[item.id] !== false);
   return hasEnabled ? next : { ...DEFAULT_COACH_CAST };
 }
+const jsonByteLength = value => {
+  const text = typeof value === 'string' ? value : JSON.stringify(value || {});
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(text).length;
+  return unescape(encodeURIComponent(text)).length;
+};
+const formatBytes = bytes => {
+  if (!Number.isFinite(bytes)) return '--';
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+};
 const AI_COACH_START_STORAGE_KEY = 'patient-triage-ai-coach-start-date';
 const ROUTINE_PROMPT_STORAGE_KEY = 'patient-triage-routine-prompt-date';
 const THEMES = [{
@@ -897,6 +910,31 @@ const normalizeEndDayLog = log => {
   normalized.endedAt = normalized.endedAt || normalized.createdAt || null;
   normalized.endedTime = normalized.endedTime || formatHHMM(normalized.endedAt) || '';
   return normalized;
+};
+const compactTaskForGas = task => {
+  if (!task || typeof task !== 'object') return task;
+  const next = { ...task };
+  if (Array.isArray(next.stuckStepLog)) next.stuckStepLog = next.stuckStepLog.slice(-4);
+  return next;
+};
+const compactPatientForGas = patient => patient && typeof patient === 'object' ? {
+  ...patient,
+  tasks: Array.isArray(patient.tasks) ? patient.tasks.map(compactTaskForGas) : []
+} : patient;
+const compactWorkItemForGas = item => item && typeof item === 'object' ? {
+  ...item,
+  steps: Array.isArray(item.steps) ? item.steps.map(step => ({ ...step })) : [],
+  logs: Array.isArray(item.logs) ? item.logs.slice(-40) : []
+} : item;
+const compactPayloadForGas = payload => {
+  const next = { ...(payload || {}) };
+  next.patients = Array.isArray(next.patients) ? next.patients.map(compactPatientForGas) : [];
+  next.dailyPatients = Array.isArray(next.dailyPatients) ? next.dailyPatients.map(compactPatientForGas) : [];
+  next.generalTasks = Array.isArray(next.generalTasks) ? next.generalTasks.map(compactTaskForGas) : [];
+  next.dailyGeneralTasks = Array.isArray(next.dailyGeneralTasks) ? next.dailyGeneralTasks.map(compactTaskForGas) : [];
+  next.workItems = Array.isArray(next.workItems) ? next.workItems.map(compactWorkItemForGas) : [];
+  next.endDayLogs = pruneEndDayLogs(next.endDayLogs || []);
+  return next;
 };
 const formatEndDayLogs = (logs, baseDate = todayStr()) => {
   const weekly = pruneEndDayLogs(logs, baseDate).map(normalizeEndDayLog);
@@ -10909,7 +10947,8 @@ function PatientTriage() {
     setGasConfigState(cfg);
     saveGasConfig(cfg);
   };
-  const buildPayload = () => ({
+  const buildPayload = (opts = {}) => {
+    const payload = {
     updatedAt: Date.now(),
     patients,
     stats,
@@ -10935,7 +10974,15 @@ function PatientTriage() {
     ntfySettings,
     coachCast,
     version: 12
+    };
+    return opts.forGas ? compactPayloadForGas(payload) : payload;
+  };
+  const gasPayloadBytes = jsonByteLength({
+    secret: gasConfig.secret || '',
+    data: buildPayload({ forGas: true })
   });
+  const localPayloadBytes = jsonByteLength(buildPayload());
+  const gasNeedsChunkedStore = gasPayloadBytes > GAS_SINGLE_PROPERTY_LIMIT_BYTES;
   // データ復元の唯一の入口。初期ロード(withDefaults:true)・インポート・GAS pull・バックアップ復元が共用する。
   // withDefaults: 欠けている項目を初期値に戻す(初期ロード用)。falseなら欠けている項目は現状維持。
   const applyPayload = (parsed, opts = {}) => {
@@ -10995,7 +11042,10 @@ function PatientTriage() {
     }
     setGasStatus('syncing');
     try {
-      const r = await gasFetch(gasConfig, buildPayload());
+      const payload = buildPayload({ forGas: true });
+      const bodyBytes = jsonByteLength({ secret: gasConfig.secret, data: payload });
+      if (bodyBytes > GAS_TOTAL_SAFE_BYTES) showToast(`GAS同期データが大きめです (${formatBytes(bodyBytes)})。ログ整理かGAS分割保存を確認してください`);
+      const r = await gasFetch(gasConfig, payload);
       if (r.ok) {
         setGasStatus('ok');
         showToast(r.unverified ? 'GASに送信しました（応答は確認できませんでした）' : 'GASに保存しました ✓');
@@ -11045,7 +11095,7 @@ function PatientTriage() {
       isInitialLoad.current = false;
       return;
     }
-    const t = setTimeout(() => gasFetch(gasConfig, buildPayload()).then(r => setGasStatus(r.ok ? 'ok' : 'error')).catch(() => setGasStatus('error')), 3000);
+    const t = setTimeout(() => gasFetch(gasConfig, buildPayload({ forGas: true })).then(r => setGasStatus(r.ok ? 'ok' : 'error')).catch(() => setGasStatus('error')), 3000);
     return () => clearTimeout(t);
   }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, loaded]);
   const buildExportJSON = () => JSON.stringify({
@@ -12088,6 +12138,7 @@ function PatientTriage() {
   }) : React.createElement(ChevronRight, {
     size: 12
   }), "\u30C7\u30FC\u30BF (\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7 / GAS\u540C\u671F)"), dataToolsOpen && React.createElement("div", {
+    className: "data-tools-panel",
     style: {
       marginTop: 10,
       background: 'var(--surface)',
@@ -12097,6 +12148,7 @@ function PatientTriage() {
       fontSize: 12
     }
   }, React.createElement("div", {
+    className: "data-tools-card",
     style: {
       background: 'var(--surface-2)',
       borderRadius: 12,
@@ -12109,6 +12161,8 @@ function PatientTriage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
+      gap: 8,
+      flexWrap: 'wrap',
       marginBottom: 10
     }
   }, React.createElement("span", {
@@ -12276,7 +12330,26 @@ function PatientTriage() {
       fontSize: 12,
       margin: 0
     }
-  }, "\u8A2D\u5B9A\u3059\u308B\u3068Pixel\u2194Windows\u9593\u3067\u540C\u671F\u3067\u304D\u307E\u3059\u3002")), React.createElement("p", {
+  }, "\u8A2D\u5B9A\u3059\u308B\u3068Pixel\u2194Windows\u9593\u3067\u540C\u671F\u3067\u304D\u307E\u3059\u3002"), React.createElement("div", {
+    className: "data-size-meter",
+    style: {
+      display: 'grid',
+      gap: 3,
+      marginTop: 10,
+      padding: '9px 10px',
+      borderRadius: 10,
+      border: `1px solid ${gasNeedsChunkedStore ? '#FBBF24' : 'var(--border)'}`,
+      background: gasNeedsChunkedStore ? 'rgba(251,191,36,.13)' : 'var(--surface)',
+      color: gasNeedsChunkedStore ? '#92400E' : 'var(--text-3)',
+      fontSize: 11,
+      lineHeight: 1.55
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: gasNeedsChunkedStore ? '#92400E' : 'var(--text-2)',
+      fontSize: 11
+    }
+  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasNeedsChunkedStore ? "GASを1プロパティ保存にしている場合は容量超過します。分割保存GASを使ってください。" : "現在の同期データ量は小さめです。"))), React.createElement("p", {
     style: {
       fontWeight: 700,
       color: 'var(--text-2)',

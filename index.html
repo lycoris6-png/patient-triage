@@ -634,6 +634,40 @@ body.work-mode:not(.rpg-mode) {
   font-size:11px; font-weight:700;
   padding:4px 12px; border-radius:99px;
 }
+.data-tools-panel {
+  overflow: hidden;
+}
+.data-tools-panel button {
+  min-width: 0;
+}
+.data-tools-card {
+  min-width: 0;
+}
+.data-size-meter {
+  overflow-wrap: anywhere;
+}
+@media (max-width:560px) {
+  .data-tools-panel {
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+  .data-tools-card {
+    padding: 11px 10px !important;
+    margin-bottom: 12px !important;
+  }
+  .data-tools-panel .btn-ghost,
+  .data-tools-panel .btn-dark {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 7px 10px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+  }
+  .data-tools-panel .tag {
+    padding: 3px 7px;
+    font-size: 10px;
+  }
+}
 
 /* ── スクロールバー ── */
 ::-webkit-scrollbar { width:4px; }
@@ -1176,8 +1210,8 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260625-ntfy-slots"></script>
-<script src="prototype_unified_triage.app.js?v=20260625-ntfy-slots"></script>
+<script src="dialogue.js?v=20260626-sync-size"></script>
+<script src="prototype_unified_triage.app.js?v=20260626-sync-size"></script>
 
 
 

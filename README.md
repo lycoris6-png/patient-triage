@@ -80,6 +80,10 @@ The engine in `index.html` and `prototype_unified_triage.app.js` only reads `win
 
 The unified prototype now includes `updatedAt` (epoch ms) at the top of every push payload, and reads the JSON response of the POST when CORS allows it. To protect against a stale device silently overwriting newer data (last-write-wins problem), extend the GAS `doPost(e)` to reject pushes older than what is stored:
 
+The browser sends a compact GAS-sync payload: active task data is preserved, while growing UI logs are trimmed for sync (`endDayLogs` to the current week, work logs to recent entries, and stuck-step logs to recent entries). The full local JSON export still keeps the richer local data.
+
+Capacity note: 12 patients with 30 tasks each is usually tens to hundreds of KB as JSON. Apps Script `PropertiesService` has a small per-property value limit, so storing the whole payload in one property is not safe. Use chunked storage for `PROP_KEY` when the app shows the sync payload above the single-property warning threshold.
+
 ```js
 function doPost(e) {
   const body = JSON.parse(e.postData.contents || '{}');
