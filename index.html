@@ -619,13 +619,33 @@ body.work-mode:not(.rpg-mode) {
   padding:16px; z-index:50;
   background:rgba(24,15,62,.55);
   backdrop-filter:blur(6px);
+  overflow:hidden;
 }
 .dialog {
   background:var(--surface); border-radius:20px;
   box-shadow:var(--shadow-lg);
   padding:28px; width:100%; max-width:480px;
+  max-height:calc(100dvh - 32px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
   animation:fadeUp .22s cubic-bezier(.34,1.26,.64,1) both;
   border:1.5px solid var(--border);
+}
+.dialog * {
+  min-width:0;
+}
+@media (max-width:560px) {
+  .dialog-bg {
+    align-items:flex-start;
+    justify-content:center;
+    padding:10px max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-bottom));
+  }
+  .dialog {
+    max-height:calc(100dvh - 20px - env(safe-area-inset-bottom));
+    padding:18px 14px;
+    border-radius:16px;
+  }
 }
 
 /* ── GASステータスバッジ ── */
@@ -1210,8 +1230,8 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260626-sync-size"></script>
-<script src="prototype_unified_triage.app.js?v=20260626-sync-size"></script>
+<script src="dialogue.js?v=20260627-dialog-scroll"></script>
+<script src="prototype_unified_triage.app.js?v=20260627-dialog-scroll"></script>
 
 
 
