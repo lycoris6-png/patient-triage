@@ -657,6 +657,7 @@ const GAS_SINGLE_PROPERTY_LIMIT_BYTES = 9000;
 const GAS_TOTAL_SAFE_BYTES = 450000;
 const MANUAL_TIMER_TITLE_STORAGE_KEY = 'patient-triage-manual-timer-title';
 const MANUAL_TALLY_TITLE_STORAGE_KEY = 'patient-triage-manual-tally-title';
+const SUSPENDED_RUNNING_STORAGE_KEY = 'patient-triage-suspended-running';
 const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
 const COACH_CAST_OPTIONS = [
   { id: 'mentor', label: 'エスト' },
@@ -1438,6 +1439,11 @@ const saveLocal = (key, val) => {
   } catch {
     return false;
   }
+};
+const removeLocal = key => {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
 };
 const BACKUP_KEY_PREFIX = 'patient-triage-backup-';
 const BACKUP_KEEP_DAYS = 3;
@@ -6609,6 +6615,14 @@ function elapsedMsOf(running, now) {
   const base = running.pausedAt ? running.pausedAt : now;
   return Math.max(0, base - running.startedAt - (running.accumulatedPaused || 0));
 }
+const suspendedRunningSnapshot = running => {
+  if (!running) return null;
+  return {
+    ...running,
+    pausedAt: running.pausedAt || Date.now(),
+    suspendedAt: Date.now()
+  };
+};
 const TIMER_CHIBI = {
   timer: {
     neutral: 'blue_white_girl_06_clipboard.png',
@@ -6789,10 +6803,12 @@ function FloatingTimerBar({
   }, isTally && React.createElement("button", {
     onClick: onIncrement,
     className: "btn-dark",
+    disabled: paused,
     style: {
       padding: '7px 14px',
       fontSize: 14,
-      fontWeight: 900
+      fontWeight: 900,
+      opacity: paused ? .42 : 1
     },
     "aria-label": "1件追加"
   }, "+1"), !isTally && React.createElement("button", {
@@ -6805,12 +6821,15 @@ function FloatingTimerBar({
     title: "1分延長"
   }, "+1分"), React.createElement("button", {
     onClick: onPauseToggle,
-    className: "btn-sm",
+    className: paused ? "btn-dark" : "btn-sm",
     style: {
       fontSize: 11,
-      padding: '5px 8px'
-    }
-  }, paused ? '▶' : '⏸'), React.createElement("button", {
+      padding: '5px 10px',
+      fontWeight: 800
+    },
+    title: paused ? "再開" : "一時停止",
+    "aria-label": paused ? "再開" : "一時停止"
+  }, paused ? '▶ 再開' : '⏸ 一時停止'), React.createElement("button", {
     onClick: onReset,
     className: "btn-sm",
     style: {
@@ -6835,13 +6854,15 @@ function FloatingTimerBar({
       padding: '5px 8px',
       opacity: .65
     },
-    title: "閉じる"
-  }, "✕"))));
+    title: "しまう"
+  }, "しまう"))));
 }
 function TimerQuickLauncher({
   running,
   onStartTimer,
-  onStartTally
+  onStartTally,
+  suspended,
+  onResumeSuspended
 }) {
   if (running) return null;
   return React.createElement("div", {
@@ -6861,7 +6882,27 @@ function TimerQuickLauncher({
       backdropFilter: 'blur(8px)'
     },
     "aria-label": "タイマーと件数クリッカー"
-  }, React.createElement("button", {
+  }, suspended && React.createElement("button", {
+    type: "button",
+    className: "btn-ghost dock-icon",
+    onClick: onResumeSuspended,
+    title: `${suspended.mode === 'tally' ? '件数クリッカー' : 'タイマー'}を再開: ${suspended.title || '中断中'}`,
+    "aria-label": "中断中の計測を再開",
+    style: {
+      width: 38,
+      height: 38,
+      padding: 0,
+      borderRadius: 999,
+      fontSize: 17,
+      lineHeight: 1,
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'var(--accent)',
+      borderColor: 'var(--accent)',
+      background: 'var(--surface)'
+    }
+  }, "↩"), React.createElement("button", {
     type: "button",
     className: "btn-ghost dock-icon",
     onClick: onStartTimer,
@@ -9061,6 +9102,7 @@ function PatientTriage() {
   });
   const [undoEntry, setUndoEntry] = useState(null);
   const [runningTask, setRunningTask] = useState(null);
+  const [suspendedRunningTask, setSuspendedRunningTask] = useState(() => loadLocal(SUSPENDED_RUNNING_STORAGE_KEY));
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('triage-running-change', {
       detail: {
@@ -9075,6 +9117,9 @@ function PatientTriage() {
       }
     }));
   }, [runningTask]);
+  useEffect(() => {
+    if (suspendedRunningTask) saveLocal(SUSPENDED_RUNNING_STORAGE_KEY, suspendedRunningTask);else removeLocal(SUSPENDED_RUNNING_STORAGE_KEY);
+  }, [suspendedRunningTask]);
   const startTimer = task => {
     if (!task) return;
     const mins = estimateMinutes(task);
@@ -9082,6 +9127,7 @@ function PatientTriage() {
       showToast('見積もり分が未設定です');
       return;
     }
+    setSuspendedRunningTask(null);
     setRunningTask({
       mode: 'timer',
       taskId: task.id,
@@ -9120,6 +9166,7 @@ function PatientTriage() {
         targetCount: target
       });
     }
+    setSuspendedRunningTask(null);
     setRunningTask({
       mode: 'tally',
       taskId: task.id,
@@ -9157,6 +9204,7 @@ function PatientTriage() {
       return;
     }
     saveLocal(MANUAL_TIMER_TITLE_STORAGE_KEY, title);
+    setSuspendedRunningTask(null);
     setRunningTask({
       mode: 'timer',
       taskId: null,
@@ -9193,6 +9241,7 @@ function PatientTriage() {
       return;
     }
     saveLocal(MANUAL_TALLY_TITLE_STORAGE_KEY, title);
+    setSuspendedRunningTask(null);
     setRunningTask({
       mode: 'tally',
       taskId: null,
@@ -9207,7 +9256,25 @@ function PatientTriage() {
     });
   };
   const stopRunning = () => {
+    const suspended = suspendedRunningSnapshot(runningTask);
+    if (suspended) {
+      setSuspendedRunningTask(suspended);
+      showToast('計測をしまいました。右下から再開できます');
+    }
     setRunningTask(null);
+  };
+  const resumeSuspendedRunning = () => {
+    const prev = suspendedRunningTask;
+    if (!prev) return;
+    const pausedFor = prev.pausedAt ? Date.now() - prev.pausedAt : 0;
+    setRunningTask({
+      ...prev,
+      pausedAt: null,
+      accumulatedPaused: (prev.accumulatedPaused || 0) + Math.max(0, pausedFor),
+      suspendedAt: null
+    });
+    setSuspendedRunningTask(null);
+    showToast('計測を再開しました');
   };
   const pauseToggleRunning = () => {
     setRunningTask(prev => {
@@ -9243,6 +9310,7 @@ function PatientTriage() {
   const incrementRunning = () => {
     setRunningTask(prev => {
       if (!prev || prev.mode !== 'tally') return prev;
+      if (prev.pausedAt) return prev;
       const next = (prev.currentCount || 0) + 1;
       const justHit = prev.targetCount > 0 && next >= prev.targetCount && (prev.currentCount || 0) < prev.targetCount;
       if (justHit) {
@@ -13032,7 +13100,9 @@ function PatientTriage() {
   }, toast), React.createElement(TimerQuickLauncher, {
     running: runningTask,
     onStartTimer: startManualTimer,
-    onStartTally: startManualTally
+    onStartTally: startManualTally,
+    suspended: suspendedRunningTask,
+    onResumeSuspended: resumeSuspendedRunning
   }), React.createElement(FloatingTimerBar, {
     running: runningTask,
     onIncrement: incrementRunning,
