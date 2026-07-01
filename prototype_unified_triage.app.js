@@ -234,6 +234,17 @@ const QUICK_GENERAL_TASKS = [{
   estimate: '15'
 }];
 const QUICK_PATIENT_TASKS = QUICK_GENERAL_TASKS;
+const PATIENT_EXAM_QUICK_ITEMS = Object.freeze([
+  { id: 'ld', label: 'L/D', title: 'L/D' },
+  { id: 'us', label: 'US', title: 'US' },
+  { id: 'ct', label: 'CT', title: 'CT' },
+  { id: 'mri', label: 'MRI', title: 'MRI' },
+  { id: 'other', label: '他', title: '検査' }
+]);
+const PATIENT_EXAM_QUICK_ACTIONS = Object.freeze([
+  { id: 'order', label: 'オーダー', suffix: 'オーダー', type: 'order', estimate: '5' },
+  { id: 'check', label: 'チェック', suffix: 'チェック', type: 'test', estimate: '5' }
+]);
 const QUICK_DAILY_TASKS = [{
   title: '掃除',
   type: 'home',
@@ -644,6 +655,8 @@ const STORAGE_KEY = 'patient-triage-v1';
 const GAS_CONFIG_KEY = 'patient-triage-gas-config';
 const GAS_SINGLE_PROPERTY_LIMIT_BYTES = 9000;
 const GAS_TOTAL_SAFE_BYTES = 450000;
+const MANUAL_TIMER_TITLE_STORAGE_KEY = 'patient-triage-manual-timer-title';
+const MANUAL_TALLY_TITLE_STORAGE_KEY = 'patient-triage-manual-tally-title';
 const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
 const COACH_CAST_OPTIONS = [
   { id: 'mentor', label: 'エスト' },
@@ -1587,7 +1600,15 @@ function AppDialogHost() {
     };
   }, []);
   useEffect(() => {
-    if (req && focusRef.current) focusRef.current.focus();
+    if (req && focusRef.current) {
+      const coarsePointer = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      if (req.kind !== 'form' && coarsePointer) return;
+      try {
+        focusRef.current.focus({ preventScroll: true });
+      } catch {
+        focusRef.current.focus();
+      }
+    }
   }, [req]);
   if (!req) return null;
   const isForm = req.kind === 'form';
@@ -2622,6 +2643,7 @@ function PatientCard({
   onApplyTemplate,
   quickTasks,
   onApplyQuickTask,
+  onApplyExamTask,
   adding,
   onStartAdd,
   onCancelAdd,
@@ -2657,6 +2679,7 @@ function PatientCard({
   const [draftName, setDraftName] = useState(patient.name);
   const [quickOpen, setQuickOpen] = useState(false);
   const [setOpen, setSetOpen] = useState(false);
+  const [examQuickItem, setExamQuickItem] = useState(PATIENT_EXAM_QUICK_ITEMS[0].id);
   useEffect(() => {
     setDraftName(patient.name);
   }, [patient.name]);
@@ -2681,6 +2704,7 @@ function PatientCard({
   const showCheckStamp = !!checkMeta && isRoundTarget(patient);
   const checked = showCheckStamp && isCheckedToday(patient, checkMode);
   const checkedAt = showCheckStamp ? patient[checkMeta.atField] : null;
+  const examQuickSelected = PATIENT_EXAM_QUICK_ITEMS.find(item => item.id === examQuickItem) || PATIENT_EXAM_QUICK_ITEMS[0];
   return React.createElement("div", {
     className: `card ${pri.cls}`,
     style: {
@@ -3206,7 +3230,59 @@ function PatientCard({
       gap: 7,
       marginTop: 10
     }
-  }, quickTasks && quickTasks.length > 0 && React.createElement("div", null, React.createElement("button", {
+  }, onApplyExamTask && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 6,
+      padding: '7px 8px',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      background: 'var(--surface-2)'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 5,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 900,
+      marginRight: 2
+    }
+  }, "検査"), PATIENT_EXAM_QUICK_ITEMS.map(item => React.createElement("button", {
+    key: item.id,
+    type: "button",
+    className: `btn-sm${examQuickSelected.id === item.id ? ' btn-ghost-active' : ''}`,
+    onClick: () => setExamQuickItem(item.id),
+    style: {
+      fontSize: 11,
+      padding: '4px 8px',
+      border: examQuickSelected.id === item.id ? '1px solid var(--accent)' : '1px solid var(--border)',
+      borderRadius: 99,
+      background: examQuickSelected.id === item.id ? 'rgba(108,62,248,.10)' : 'var(--surface)'
+    }
+  }, item.label))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, PATIENT_EXAM_QUICK_ACTIONS.map(action => React.createElement("button", {
+    key: action.id,
+    type: "button",
+    className: action.id === 'order' ? 'btn-dark' : 'btn-ghost',
+    onClick: () => onApplyExamTask(examQuickSelected, action),
+    style: {
+      padding: '6px 12px',
+      fontSize: 11,
+      boxShadow: 'none'
+    },
+    title: `${examQuickSelected.label}${action.label}を追加`
+  }, "+ ", action.label)))), quickTasks && quickTasks.length > 0 && React.createElement("div", null, React.createElement("button", {
     className: "btn-sm",
     onClick: () => setQuickOpen(v => !v),
     style: {
@@ -9058,13 +9134,14 @@ function PatientTriage() {
     });
   };
   const startManualTimer = async () => {
+    const lastTitle = String(loadLocal(MANUAL_TIMER_TITLE_STORAGE_KEY) || '').trim();
     const res = await appForm({
       title: '自由タイマー',
       confirmText: 'スタート',
       fields: [{
         key: 'title',
         label: '何のタイマーにしますか？',
-        defaultValue: '自由タイマー'
+        defaultValue: lastTitle || '自由タイマー'
       }, {
         key: 'mins',
         label: '何分で測りますか？',
@@ -9079,6 +9156,7 @@ function PatientTriage() {
       showToast('1分以上の数字で指定してください');
       return;
     }
+    saveLocal(MANUAL_TIMER_TITLE_STORAGE_KEY, title);
     setRunningTask({
       mode: 'timer',
       taskId: null,
@@ -9092,13 +9170,14 @@ function PatientTriage() {
     });
   };
   const startManualTally = async () => {
+    const lastTitle = String(loadLocal(MANUAL_TALLY_TITLE_STORAGE_KEY) || '').trim();
     const res = await appForm({
       title: '件数クリッカー',
       confirmText: 'スタート',
       fields: [{
         key: 'title',
         label: '何を数えますか？',
-        defaultValue: '件数クリッカー'
+        defaultValue: lastTitle || '件数クリッカー'
       }, {
         key: 'count',
         label: '何件で区切りますか？',
@@ -9113,6 +9192,7 @@ function PatientTriage() {
       showToast('1以上の整数で指定してください');
       return;
     }
+    saveLocal(MANUAL_TALLY_TITLE_STORAGE_KEY, title);
     setRunningTask({
       mode: 'tally',
       taskId: null,
@@ -9703,6 +9783,39 @@ function PatientTriage() {
       tasks: [...p.tasks, task]
     } : p));
     showToast(`「${preset.title}」を追加`);
+  };
+  const addExamQuickPatientTask = async (patientId, examItem, action) => {
+    if (!examItem || !action) return;
+    let examTitle = examItem.title || examItem.label || '検査';
+    if (examItem.id === 'other') {
+      const input = await appPrompt({
+        title: '検査タスク',
+        label: '検査名',
+        defaultValue: '',
+        placeholder: '例: XP、心電図、培養',
+        confirmText: '追加'
+      });
+      if (input === null) return;
+      examTitle = input.trim() || '検査';
+    }
+    const title = `${examTitle}${action.suffix || action.label || ''}`;
+    const task = {
+      id: uid(),
+      title,
+      type: action.type || 'test',
+      estimate: action.estimate || '5',
+      scheduledTime: null,
+      status: 'todo',
+      stuckReason: '',
+      tinyStep: '',
+      createdAt: Date.now()
+    };
+    rememberUndo('検査タスク追加');
+    setActivePatients(prev => prev.map(p => p.id === patientId ? {
+      ...p,
+      tasks: [...p.tasks, task]
+    } : p));
+    showToast(`「${title}」を追加`);
   };
   const updateTask = (patientId, taskId, updates) => {
     if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('タスク状態変更');
@@ -11953,6 +12066,7 @@ function PatientTriage() {
     onApplyTemplate: tpl => applyTemplate(p.id, tpl),
     quickTasks: quickPatientPresets,
     onApplyQuickTask: preset => addQuickPatientTask(p.id, preset),
+    onApplyExamTask: !isDailyMode ? (examItem, action) => addExamQuickPatientTask(p.id, examItem, action) : null,
     adding: adding[p.id],
     onStartAdd: () => setAdding(a => ({
       ...a,
