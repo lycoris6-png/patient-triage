@@ -6692,13 +6692,14 @@ function FloatingTimerBar({
     const target = running.targetCount || 0;
     const remaining = Math.max(0, target - count);
     const pace = elapsedSec > 0 ? (count / (elapsedSec / 60)) : 0;
+    const minutesPerItem = count > 0 ? elapsedSec / 60 / count : null;
     const etaMin = pace > 0 && remaining > 0 ? Math.ceil(remaining / pace) : null;
     const done = target > 0 && count >= target;
     const showTarget = target <= 0 || done || remaining <= 3;
     accent = done ? '#16A34A' : '#0EA5E9';
     progressPct = target > 0 ? Math.min(100, (count / target) * 100) : 0;
     main = showTarget ? `${count}/${target}件` : `${count}件`;
-    sub = `経過 ${formatMSS(elapsedSec)}・${pace > 0 ? pace.toFixed(1) : '0.0'}件/分${etaMin != null ? `・あと${etaMin}分` : (done ? '・🎉達成' : '')}`;
+    sub = `経過 ${formatMSS(elapsedSec)}・1件あたり${minutesPerItem != null ? minutesPerItem.toFixed(1) : '--'}分${etaMin != null ? `・あと${etaMin}分` : (done ? '・🎉達成' : '')}`;
     chibiPose = paused ? 'paused' : (done ? 'done' : (progressPct >= 75 ? 'over' : (count > 0 ? 'warn' : 'neutral')));
   } else {
     const totalMs = running.durationMs || 0;
