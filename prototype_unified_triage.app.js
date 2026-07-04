@@ -3811,6 +3811,7 @@ function GeneralTaskSection({
   const openTasks = tasks.filter(t => t.status !== 'done');
   const doneTasks = tasks.filter(t => t.status === 'done');
   const sortedOpen = [...openTasks].sort((a, b) => {
+    if (!!a.closer !== !!b.closer) return a.closer ? 1 : -1;
     if (a.dueDate && !b.dueDate) return -1;
     if (!a.dueDate && b.dueDate) return 1;
     if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
@@ -3910,7 +3911,16 @@ function GeneralTaskSection({
         fontSize: 10,
         border: '1px solid ' + dailyPriority.color + '35'
       }
-    }, dailyPriority.label), editingTaskId === task.id ? React.createElement("input", {
+    }, dailyPriority.label), task.closer && React.createElement("span", {
+      className: "tag",
+      title: "締めタスク: 他が全部終わってから提案されます",
+      style: {
+        background: 'rgba(15,118,110,.12)',
+        color: '#0F766E',
+        fontSize: 10,
+        border: '1px solid rgba(15,118,110,.3)'
+      }
+    }, "🌙 締め"), editingTaskId === task.id ? React.createElement("input", {
       autoFocus: true,
       value: draftTaskTitle,
       onChange: e => setDraftTaskTitle(e.target.value),
@@ -6559,7 +6569,19 @@ function RoutinePresetSection({
     }, DAILY_TASK_PRIORITIES.map(p => React.createElement("option", {
       key: p.id,
       value: p.id
-    }, p.label)))));
+    }, p.label))), React.createElement("button", {
+      className: "tag",
+      onClick: () => onUpdate(preset.id, {
+        closer: !preset.closer
+      }),
+      title: "締めタスク: 他のタスクが全部終わるまで「次の一手」に提案されません",
+      style: {
+        background: preset.closer ? '#0F766E' : 'var(--surface-2)',
+        color: preset.closer ? '#fff' : 'var(--text-3)',
+        border: '1px solid ' + (preset.closer ? '#0F766E' : 'var(--border)'),
+        cursor: 'pointer'
+      }
+    }, "🌙 締め")));
   });
   return React.createElement("div", {
     style: {
@@ -10701,6 +10723,9 @@ function PatientTriage() {
     }
     if (!pool.length) {
       let generalPool = erOnly ? [] : activeGeneralTasks.filter(t => t.status === 'todo' || t.status === 'doing');
+      // 締めタスク(closer)は他のタスクが残っているうちは提案しない
+      const generalNonCloser = generalPool.filter(t => !t.closer);
+      if (generalNonCloser.length) generalPool = generalNonCloser;
       if (quickOnly) {
         const quick = generalPool.filter(t => t.estimate === '2');
         generalPool = quick.length > 0 ? quick : generalPool;
@@ -11114,6 +11139,7 @@ function PatientTriage() {
           status: 'todo',
           createdAt: Date.now(),
           general: true,
+          closer: item.closer === true || undefined,
           routineId: item.id,
           routineDate: stamp
         };
