@@ -1232,6 +1232,7 @@ body.rpg-mode .chibi-coach-bubble {
 <body>
 <div id="root"></div>
 <script src="dialogue.js?v=20260702-tally-minutes-per-item"></script>
+<script src="dialogue-packs.js?v=20260704-seasonal-packs"></script>
 <script src="prototype_unified_triage.app.js?v=20260702-tally-minutes-per-item"></script>
 
 
@@ -1241,6 +1242,40 @@ body.rpg-mode .chibi-coach-bubble {
   const CHIBI_BASE = 'chibi_split_pngs/';
   // セリフ本体は dialogue.js (window.APP_DIALOGUE) にあります。ここは表示エンジンだけです。
   const D = window.APP_DIALOGUE || {};
+  // 季節パック(dialogue-packs.js)を日付で選んでベースに混ぜる
+  (function mergeSeasonalPacks(){
+    const packs = Array.isArray(window.APP_DIALOGUE_PACKS) ? window.APP_DIALOGUE_PACKS : [];
+    if (!packs.length) return;
+    const now = new Date();
+    const mmdd = String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const inWindow = pack => {
+      if (!pack || typeof pack !== 'object') return false;
+      if (!pack.from || !pack.to) return true;
+      // 年またぎ(例 12-01〜02-28)にも対応
+      return pack.from <= pack.to
+        ? (mmdd >= pack.from && mmdd <= pack.to)
+        : (mmdd >= pack.from || mmdd <= pack.to);
+    };
+    packs.filter(inWindow).forEach(pack => {
+      ['patient', 'daily', 'work'].forEach(mode => {
+        const src = pack[mode];
+        if (!src || typeof src !== 'object') return;
+        const dstMode = D[mode] = D[mode] || {};
+        Object.keys(src).forEach(who => {
+          const scenes = src[who];
+          if (!scenes || typeof scenes !== 'object') return;
+          const dstWho = dstMode[who] = dstMode[who] || {};
+          Object.keys(scenes).forEach(scene => {
+            const lines = scenes[scene];
+            if (!Array.isArray(lines) || !lines.length) return;
+            const clean = lines.filter(l => typeof l === 'string' && l.trim());
+            if (!clean.length) return;
+            dstWho[scene] = (Array.isArray(dstWho[scene]) ? dstWho[scene] : []).concat(clean);
+          });
+        });
+      });
+    });
+  })();
   const FALLBACK_LINES = ['…'];
   const linesFor = (who, mode) => {
     const table = mode === 'work' ? D.work : mode === 'daily' ? D.daily : D.patient;
