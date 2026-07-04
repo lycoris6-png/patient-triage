@@ -182,6 +182,14 @@ function ntfyPublish_(title, message) {
   return response.getContentText();
 }
 function ntfyStoredData_() {
+  // 分割保存モジュール(gas-chunked-storage.gs)があればそちら経由で読む
+  if (typeof loadStoredData_ === 'function') {
+    try {
+      return loadStoredData_() || {};
+    } catch (err) {
+      throw new Error('同期データを読み込めません: ' + err.message);
+    }
+  }
   const raw = PropertiesService.getUserProperties().getProperty(PROP_KEY);
   if (!raw) return {};
   try {

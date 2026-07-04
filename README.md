@@ -82,7 +82,7 @@ The unified prototype now includes `updatedAt` (epoch ms) at the top of every pu
 
 The browser sends a compact GAS-sync payload: active task data is preserved, while growing UI logs are trimmed for sync (`endDayLogs` to the current week, work logs to recent entries, and stuck-step logs to recent entries). The full local JSON export still keeps the richer local data.
 
-Capacity note: 12 patients with 30 tasks each is usually tens to hundreds of KB as JSON. Apps Script `PropertiesService` has a small per-property value limit, so storing the whole payload in one property is not safe. Use chunked storage for `PROP_KEY` when the app shows the sync payload above the single-property warning threshold.
+Capacity note: 12 patients with 30 tasks each is usually tens to hundreds of KB as JSON. Apps Script `PropertiesService` has a small per-property value limit (9KB), so storing the whole payload in one property is not safe. Add `gas-chunked-storage.gs` to the Apps Script project to store the payload as chunked properties (it provides `loadStoredData_` / `saveStoredData_`, reads legacy single-property data, and cleans up surplus chunks). `gas-quota-inspector.gs` can be pasted alongside to audit what is using the property stores.
 
 ```js
 function doPost(e) {
