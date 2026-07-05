@@ -4656,7 +4656,7 @@ function GasConfigDialog({
     }
   }, React.createElement("strong", {
     style: { color: 'var(--text)', fontSize: 13 }
-  }, "ntfy キャラ通知"), React.createElement("button", {
+  }, "Pushover キャラ通知"), React.createElement("button", {
     className: `btn-sm${ntfy.enabled ? ' btn-ghost-active' : ''}`,
     onClick: () => setNtfy(prev => ({ ...prev, enabled: !prev.enabled })),
     style: {
@@ -4670,7 +4670,7 @@ function GasConfigDialog({
       fontSize: 11,
       lineHeight: 1.6
     }
-  }, "任意の時刻にntfyへ送ります。本文が空ならキャラクターのおまかせメッセージになります。患者名・タスク名・病棟は送信しません。"), React.createElement("div", {
+  }, "任意の時刻にPushoverへ送ります。本文が空ならキャラクターのおまかせメッセージになります。患者名・タスク名・病棟は送信しません。"), React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'space-between',
@@ -6420,6 +6420,354 @@ function RewardSection({
       opacity: !form.text.trim() ? .45 : 1
     }
   }, "追加"))));
+}
+function SettingsSubSection({
+  icon,
+  title,
+  summary,
+  open,
+  onToggle,
+  children
+}) {
+  return React.createElement("div", {
+    style: {
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      background: 'var(--surface-2)',
+      overflow: 'hidden'
+    }
+  }, React.createElement("button", {
+    onClick: onToggle,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      width: '100%',
+      padding: '10px 12px',
+      background: 'transparent',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: 12,
+      color: 'var(--text)',
+      fontWeight: 800,
+      textAlign: 'left'
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 13
+  }) : React.createElement(ChevronRight, {
+    size: 13
+  }), React.createElement("span", null, icon, " ", title), summary ? React.createElement("span", {
+    style: {
+      marginLeft: 'auto',
+      fontSize: 10,
+      color: 'var(--text-3)',
+      fontWeight: 700,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis'
+    }
+  }, summary) : null), open ? React.createElement("div", {
+    style: {
+      padding: '2px 12px 12px'
+    }
+  }, children) : null);
+}
+function PresetHub({
+  open,
+  onToggle,
+  label,
+  children
+}) {
+  return React.createElement("div", {
+    style: {
+      marginTop: 12
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: onToggle,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 12,
+      color: 'var(--text-3)',
+      fontWeight: 700
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "⚙️ ", label || 'プリセット編集'), open ? React.createElement("div", {
+    style: {
+      marginTop: 8,
+      paddingLeft: 10,
+      borderLeft: '2px solid var(--border)',
+      display: 'grid',
+      gap: 10
+    }
+  }, children) : null);
+}
+function DataToolsPanel({
+  gasConfig,
+  gasStatus,
+  gasAiCoach,
+  ntfySettings,
+  coachCast,
+  onToggleCast,
+  onOpenGasDialog,
+  onAiTest,
+  onNtfyTest,
+  onPull,
+  onPush,
+  gasPayloadBytes,
+  localPayloadBytes,
+  gasNeedsChunkedStore,
+  onExportFile,
+  onExportClipboard,
+  onImport,
+  onRestore,
+  gasOpen,
+  onToggleGas,
+  charOpen,
+  onToggleChar,
+  backupOpen,
+  onToggleBackup
+}) {
+  const gasReady = !!(gasConfig.url && gasConfig.secret);
+  const gasSummary = !gasConfig.url ? '未設定' : gasStatus === 'error' ? 'エラー' : gasStatus === 'syncing' ? '同期中…' : '接続済 ' + formatBytes(gasPayloadBytes) + (gasNeedsChunkedStore ? ' ⚠' : '');
+  const charSummary = 'AI一言 ' + (gasAiCoach.enabled ? 'ON' : 'OFF') + ' / Pushover ' + (ntfySettings.enabled ? 'ON' : 'OFF');
+  const statusTag = (on, bg, fg, label) => React.createElement("span", {
+    className: "tag",
+    style: {
+      background: on ? bg : 'var(--surface)',
+      color: on ? fg : 'var(--text-3)',
+      border: '1px solid var(--border)'
+    }
+  }, label);
+  return React.createElement("div", {
+    className: "data-tools-panel",
+    style: {
+      marginTop: 10,
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 14,
+      padding: 12,
+      fontSize: 12,
+      display: 'grid',
+      gap: 8
+    }
+  }, React.createElement(SettingsSubSection, {
+    icon: "🔄",
+    title: "同期 (GAS)",
+    summary: gasSummary,
+    open: gasOpen,
+    onToggle: onToggleGas
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: onOpenGasDialog,
+    style: {
+      color: 'var(--accent)',
+      fontWeight: 700,
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      padding: '5px 10px'
+    }
+  }, gasConfig.url ? 'GAS設定を開く' : 'GASを設定する'), !gasConfig.url && React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11
+    }
+  }, "設定するとPixel⇔Windows間で同期できます")), gasConfig.url && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      marginBottom: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onPull,
+    disabled: gasStatus === 'syncing',
+    style: {
+      fontSize: 12,
+      padding: '7px 16px'
+    }
+  }, "↓ GASから読み込む"), React.createElement("button", {
+    className: "btn-dark",
+    onClick: onPush,
+    disabled: gasStatus === 'syncing',
+    style: {
+      fontSize: 12,
+      padding: '7px 16px'
+    }
+  }, "↑ GASに保存する"), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 500
+    }
+  }, "変更時3秒後に自動保存")), React.createElement("div", {
+    className: "data-size-meter",
+    style: {
+      display: 'grid',
+      gap: 3,
+      padding: '9px 10px',
+      borderRadius: 10,
+      border: `1px solid ${gasNeedsChunkedStore ? '#FBBF24' : 'var(--border)'}`,
+      background: gasNeedsChunkedStore ? 'rgba(251,191,36,.13)' : 'var(--surface)',
+      color: gasNeedsChunkedStore ? '#92400E' : 'var(--text-3)',
+      fontSize: 11,
+      lineHeight: 1.55
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: gasNeedsChunkedStore ? '#92400E' : 'var(--text-2)',
+      fontSize: 11
+    }
+  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasNeedsChunkedStore ? "GASを1プロパティ保存にしている場合は容量超過します。分割保存GASを使ってください。" : "現在の同期データ量は小さめです。"))), React.createElement(SettingsSubSection, {
+    icon: "🎭",
+    title: "キャラ・通知",
+    summary: charSummary,
+    open: charOpen,
+    onToggle: onToggleChar
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    }
+  }, statusTag(gasAiCoach.enabled, 'rgba(22,163,74,.13)', 'var(--done)', `AI一言 ${gasAiCoach.enabled ? 'ON' : 'OFF'}`), statusTag(gasAiCoach.onStart, 'rgba(108,62,248,.10)', 'var(--accent)', `起動時 ${gasAiCoach.onStart ? 'ON' : 'OFF'}`), statusTag(gasAiCoach.onEndDay, 'rgba(108,62,248,.10)', 'var(--accent)', `おしまい時 ${gasAiCoach.onEndDay ? 'ON' : 'OFF'}`), React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 700
+    }
+  }, gasAiCoach.locationLabel || '職場'), React.createElement("button", {
+    className: "btn-sm",
+    onClick: onAiTest,
+    disabled: !gasReady || !gasAiCoach.enabled,
+    style: {
+      fontSize: 11,
+      padding: '4px 8px',
+      opacity: !gasReady || !gasAiCoach.enabled ? .45 : 1
+    }
+  }, "テスト")), gasConfig.url && React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    }
+  }, statusTag(ntfySettings.enabled, 'rgba(14,165,233,.13)', '#0369A1', `Pushover ${ntfySettings.enabled ? 'ON' : 'OFF'}`), React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11
+    }
+  }, ntfySettings.slots.filter(slot => slot.enabled).map(slot => slot.time).join(' / ') || '時刻なし'), React.createElement("button", {
+    className: "btn-sm",
+    onClick: onNtfyTest,
+    disabled: !gasReady,
+    style: {
+      fontSize: 11,
+      padding: '4px 8px'
+    }
+  }, "通知テスト")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    }
+  }, React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 800
+    }
+  }, "登場キャラ"), COACH_CAST_OPTIONS.map(c => React.createElement("label", {
+    key: c.id,
+    className: "tag",
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      cursor: 'pointer',
+      border: '1px solid var(--border)',
+      background: coachCast[c.id] !== false ? 'rgba(108,62,248,.10)' : 'var(--surface)',
+      color: coachCast[c.id] !== false ? 'var(--accent)' : 'var(--text-3)'
+    }
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: coachCast[c.id] !== false,
+    onChange: e => onToggleCast(c.id, e.target.checked),
+    style: {
+      margin: 0,
+      accentColor: 'var(--accent)'
+    }
+  }), c.label))), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => window.open('./dialogue-editor.html', '_blank'),
+    style: {
+      fontSize: 11,
+      padding: '7px 14px'
+    }
+  }, "🎭 セリフ編集…")), React.createElement(SettingsSubSection, {
+    icon: "💾",
+    title: "バックアップ",
+    summary: "書き出し / 復元",
+    open: backupOpen,
+    onToggle: onToggleBackup
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 7,
+      marginBottom: 10
+    }
+  }, React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onExportFile,
+    style: {
+      fontSize: 11,
+      padding: '7px 14px'
+    }
+  }, "ファイル保存(.json)"), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onExportClipboard,
+    style: {
+      fontSize: 11,
+      padding: '7px 14px'
+    }
+  }, "クリップボードにコピー"), React.createElement("button", {
+    className: "btn-ghost",
+    onClick: onImport,
+    style: {
+      fontSize: 11,
+      padding: '7px 14px',
+      marginLeft: 'auto'
+    }
+  }, "インポート…")), React.createElement("p", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      margin: 0
+    }
+  }, "※ 患者符丁以外の個人情報は入れないこと。"), React.createElement(BackupRestoreSection, {
+    onRestore: onRestore
+  })));
 }
 function RoutinePresetSection({
   presets,
@@ -9044,6 +9392,10 @@ function PatientTriage() {
   const [quickPresetsOpen, setQuickPresetsOpen] = useState(false);
   const [dailyQuickPresetsOpen, setDailyQuickPresetsOpen] = useState(false);
   const [routineOpen, setRoutineOpen] = useState(false);
+  const [presetHubOpen, setPresetHubOpen] = useState(false);
+  const [dataGasOpen, setDataGasOpen] = useState(false);
+  const [dataCharOpen, setDataCharOpen] = useState(false);
+  const [dataBackupOpen, setDataBackupOpen] = useState(false);
   const [routinePromptOpen, setRoutinePromptOpen] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [quickPatientPresets, setQuickPatientPresets] = useState(QUICK_PATIENT_TASKS);
@@ -12061,7 +12413,11 @@ function PatientTriage() {
     style: {
       marginTop: 10
     }
-  }, React.createElement("button", {
+  }, React.createElement(PresetHub, {
+    open: presetHubOpen,
+    onToggle: () => setPresetHubOpen(v => !v),
+    label: "プリセット編集 (よく使う / セット / 固定)"
+  }, React.createElement("div", null, React.createElement("button", {
     className: "btn-sm",
     onClick: () => setDailyQuickPresetsOpen(v => !v),
     style: {
@@ -12090,7 +12446,7 @@ function PatientTriage() {
     onRemoveGeneral: idx => removeQuickPreset('general', idx),
     onRemoveDaily: idx => removeQuickPreset('daily', idx),
     showPatient: false
-  }), React.createElement("div", {
+  })), React.createElement("div", {
     style: {
       marginTop: 10
     }
@@ -12117,6 +12473,14 @@ function PatientTriage() {
     onAddItem: addDailyTaskSetItem,
     onUpdateItem: updateDailyTaskSetItem,
     onRemoveItem: removeDailyTaskSetItem
+  })), React.createElement(RoutinePresetSection, {
+    presets: routinePresets,
+    open: routineOpen,
+    onToggleOpen: () => setRoutineOpen(v => !v),
+    onUpdate: updateRoutinePreset,
+    onAdd: addRoutinePreset,
+    onRemove: removeRoutinePreset,
+    onApplyToday: applyTodayRoutines
   })))) : React.createElement("div", {
     style: {
       display: 'flex',
@@ -12346,7 +12710,47 @@ function PatientTriage() {
     size: 12
   }) : React.createElement(ChevronRight, {
     size: 12
-  }), "\u30C7\u30FC\u30BF (\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7 / GAS\u540C\u671F)"), dataToolsOpen && React.createElement("div", {
+  }), "\u30C7\u30FC\u30BF (\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7 / GAS\u540C\u671F)"), dataToolsOpen && React.createElement(DataToolsPanel, {
+    gasConfig: gasConfig,
+    gasStatus: gasStatus,
+    gasAiCoach: gasAiCoach,
+    ntfySettings: normalizedNtfySettings,
+    coachCast: coachCast,
+    onToggleCast: (id, checked) => setCoachCast(prev => normalizeCoachCast({
+      ...prev,
+      [id]: checked
+    })),
+    onOpenGasDialog: () => setGasDialog(true),
+    onAiTest: async () => {
+      showToast('AI\u4E00\u8A00\u3092\u53D6\u5F97\u4E2D\u2026');
+      const result = await requestAiCoachLine('start');
+      showToast(result.ok ? 'AI\u4E00\u8A00\u3092\u8868\u793A\u3057\u307E\u3057\u305F' : `AI\u4E00\u8A00\u5931\u6557: ${result.error || 'GAS\u8A2D\u5B9A\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044'}`);
+    },
+    onNtfyTest: async () => {
+      showToast('Pushover\u3078\u30C6\u30B9\u30C8\u9001\u4FE1\u4E2D\u2026');
+      try {
+        const result = await gasNtfyTest(gasConfig);
+        showToast(result?.ok && result?.sent === true ? 'Pushover\u3078\u30C6\u30B9\u30C8\u901A\u77E5\u3092\u9001\u308A\u307E\u3057\u305F' : 'Pushover\u901A\u77E5\u5931\u6557: ' + (result?.error || 'GAS\u304C\u901A\u77E5\u30C6\u30B9\u30C8\u51E6\u7406\u3092\u8FD4\u3057\u3066\u3044\u307E\u305B\u3093\u3002doGet\u3068\u518D\u30C7\u30D7\u30ED\u30A4\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044'));
+      } catch (e) {
+        showToast('Pushover\u901A\u77E5\u5931\u6557: ' + (e?.message || 'GAS\u901A\u4FE1\u30A8\u30E9\u30FC'));
+      }
+    },
+    onPull: gasPull,
+    onPush: gasPush,
+    gasPayloadBytes: gasPayloadBytes,
+    localPayloadBytes: localPayloadBytes,
+    gasNeedsChunkedStore: gasNeedsChunkedStore,
+    onExportFile: exportToFile,
+    onExportClipboard: exportToClipboard,
+    onImport: () => setImportDialog(true),
+    onRestore: restoreBackup,
+    gasOpen: dataGasOpen,
+    onToggleGas: () => setDataGasOpen(v => !v),
+    charOpen: dataCharOpen,
+    onToggleChar: () => setDataCharOpen(v => !v),
+    backupOpen: dataBackupOpen,
+    onToggleBackup: () => setDataBackupOpen(v => !v)
+  }), false && React.createElement("div", {
     className: "data-tools-panel",
     style: {
       marginTop: 10,
@@ -12614,7 +13018,11 @@ function PatientTriage() {
       marginTop: 10,
       marginBottom: 40
     }
-  }, React.createElement("button", {
+  }, !isDailyMode && React.createElement(PresetHub, {
+    open: presetHubOpen,
+    onToggle: () => setPresetHubOpen(v => !v),
+    label: "プリセット編集 (セット / よく使う / 固定)"
+  }, React.createElement("div", null, React.createElement("button", {
     className: "btn-sm",
     onClick: () => setTemplatesOpen(v => !v),
     style: {
@@ -12637,7 +13045,7 @@ function PatientTriage() {
     onAddItem: addTemplateItem,
     onUpdateItem: updateTemplateItem,
     onRemoveItem: removeTemplateItem
-  }), React.createElement("div", {
+  })), React.createElement("div", {
     style: {
       marginTop: 10
     }
@@ -12679,7 +13087,7 @@ function PatientTriage() {
     onAdd: addRoutinePreset,
     onRemove: removeRoutinePreset,
     onApplyToday: applyTodayRoutines
-  }), missedEndDayPrompt && React.createElement("div", {
+  }))), React.createElement("div", null, missedEndDayPrompt && React.createElement("div", {
     className: "dialog-bg",
     onClick: () => setMissedEndDayPrompt(null)
   }, React.createElement("div", {

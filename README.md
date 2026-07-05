@@ -105,28 +105,24 @@ function json_(obj) {
 
 If the GAS deployment does not return readable CORS responses, the client falls back to the old fire-and-forget push and reports "応答は確認できませんでした".
 
-## ntfy Character Notifications
+## Character Notifications (Pushover)
 
-The unified app can sync a lightweight notification schedule to GAS. Each ntfy slot can have its own time, enabled state, optional title, and optional custom message. If the message is blank, GAS falls back to a character name and a generic fixed line. Patient names, wards, task titles, and clinical details are never sent to ntfy.
+> 2026-07: 通知バックエンドは ntfy から **Pushover** に移行済み。デプロイ中のGASプロジェクトは Pushover 送信版になっている。互換のため、内部のデータキー・アクション名 (`ntfySettings`, `action=ntfyTest`, 関数名の `ntfy` プレフィックス) は変更していない。リポジトリの `gas-ntfy-addon.gs` は旧ntfy版の参考実装として残している。
 
-1. Add `gas-ntfy-addon.gs` to the same Apps Script project as the sync backend.
-2. In Apps Script **Script properties**, add:
-   - `NTFY_TOPIC` (required): a long, hard-to-guess private topic name.
-   - `NTFY_SERVER` (optional): defaults to `https://ntfy.sh`.
-   - `NTFY_TOKEN` (optional): ntfy access token when authentication is enabled.
-   - `NTFY_CLICK_URL` (optional): the installed app / GitHub Pages URL opened when the notification is tapped.
-3. In the existing `doGet(e)`, after validating `SECRET` and defining `p` / `callback`, add this before the normal sync response:
+The unified app can sync a lightweight notification schedule to GAS. Each notification slot can have its own time, enabled state, optional title, and optional custom message. If the message is blank, GAS falls back to a character name and a generic fixed line. Patient names, wards, task titles, and clinical details are never sent to Pushover.
 
-```js
-if (p.action === 'ntfyTest') return ntfyTest_(callback);
-```
+1. The notification addon lives in the same Apps Script project as the sync backend.
+2. In Apps Script **Script properties**, set:
+   - `PUSHOVER_TOKEN` (required): the Pushover application token.
+   - `PUSHOVER_USER` (required): the Pushover user key.
+   - (Legacy `NTFY_*` properties are no longer used and can be deleted.)
+3. `doGet(e)` handles `action=ntfyTest` (kept under the legacy name) after validating `SECRET`.
+4. The Apps Script project timezone is **Asia/Tokyo**.
+5. A five-minute time trigger (`ntfyScheduledTick`) reads the synced schedule and sends via Pushover.
+6. In the app, open **データ → 同期(GAS) → GAS設定**, enable notifications, add or edit slots, save, and press **通知テスト**.
+7. Install the Pushover app on the phone and log in with the same user key.
 
-4. Set the Apps Script project timezone to **Asia/Tokyo**.
-5. Run `installNtfyTrigger()` once from the Apps Script editor and approve the requested permissions. It installs one five-minute trigger and removes older duplicates first. For a direct send test, select the public `runNtfyTest` function (private helper names ending in `_` are not shown in the GAS function picker).
-6. Deploy a new web-app version. In the app, open **データ → GAS設定**, enable ntfy, add or edit notification slots, save, and press **通知テスト**.
-7. Install the ntfy Android app and subscribe to the same `NTFY_TOPIC`.
-
-The schedule and enabled cast are read from the latest GAS-synced app data. A same-day sent-key list prevents duplicate notifications when the time trigger runs more than once near the configured time, while still allowing multiple different slots in the same five-minute trigger window.
+The schedule and enabled cast are read from the latest GAS-synced app data. A same-day sent-key list prevents duplicate notifications when the time trigger runs more than once near the configured time, while still allowing multiple different slots in the same five-minute trigger window. Night-band lines (21:00–04:59, or a slot id of `night`) deliver wind-down messages.
 
 ## GAS AI Coach Line
 
