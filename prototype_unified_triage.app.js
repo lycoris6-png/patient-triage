@@ -655,6 +655,8 @@ const STORAGE_KEY = 'patient-triage-v1';
 const GAS_CONFIG_KEY = 'patient-triage-gas-config';
 const GAS_SINGLE_PROPERTY_LIMIT_BYTES = 9000;
 const GAS_TOTAL_SAFE_BYTES = 450000;
+// 分割保存GAS前提。実際の保存上限(450KB)の9割で「そろそろ整理」を促す
+const GAS_NEAR_LIMIT_BYTES = 405000;
 const MANUAL_TIMER_TITLE_STORAGE_KEY = 'patient-triage-manual-timer-title';
 const MANUAL_TALLY_TITLE_STORAGE_KEY = 'patient-triage-manual-tally-title';
 const SUSPENDED_RUNNING_STORAGE_KEY = 'patient-triage-suspended-running';
@@ -6633,7 +6635,7 @@ function DataToolsPanel({
       color: gasNeedsChunkedStore ? '#92400E' : 'var(--text-2)',
       fontSize: 11
     }
-  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasNeedsChunkedStore ? "GASを1プロパティ保存にしている場合は容量超過します。分割保存GASを使ってください。" : "現在の同期データ量は小さめです。"))), React.createElement(SettingsSubSection, {
+  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasNeedsChunkedStore ? "GASの保存上限(約450KB)に近づいています。不要なログを整理すると安全です。" : "GASの保存上限(約450KB)に対して余裕があります。"))), React.createElement(SettingsSubSection, {
     icon: "🎭",
     title: "キャラ・通知",
     summary: charSummary,
@@ -11542,7 +11544,7 @@ function PatientTriage() {
     data: buildPayload({ forGas: true })
   });
   const localPayloadBytes = jsonByteLength(buildPayload());
-  const gasNeedsChunkedStore = gasPayloadBytes > GAS_SINGLE_PROPERTY_LIMIT_BYTES;
+  const gasNeedsChunkedStore = gasPayloadBytes > GAS_NEAR_LIMIT_BYTES;
   // データ復元の唯一の入口。初期ロード(withDefaults:true)・インポート・GAS pull・バックアップ復元が共用する。
   // withDefaults: 欠けている項目を初期値に戻す(初期ロード用)。falseなら欠けている項目は現状維持。
   const applyPayload = (parsed, opts = {}) => {
