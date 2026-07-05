@@ -1427,7 +1427,7 @@ body.rpg-mode .chibi-coach-bubble {
     return fmt(tpl, { text: r.text || '', when });
   }
   const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['adjutant','thumb'], ['spark','certificate']];
-  let el, img, partnerImg, textEl, hideTimer, lastShown = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false;
+  let el, img, partnerImg, textEl, hideTimer, lastShown = 0, lastAutoStartAt = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false;
   const headerCastClasses = ['', 'header-cast-b', 'header-cast-c'];
   const headerCastSets = [
     [['yushka','yushka_09_smug.png'], ['spark','red_antler_girl_03_cheer.png'], ['adjutant','purple_adjutant_01_neutral.png'], ['butler','bat_wing_girl_01_neutral.png'], ['mentor','blue_white_girl_06_clipboard.png']],
@@ -1562,6 +1562,12 @@ body.rpg-mode .chibi-coach-bubble {
   function show(kind, force, customText, meta, forcedActor, forcedPose){
     const now = Date.now();
     if (!force && now - lastShown < 1800) return;
+    // 自動startの二重発火対策: マウント時のモード変更イベントとloadタイマーが
+    // 連続してstartを出すため、テキスト指定なしのstartは2.5秒間だけ重複排除する
+    if (kind === 'start' && !customText) {
+      if (now - lastAutoStartAt < 2500) return;
+      lastAutoStartAt = now;
+    }
     lastShown = now;
     ensureCoach();
     let effectiveKind = kind;
