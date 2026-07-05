@@ -175,6 +175,10 @@ const GENERAL_TASK_TYPES = [{
   label: '病棟カルテ',
   dot: '#A855F7'
 }, {
+  id: 'findings',
+  label: '所見',
+  dot: '#F43F5E'
+}, {
   id: 'other',
   label: 'その他',
   dot: '#94A3B8'
@@ -3232,7 +3236,7 @@ function PatientCard({
     }
   }, React.createElement(Plus, {
     size: 13
-  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), !adding && React.createElement("div", {
+  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), adding && React.createElement("div", {
     style: {
       display: 'grid',
       gap: 7,
