@@ -2729,6 +2729,7 @@ function PatientCard({
     style: {
       display: 'flex',
       alignItems: 'center',
+      flexWrap: 'wrap',
       padding: '13px 16px',
       cursor: 'pointer',
       userSelect: 'none',
@@ -2775,7 +2776,7 @@ function PatientCard({
       alignItems: 'center',
       gap: 5,
       flex: '1 1 auto',
-      minWidth: 0
+      minWidth: '11rem'
     }
   }, React.createElement("span", {
     style: {
@@ -2808,7 +2809,15 @@ function PatientCard({
   }, React.createElement(Pencil, {
     size: 11,
     color: "var(--text-2)"
-  }))), activeAlerts.length > 0 && React.createElement("div", {
+  }))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      marginLeft: 'auto',
+      flexShrink: 0
+    }
+  }, activeAlerts.length > 0 && React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -2843,7 +2852,6 @@ function PatientCard({
     title: checked ? `${checkMeta.stampDoneHint}${checkedAt ? ' ' + formatHHMM(checkedAt) : ''}\uFF08\u30BF\u30C3\u30D7\u3067\u53D6\u308A\u6D88\u3057\uFF09` : checkMeta.stampHint,
     "aria-pressed": checked,
     style: {
-      marginLeft: 'auto',
       display: 'flex',
       alignItems: 'center',
       gap: 4,
@@ -2868,7 +2876,6 @@ function PatientCard({
     },
     title: "\u7D42\u4E86",
     style: {
-      marginLeft: 'auto',
       display: 'flex',
       alignItems: 'center',
       gap: 4,
@@ -2895,7 +2902,7 @@ function PatientCard({
   }, React.createElement(BedDouble, {
     size: 13,
     color: "#0E7490"
-  }), "\u7D42\u4E86")), expanded && React.createElement("div", {
+  }), "\u7D42\u4E86"))), expanded && React.createElement("div", {
     style: {
       padding: '0 16px 16px',
       borderTop: '1.5px solid var(--border)'
@@ -9376,7 +9383,7 @@ function PatientTriage() {
   const [suggestion, setSuggestion] = useState(null);
   const [focusMode, setFocusMode] = useState(false);
   const [lowEnergyNeedsNext, setLowEnergyNeedsNext] = useState(false);
-  const [quickOnly, setQuickOnly] = useState(false);
+  const [wardOnly, setWardOnly] = useState(false);
   const [erOnly, setErOnly] = useState(false);
   const [checkMode, setCheckMode] = useState('');
   const [stuckDialog, setStuckDialog] = useState(null);
@@ -9879,20 +9886,32 @@ function PatientTriage() {
       low: 3,
       planned: 4
     };
+    // 符丁の先頭数字を部屋番号として拾う (例: "305 A.A ◯◯" → 305)
+    const roomOf = p => {
+      const m = String(p.name || '').trim().match(/^(\d{2,4})/);
+      return m ? parseInt(m[1], 10) : null;
+    };
     return [...activePatients].sort((a, b) => {
       const pa = order[getPri(a)],
         pb = order[getPri(b)];
-      if (patientSortMode === 'ward') {
+      if (patientSortMode === 'ward' || patientSortMode === 'wardDesc') {
+        const dir = patientSortMode === 'wardDesc' ? -1 : 1;
         const wa = WARD_ORDER[getWard(a)] ?? 0;
         const wb = WARD_ORDER[getWard(b)] ?? 0;
-        if (wa !== wb) return wa - wb;
+        if (wa !== wb) return (wa - wb) * dir;
+        const ra = roomOf(a);
+        const rb = roomOf(b);
+        // 部屋番号は病棟内では常に昇順(カルテ準拠)。dirは病棟ブロックの順にだけ効く
+        if (ra !== null && rb !== null && ra !== rb) return ra - rb;
+        if (ra !== null && rb === null) return -1; // 部屋番号なしは向きに関わらず後ろ
+        if (ra === null && rb !== null) return 1;
         if (pa !== pb) return pa - pb;
         return (a.createdAt || 0) - (b.createdAt || 0);
       }
       return pa !== pb ? pa - pb : (a.createdAt || 0) - (b.createdAt || 0);
     });
   }, [activePatients, patientSortMode]);
-  const visiblePatients = useMemo(() => erOnly && !isDailyMode ? sortedPatients.filter(p => getPri(p) === 'er') : sortedPatients, [sortedPatients, erOnly, isDailyMode]);
+  const visiblePatients = useMemo(() => erOnly && !isDailyMode ? sortedPatients.filter(p => getPri(p) === 'er') : wardOnly && !isDailyMode ? sortedPatients.filter(p => getPri(p) !== 'er') : sortedPatients, [sortedPatients, erOnly, wardOnly, isDailyMode]);
   const checkTargets = useMemo(() => isDailyMode ? [] : activePatients.filter(isRoundTarget), [activePatients, isDailyMode]);
   const checkedCounts = useMemo(() => ({
     round: checkTargets.filter(p => isCheckedToday(p, 'round')).length,
@@ -9923,7 +9942,7 @@ function PatientTriage() {
     patientPlanned: getPri(p) === 'planned',
     patientAlerts: getPatientAlerts(p)
   }))), [activePatients]);
-  const visibleFlatTasks = useMemo(() => erOnly && !isDailyMode ? flatTasks.filter(t => t.patientPriority === 'er') : flatTasks, [flatTasks, erOnly, isDailyMode]);
+  const visibleFlatTasks = useMemo(() => erOnly && !isDailyMode ? flatTasks.filter(t => t.patientPriority === 'er') : wardOnly && !isDailyMode ? flatTasks.filter(t => t.patientPriority !== 'er') : flatTasks, [flatTasks, erOnly, wardOnly, isDailyMode]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
   const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done').length, [flatTasks]);
   const remainingPatientTasks = useMemo(() => flatTasks.filter(isActionableTask), [flatTasks]);
@@ -11067,9 +11086,8 @@ function PatientTriage() {
     if (erOnly) {
       pool = pool.filter(t => t.patientPriority === 'er');
     }
-    if (quickOnly) {
-      const quick = pool.filter(t => t.estimate === '2');
-      pool = quick.length > 0 ? quick : pool;
+    if (wardOnly) {
+      pool = pool.filter(t => t.patientPriority !== 'er');
     }
     if (lowEnergy) {
       const urgent = pool.filter(t => t.status === 'doing' || t.patientPriority === 'er' || ['past', 'now'].includes(timeStatus(t.scheduledTime, now)));
@@ -11084,10 +11102,6 @@ function PatientTriage() {
       // 締めタスク(closer)は他のタスクが残っているうちは提案しない
       const generalNonCloser = generalPool.filter(t => !t.closer);
       if (generalNonCloser.length) generalPool = generalNonCloser;
-      if (quickOnly) {
-        const quick = generalPool.filter(t => t.estimate === '2');
-        generalPool = quick.length > 0 ? quick : generalPool;
-      }
       if (lowEnergy) {
         const urgent = generalPool.filter(t => t.status === 'doing' || t.dueDate && t.dueDate <= todayStr() || ['past', 'now'].includes(timeStatus(t.scheduledTime, now)));
         if (urgent.length) generalPool = urgent;
@@ -11181,7 +11195,7 @@ function PatientTriage() {
   };
   const willClearSuggestedTasks = () => {
     if (!suggestion?.task) return false;
-    const visibleTaskPool = erOnly && !isDailyMode ? flatTasks.filter(task => task.patientPriority === 'er') : flatTasks;
+    const visibleTaskPool = erOnly && !isDailyMode ? flatTasks.filter(task => task.patientPriority === 'er') : wardOnly && !isDailyMode ? flatTasks.filter(task => task.patientPriority !== 'er') : flatTasks;
     const remainingPatients = visibleTaskPool.filter(task => isActionableTask(task) && !(task.id === suggestion.task.id && task.patientId === suggestion.task.patientId)).length;
     const remainingGeneral = activeGeneralTasks.filter(task => isActionableTask(task) && !(suggestion.fromGeneral && task.id === suggestion.task.id)).length;
     return remainingPatients + (erOnly && !isDailyMode ? 0 : remainingGeneral) === 0;
@@ -11951,7 +11965,7 @@ function PatientTriage() {
     color: 'rgba(255,255,255,.9)'
   }, {
     label: isWorkMode ? '一手' : '未完了',
-    val: isWorkMode ? workItems.reduce((sum, item) => sum + openWorkSteps(item).length, 0) : erOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done').length : openTaskCount + openGeneralCount,
+    val: isWorkMode ? workItems.reduce((sum, item) => sum + openWorkSteps(item).length, 0) : erOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done').length : wardOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done').length + openGeneralCount : openTaskCount + openGeneralCount,
     color: 'rgba(255,255,255,.9)'
   }, {
     label: isWorkMode ? '今日の前進' : '今日の済',
@@ -12210,17 +12224,27 @@ function PatientTriage() {
   }, React.createElement(Zap, {
     size: 14
   }), "\u6B21\u306E\u4E00\u624B"), React.createElement("button", {
-    className: `btn-ghost dock-icon${quickOnly ? ' btn-ghost-active' : ''}`,
-    onClick: () => setQuickOnly(q => !q),
-    "aria-label": "2分だけ",
-    "aria-pressed": quickOnly,
-    title: quickOnly ? "\u6B21\u306E\u4E00\u624B\u30922\u5206\u30BF\u30B9\u30AF\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u6B21\u306E\u4E00\u624B\u30922\u5206\u30BF\u30B9\u30AF\u306B\u7D5E\u308A\u8FBC\u3080",
-    style: filterButtonStyle(quickOnly)
-  }, "☕️"), React.createElement("button", {
+    className: `btn-ghost dock-icon${wardOnly ? ' btn-ghost-active' : ''}`,
+    onClick: () => setWardOnly(v => {
+      const next = !v;
+      if (next) {
+        setErOnly(false);
+        if (suggestion?.task && !suggestion.fromGeneral && suggestion.task.patientPriority === 'er') setSuggestion(null);
+      }
+      return next;
+    }),
+    "aria-label": "病棟のみ",
+    "aria-pressed": wardOnly,
+    title: wardOnly ? "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092\u75C5\u68DF\u60A3\u8005(ER\u4EE5\u5916)\u306B\u7D5E\u308A\u8FBC\u307F\u4E2D" : "\u60A3\u8005\u8868\u793A\u3068\u6B21\u306E\u4E00\u624B\u3092\u75C5\u68DF\u60A3\u8005(ER\u4EE5\u5916)\u306B\u7D5E\u308A\u8FBC\u3080",
+    style: filterButtonStyle(wardOnly)
+  }, "🏥"), React.createElement("button", {
     className: `btn-ghost dock-icon${erOnly ? ' btn-ghost-active' : ''}`,
     onClick: () => setErOnly(v => {
       const next = !v;
-      if (next && (suggestion?.fromGeneral || suggestion?.task && suggestion.task.patientPriority !== 'er')) setSuggestion(null);
+      if (next) {
+        setWardOnly(false);
+        if (suggestion?.fromGeneral || suggestion?.task && suggestion.task.patientPriority !== 'er') setSuggestion(null);
+      }
       return next;
     }),
     "aria-label": "ERのみ",
@@ -12268,11 +12292,11 @@ function PatientTriage() {
   }, React.createElement(Plus, {
     size: 14
   }), "予定追加", openScheduledCount ? ` ${openScheduledCount}` : ''), !isDailyMode && React.createElement("button", {
-    className: `btn-ghost${patientSortMode === 'ward' ? ' btn-ghost-active' : ''}`,
-    onClick: () => setPatientSortMode(m => m === 'priority' ? 'ward' : 'priority'),
+    className: `btn-ghost${patientSortMode !== 'priority' ? ' btn-ghost-active' : ''}`,
+    onClick: () => setPatientSortMode(m => m === 'ward' ? 'wardDesc' : m === 'wardDesc' ? 'priority' : 'ward'),
     "aria-label": "\u60A3\u8005\u306E\u4E26\u3079\u66FF\u3048",
-    title: patientSortMode === 'ward' ? "\u75C5\u68DF\u9806\u3067\u8868\u793A\u4E2D" : "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D"
-  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806" : "\u512A\u5148\u5EA6\u9806"), React.createElement("button", {
+    title: patientSortMode === 'ward' ? "\u75C5\u68DF\u9806(5\u968E\u5074\u304B\u3089)\u30FB\u90E8\u5C4B\u756A\u53F7\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u30673\u968E\u5074\u304B\u3089\u3078)" : patientSortMode === 'wardDesc' ? "\u75C5\u68DF\u9806(3\u968E\u5074\u304B\u3089)\u30FB\u90E8\u5C4B\u756A\u53F7\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u3067\u512A\u5148\u5EA6\u9806\u3078)" : "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u3067\u75C5\u68DF\u9806\u3078)"
+  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806\u2191" : patientSortMode === 'wardDesc' ? "\u75C5\u68DF\u9806\u2193" : "\u512A\u5148\u5EA6\u9806"), React.createElement("button", {
     className: "btn-ghost dock-icon",
     onClick: showFinishEstimate,
     "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",
