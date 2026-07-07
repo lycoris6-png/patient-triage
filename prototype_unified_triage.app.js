@@ -511,6 +511,27 @@ const WARD_ORDER = WARDS.reduce((acc, ward, index) => {
   acc[ward.id] = index;
   return acc;
 }, {});
+// 下から回診する時の病棟順: フロアの並びだけ逆転し、同一フロア内は東→南の順を保つ
+// (例: 3E → 4E → 4S → 5E → 5S。機械的な逆順 3E→4S→4E→5S→5E とは違う)
+const WARD_ORDER_DESC = (() => {
+  const floors = [];
+  const byFloor = {};
+  WARDS.filter(w => w.id).forEach(w => {
+    const floor = (String(w.id).match(/^\d+/) || [w.id])[0];
+    if (!byFloor[floor]) {
+      byFloor[floor] = [];
+      floors.push(floor);
+    }
+    byFloor[floor].push(w.id);
+  });
+  const seq = floors.slice().reverse().flatMap(f => byFloor[f]);
+  const map = {};
+  seq.forEach((id, i) => {
+    map[id] = i;
+  });
+  map[''] = seq.length; // 病棟未設定は最後
+  return map;
+})();
 const PATIENT_KINDS = [{
   id: 'referral',
   label: '紹介外来',
@@ -9895,15 +9916,16 @@ function PatientTriage() {
       const pa = order[getPri(a)],
         pb = order[getPri(b)];
       if (patientSortMode === 'ward' || patientSortMode === 'wardDesc') {
-        const dir = patientSortMode === 'wardDesc' ? -1 : 1;
-        const wa = WARD_ORDER[getWard(a)] ?? 0;
-        const wb = WARD_ORDER[getWard(b)] ?? 0;
-        if (wa !== wb) return (wa - wb) * dir;
+        // ↑=上から回診(5E→5S→4E→4S→3E) / ↓=下から回診(3E→4E→4S→5E→5S)
+        const wardRank = patientSortMode === 'wardDesc' ? WARD_ORDER_DESC : WARD_ORDER;
+        const wa = wardRank[getWard(a)] ?? 0;
+        const wb = wardRank[getWard(b)] ?? 0;
+        if (wa !== wb) return wa - wb;
         const ra = roomOf(a);
         const rb = roomOf(b);
-        // 部屋番号は病棟内では常に昇順(カルテ準拠)。dirは病棟ブロックの順にだけ効く
+        // 部屋番号は常に小→大(小さい方が重症)。向きに関わらず固定
         if (ra !== null && rb !== null && ra !== rb) return ra - rb;
-        if (ra !== null && rb === null) return -1; // 部屋番号なしは向きに関わらず後ろ
+        if (ra !== null && rb === null) return -1; // 部屋番号なしは後ろ
         if (ra === null && rb !== null) return 1;
         if (pa !== pb) return pa - pb;
         return (a.createdAt || 0) - (b.createdAt || 0);
@@ -12295,7 +12317,7 @@ function PatientTriage() {
     className: `btn-ghost${patientSortMode !== 'priority' ? ' btn-ghost-active' : ''}`,
     onClick: () => setPatientSortMode(m => m === 'ward' ? 'wardDesc' : m === 'wardDesc' ? 'priority' : 'ward'),
     "aria-label": "\u60A3\u8005\u306E\u4E26\u3079\u66FF\u3048",
-    title: patientSortMode === 'ward' ? "\u75C5\u68DF\u9806(5\u968E\u5074\u304B\u3089)\u30FB\u90E8\u5C4B\u756A\u53F7\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u30673\u968E\u5074\u304B\u3089\u3078)" : patientSortMode === 'wardDesc' ? "\u75C5\u68DF\u9806(3\u968E\u5074\u304B\u3089)\u30FB\u90E8\u5C4B\u756A\u53F7\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u3067\u512A\u5148\u5EA6\u9806\u3078)" : "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u3067\u75C5\u68DF\u9806\u3078)"
+    title: patientSortMode === 'ward' ? "\u4E0A\u304B\u3089\u56DE\u8A3A\u9806 (5\u6771\u21925\u5357\u21924\u6771\u21924\u5357\u21923\u6771\u30FB\u90E8\u5C4B\u756A\u53F7\u306F\u5C0F\u2192\u5927) \u8868\u793A\u4E2D" : patientSortMode === 'wardDesc' ? "\u4E0B\u304B\u3089\u56DE\u8A3A\u9806 (3\u6771\u21924\u6771\u21924\u5357\u21925\u6771\u21925\u5357\u30FB\u90E8\u5C4B\u756A\u53F7\u306F\u5C0F\u2192\u5927) \u8868\u793A\u4E2D" : "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u3067\u75C5\u68DF\u9806\u3078)"
   }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806\u2191" : patientSortMode === 'wardDesc' ? "\u75C5\u68DF\u9806\u2193" : "\u512A\u5148\u5EA6\u9806"), React.createElement("button", {
     className: "btn-ghost dock-icon",
     onClick: showFinishEstimate,
