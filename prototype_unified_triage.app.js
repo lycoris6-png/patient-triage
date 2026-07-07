@@ -3114,7 +3114,7 @@ function PatientCard({
       border: '1.5px solid var(--border)'
     }
   }, React.createElement("input", {
-    autoFocus: true,
+    // autoFocusしない: モバイルで即キーボードが開くとプリセットボタンやキャラ演出が隠れるため
     value: addForm.title,
     onChange: e => setAddForm({
       ...addForm,
@@ -3888,6 +3888,7 @@ function GeneralTaskSection({
     const holdUntilDate = task.holdUntilDate || nextWorkdayStr();
     return React.createElement("li", {
       key: task.id,
+      "data-task-row": task.id,
       style: {
         display: 'flex',
         gap: 10,
@@ -3965,6 +3966,12 @@ function GeneralTaskSection({
           setDraftTaskTitle('');
         }
       },
+      // 欄外タップで編集終了。ただし同じ行内(種別・分・期限セレクト等)への移動では閉じない
+      onBlur: e => {
+        const next = e.relatedTarget;
+        if (next && next.closest && next.closest(`[data-task-row="${task.id}"]`)) return;
+        commitTitleEdit(task);
+      },
       className: "inp",
       style: {
         flex: '1 1 12rem',
@@ -4033,6 +4040,11 @@ function GeneralTaskSection({
         fontSize: 10
       }
     }, holdUntilDate, "再開")), editingTaskId === task.id && React.createElement("div", {
+      onBlur: e => {
+        const next = e.relatedTarget;
+        if (next && next.closest && next.closest(`[data-task-row="${task.id}"]`)) return;
+        commitTitleEdit(task);
+      },
       style: {
         display: 'flex',
         gap: 10,
@@ -4104,7 +4116,7 @@ function GeneralTaskSection({
         marginLeft: 'auto',
         color: 'var(--accent)'
       }
-    }, "完了")), !isDone && React.createElement("div", {
+    }, "閉じる")), !isDone && React.createElement("div", {
       style: {
         display: 'flex',
         gap: 10,
