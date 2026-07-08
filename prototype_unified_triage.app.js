@@ -8411,6 +8411,7 @@ function WorkingTriageView({
         fontWeight: 700,
         color: 'var(--text)',
         lineHeight: 1.4,
+        overflowWrap: 'anywhere',
         textDecoration: !hasChildren && step.status === 'done' ? 'line-through' : 'none'
       }
     }, isNext && React.createElement("span", {
@@ -8625,6 +8626,7 @@ function WorkingTriageView({
         whiteSpace: showDetail ? 'normal' : 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
+        overflowWrap: 'anywhere',
         textDecoration: isDoneItem ? 'line-through' : 'none',
         opacity: isDoneItem ? .6 : 1
       }
@@ -8667,7 +8669,9 @@ function WorkingTriageView({
       style: {
         padding: '0 12px 12px 14px',
         display: 'grid',
-        gap: 10
+        gridTemplateColumns: 'minmax(0, 1fr)',
+        gap: 10,
+        minWidth: 0
       }
     }, React.createElement("div", {
       style: {
@@ -8832,7 +8836,9 @@ function WorkingTriageView({
     }, "閉じる"))) : (item.outcome || item.memo || item.currentFocus) && React.createElement("div", {
       style: {
         display: 'grid',
-        gap: 6
+        gridTemplateColumns: 'minmax(0, 1fr)',
+        gap: 6,
+        minWidth: 0
       }
     }, item.outcome && React.createElement("p", {
       style: {
@@ -8840,7 +8846,8 @@ function WorkingTriageView({
         color: 'var(--text-2)',
         fontSize: 12,
         lineHeight: 1.6,
-        fontWeight: 600
+        fontWeight: 600,
+        overflowWrap: 'anywhere'
       }
     }, item.outcome), item.memo && React.createElement("p", {
       style: {
@@ -8853,6 +8860,7 @@ function WorkingTriageView({
         fontSize: 12,
         lineHeight: 1.55,
         whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
         fontWeight: 500
       },
       title: "メモ"
@@ -8860,7 +8868,8 @@ function WorkingTriageView({
       style: {
         color: 'var(--text-2)',
         fontSize: 12,
-        fontWeight: 800
+        fontWeight: 800,
+        overflowWrap: 'anywhere'
       }
     }, "現在の焦点: ", item.currentFocus)), progress.total > 0 && React.createElement("div", null, React.createElement("div", {
       style: {
@@ -9030,7 +9039,8 @@ function WorkingTriageView({
         padding: '10px 0 0 16px',
         color: 'var(--text-2)',
         fontSize: 12,
-        lineHeight: 1.6
+        lineHeight: 1.6,
+        overflowWrap: 'anywhere'
       }
     }, item.logs.slice(-6).reverse().map(log => React.createElement("li", {
       key: log.id
@@ -9065,16 +9075,18 @@ function WorkingTriageView({
         borderRadius: 10,
         padding: '8px 10px',
         display: 'grid',
-        gap: 6
+        gridTemplateColumns: 'minmax(0, 1fr)',
+        gap: 6,
+        minWidth: 0
       }
     }, React.createElement("div", {
-      style: { display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }
+      style: { display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', minWidth: 0 }
     }, React.createElement("span", {
-      style: { fontSize: 11, fontWeight: 800, color: accent }
+      style: { fontSize: 11, fontWeight: 800, color: accent, flexShrink: 0 }
     }, isWaiting ? '⏸ 待ち' : '😣 抵抗あり'), React.createElement("span", {
-      style: { fontSize: 12, fontWeight: 700, color: 'var(--text)' }
+      style: { fontSize: 12, fontWeight: 700, color: 'var(--text)', overflowWrap: 'anywhere', minWidth: 0 }
     }, step.title), React.createElement("span", {
-      style: { fontSize: 10, color: 'var(--text-3)' }
+      style: { fontSize: 10, color: 'var(--text-3)', overflowWrap: 'anywhere', minWidth: 0 }
     }, '/ ', item.title), days !== null && React.createElement("span", {
       style: {
         marginLeft: 'auto',
@@ -9372,11 +9384,16 @@ function WorkingTriageView({
       marginBottom: 6
     }
   }, React.createElement("div", {
+    title: selectedCandidate.item.title,
     style: {
+      flex: 1,
+      minWidth: 0,
       fontSize: 11,
       color: 'var(--text-3)',
       fontWeight: 800,
-      minWidth: 0
+      overflow: 'hidden',
+      whiteSpace: 'nowrap',
+      textOverflow: 'ellipsis'
     }
   }, selectedCandidate.item.title), React.createElement("div", {
     style: {
@@ -9476,7 +9493,8 @@ function WorkingTriageView({
       padding: '0 0 0 16px',
       color: 'var(--text-2)',
       fontSize: 12,
-      lineHeight: 1.7
+      lineHeight: 1.7,
+      overflowWrap: 'anywhere'
     }
   }, recentLogs.map(log => React.createElement("li", {
     key: log.id
