@@ -8181,6 +8181,10 @@ function WorkingTriageView({
   };
   const startEditWork = item => {
     setEditingWorkId(item.id);
+    setExpanded(prev => ({
+      ...prev,
+      [item.id]: true
+    }));
     setWorkDraft({
       title: item.title || '',
       priority: item.priority || 'normal',
@@ -8262,71 +8266,58 @@ function WorkingTriageView({
     }) : [];
     const isSkipped = step.status === 'skipped';
     const isChecked = hasChildren ? descendantLeaves.length > 0 && descendantLeaves.every(s => s.status === 'done') : step.status === 'done';
+    const isNext = !hasChildren && step.status !== 'done' && !isSkipped && !step.blockType && nextWorkStep(item)?.id === step.id;
+    const rowBg = hasChildren ? isChecked ? 'rgba(22,163,74,.08)' : 'var(--surface-2)' : step.status === 'done' ? 'rgba(22,163,74,.08)' : isSkipped ? 'rgba(148,163,184,.12)' : step.blockType === 'waiting' ? 'rgba(59,130,246,.08)' : step.blockType === 'resistant' ? 'rgba(239,68,68,.08)' : isNext ? 'rgba(47,111,237,.08)' : 'transparent';
+    const menuItemStyle = {
+      justifyContent: 'flex-start',
+      padding: '7px 9px',
+      fontSize: 12
+    };
     return React.createElement("div", {
       key: step.id,
       style: {
-        border: '1.5px solid var(--border)',
-        borderLeft: hasChildren ? '4px solid var(--accent)' : '1.5px solid var(--border)',
-        borderRadius: 12,
-        padding: 10,
-        marginLeft: depth ? 14 : 0,
-        background: hasChildren ? isChecked ? 'rgba(22,163,74,.08)' : 'var(--surface-2)' : step.status === 'done' ? 'rgba(22,163,74,.08)' : isSkipped ? 'rgba(148,163,184,.12)' : step.blockType === 'waiting' ? 'rgba(59,130,246,.08)' : step.blockType === 'resistant' ? 'rgba(239,68,68,.08)' : 'var(--surface)',
+        borderRadius: 8,
+        background: rowBg,
         opacity: isSkipped ? .68 : 1
       }
     }, React.createElement("div", {
       style: {
         display: 'flex',
+        alignItems: isEditing ? 'flex-start' : 'center',
         gap: 8,
-        alignItems: 'flex-start'
+        padding: '6px 8px',
+        minHeight: 36
       }
     }, React.createElement("button", {
       className: `check-circle${isChecked ? ' done' : step.blockType || isSkipped ? ' stuck' : ''}`,
       onClick: () => hasChildren ? isChecked ? reopenStepTree(item.id, step.id) : completeStepTree(item.id, step.id) : step.status === 'done' || isSkipped ? reopenStep(item.id, step.id) : completeStep(item.id, step.id),
       style: {
-        marginTop: 1
+        marginTop: isEditing ? 4 : 0
       },
       title: hasChildren ? isChecked ? '配下を未完に戻す' : '配下をまとめて完了にする' : step.status === 'done' ? 'クリックで未完に戻す' : isSkipped ? '候補に戻す' : '完了にする'
     }, isChecked && React.createElement(Check, {
       size: 11,
       color: "#fff"
-    })), React.createElement("select", {
-      value: step.priority || item.priority || 'normal',
-      onChange: e => setStepPriority(item.id, step.id, e.target.value),
+    })), !isEditing && React.createElement("span", {
+      title: `優先度: ${pri.label}`,
       style: {
-        color: pri.color,
-        background: pri.color + '18',
-        border: '1px solid ' + pri.color + '35',
+        width: 7,
+        height: 7,
         borderRadius: 99,
-        padding: '2px 4px',
-        fontSize: 11,
-        fontWeight: 700,
-        cursor: 'pointer',
-        flexShrink: 0,
-        appearance: 'none'
-      },
-      title: "優先度を変更"
-    }, WORK_PRIORITIES.map(p => React.createElement("option", {
-      key: p.id,
-      value: p.id,
-      style: { background: '#fff', color: p.color }
-    }, p.label))), React.createElement("div", {
+        background: pri.color,
+        flexShrink: 0
+      }
+    }), React.createElement("div", {
       style: {
         flex: 1,
         minWidth: 0
       }
-    }, React.createElement("div", {
+    }, isEditing ? React.createElement("div", {
       style: {
-        fontSize: 13,
-        fontWeight: 900,
-        color: 'var(--text)',
-        lineHeight: 1.45
+        display: 'grid',
+        gap: 6
       }
-    }, hasChildren && React.createElement("span", {
-      style: {
-        color: 'var(--accent)',
-        marginRight: 4
-      }
-    }, "▾"), isEditing ? React.createElement("input", {
+    }, React.createElement("input", {
       className: "inp",
       value: stepDraft.title,
       onChange: e => setStepDraft(prev => ({
@@ -8337,19 +8328,11 @@ function WorkingTriageView({
         padding: '6px 8px',
         fontSize: 13
       }
-    }) : step.title), React.createElement("div", {
-      style: {
-        marginTop: 4,
-        fontSize: 11,
-        color: 'var(--text-3)',
-        fontWeight: 700
-      }
-    }, isEditing ? React.createElement("div", {
+    }), React.createElement("div", {
       style: {
         display: 'grid',
         gridTemplateColumns: '80px 90px 1fr',
-        gap: 6,
-        marginTop: 6
+        gap: 6
       }
     }, React.createElement("select", {
       className: "inp",
@@ -8391,7 +8374,7 @@ function WorkingTriageView({
         padding: '5px 6px',
         fontSize: 12
       }
-    }), React.createElement("input", {
+    })), React.createElement("input", {
       className: "inp",
       value: stepDraft.memo,
       onChange: e => setStepDraft(prev => ({
@@ -8400,16 +8383,13 @@ function WorkingTriageView({
       })),
       placeholder: "メモ",
       style: {
-        gridColumn: '1 / -1',
         padding: '5px 6px',
         fontSize: 12
       }
-    })) : React.createElement(React.Fragment, null, step.estimate, "分", step.phase ? ` / ${step.phase}` : '', step.memo ? ` / ${step.memo}` : '', isSkipped ? ' / 今は無理' : step.blockType ? ` / ${step.blockType === 'waiting' ? '待ち' : '抵抗あり'}` : '')))), isEditing ? React.createElement("div", {
+    }), React.createElement("div", {
       style: {
         display: 'flex',
-        gap: 6,
-        flexWrap: 'wrap',
-        marginTop: 8
+        gap: 6
       }
     }, React.createElement("button", {
       className: "btn-dark",
@@ -8425,47 +8405,78 @@ function WorkingTriageView({
         padding: '6px 10px',
         fontSize: 12
       }
-    }, "閉じる")) : React.createElement("div", {
+    }, "閉じる"))) : React.createElement(React.Fragment, null, React.createElement("div", {
       style: {
-        display: 'flex',
-        gap: 6,
-        flexWrap: 'wrap',
-        marginTop: 8,
-        alignItems: 'center'
+        fontSize: 13,
+        fontWeight: 700,
+        color: 'var(--text)',
+        lineHeight: 1.4,
+        textDecoration: !hasChildren && step.status === 'done' ? 'line-through' : 'none'
       }
-    }, isSkipped && React.createElement("button", {
-      className: "btn-ghost",
-      onClick: () => reopenStep(item.id, step.id),
+    }, isNext && React.createElement("span", {
+      title: "次の一手",
       style: {
-        padding: '6px 10px',
-        fontSize: 12
+        color: 'var(--accent)',
+        marginRight: 4,
+        fontSize: 10
       }
-    }, "戻す"), step.status !== 'done' && !isSkipped && hasChildren && React.createElement("button", {
-      className: "btn-ghost",
-      onClick: () => addStep(item.id, step.id),
+    }, "▶"), hasChildren && React.createElement("span", {
       style: {
-        padding: '6px 10px',
-        fontSize: 12
+        color: 'var(--accent)',
+        marginRight: 4
       }
-    }, "小タスク追加"), React.createElement("details", {
+    }, "▾"), step.title), (step.phase || step.memo) && React.createElement("div", {
       style: {
-        position: 'relative'
+        marginTop: 1,
+        fontSize: 11,
+        color: 'var(--text-3)',
+        fontWeight: 600,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      },
+      title: [step.phase, step.memo].filter(Boolean).join(' / ')
+    }, [step.phase, step.memo].filter(Boolean).join(' / ')))), !isEditing && React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: 'var(--text-3)',
+        fontWeight: 700,
+        flexShrink: 0,
+        fontVariantNumeric: 'tabular-nums'
+      }
+    }, step.estimate, "分"), !isEditing && (isSkipped || step.blockType) && React.createElement("span", {
+      title: isSkipped ? '今は無理(スキップ中)' : step.blockType === 'waiting' ? '外部要因の待ち' : '抵抗あり',
+      style: {
+        fontSize: isSkipped ? 10 : 12,
+        color: 'var(--text-3)',
+        fontWeight: 700,
+        flexShrink: 0
+      }
+    }, isSkipped ? '今は無理' : step.blockType === 'waiting' ? '⏸' : '😣'), !isEditing && React.createElement("details", {
+      style: {
+        position: 'relative',
+        flexShrink: 0
       }
     }, React.createElement("summary", {
       className: "btn-sm",
       style: {
-        padding: '6px 11px',
+        minWidth: 34,
+        minHeight: 30,
+        padding: '4px 10px',
         fontSize: 14,
         lineHeight: 1,
         cursor: 'pointer',
         listStyle: 'none',
-        userSelect: 'none'
+        userSelect: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
       },
       title: "その他の操作"
     }, "…"), React.createElement("div", {
       style: {
         position: 'absolute',
-        left: 0,
+        right: 0,
         top: 'calc(100% + 6px)',
         zIndex: 20,
         display: 'grid',
@@ -8477,130 +8488,192 @@ function WorkingTriageView({
         borderRadius: 10,
         boxShadow: 'var(--shadow)'
       }
-    }, step.status !== 'done' && !isSkipped && !hasChildren && React.createElement("button", {
+    }, React.createElement("select", {
+      value: step.priority || item.priority || 'normal',
+      onChange: e => setStepPriority(item.id, step.id, e.target.value),
+      style: {
+        color: pri.color,
+        background: pri.color + '18',
+        border: '1px solid ' + pri.color + '35',
+        borderRadius: 8,
+        padding: '6px 8px',
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: 'pointer',
+        width: '100%'
+      },
+      title: "優先度を変更"
+    }, WORK_PRIORITIES.map(p => React.createElement("option", {
+      key: p.id,
+      value: p.id,
+      style: {
+        background: '#fff',
+        color: p.color
+      }
+    }, "優先度: " + p.label))), isSkipped && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => reopenStep(item.id, step.id),
+      style: menuItemStyle
+    }, "候補に戻す"), !hasChildren && step.status === 'done' && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => reopenStep(item.id, step.id),
+      style: menuItemStyle
+    }, "未完に戻す"), step.status !== 'done' && !isSkipped && !hasChildren && React.createElement("button", {
       className: "btn-sm",
       onClick: () => markBlock(item.id, step.id, 'waiting'),
-      style: {
-        justifyContent: 'flex-start',
-        padding: '7px 9px',
-        fontSize: 12
-      }
+      style: menuItemStyle
     }, "待ちにする"), step.status !== 'done' && !isSkipped && !hasChildren && React.createElement("button", {
       className: "btn-sm",
       onClick: () => markBlock(item.id, step.id, 'resistant'),
       style: {
-        justifyContent: 'flex-start',
-        padding: '7px 9px',
-        fontSize: 12,
+        ...menuItemStyle,
         color: '#DC2626'
       }
     }, "抵抗あり"), step.status !== 'done' && !isSkipped && !hasChildren && React.createElement("button", {
       className: "btn-sm",
       onClick: () => skipStepForNow(item.id, step.id),
       style: {
-        justifyContent: 'flex-start',
-        padding: '7px 9px',
-        fontSize: 12,
+        ...menuItemStyle,
         color: 'var(--text-3)'
       }
     }, "今は無理"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => addStep(item.id, step.id),
-      style: {
-        justifyContent: 'flex-start',
-        padding: '7px 9px',
-        fontSize: 12
-      }
+      style: menuItemStyle
     }, "小タスク追加"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => reSplitItem(item.id, step.id),
-      style: {
-        justifyContent: 'flex-start',
-        padding: '7px 9px',
-        fontSize: 12
-      }
+      style: menuItemStyle
     }, "小タスクJSON"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => startEditStep(item, step),
-      style: {
-        justifyContent: 'flex-start',
-        padding: '7px 9px',
-        fontSize: 12
-      }
+      style: menuItemStyle
     }, "タスク編集"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => removeStep(item.id, step.id),
       style: {
-        justifyContent: 'flex-start',
-        padding: '7px 9px',
-        fontSize: 12,
+        ...menuItemStyle,
         color: 'var(--text-3)'
       }
     }, "タスク削除")))), hasChildren && React.createElement("div", {
       style: {
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
-        marginTop: 10
+        gap: 2,
+        margin: '2px 0 6px 12px',
+        paddingLeft: 8,
+        borderLeft: '2px solid var(--border)'
       }
     }, children.map(child => renderStep(item, child, depth + 1))));
   };
-  const renderWorkCard = item => {
+  const renderWorkCard = (item, idx = 0) => {
     const pri = workPriorityMeta(item.priority);
     const progress = workProgress(item);
-    const next = nextWorkStep(item);
     const days = daysUntilDateStr(item.deadline);
     const open = !!expanded[item.id];
     const isWorkEditing = editingWorkId === item.id;
+    const isDoneItem = item.status === 'done' || item.status === 'abandoned';
+    const showDetail = open || isWorkEditing;
+    const topSteps = workStepChildren(item, null);
+    const toggleOpen = () => {
+      if (isWorkEditing) return;
+      setExpanded(prev => ({
+        ...prev,
+        [item.id]: !prev[item.id]
+      }));
+    };
     return React.createElement("article", {
       key: item.id,
       style: {
-        background: 'var(--surface)',
-        border: `1.5px solid ${item.status === 'waiting' ? '#93C5FD' : item.status === 'resistant' ? '#FCA5A5' : 'var(--border)'}`,
-        borderLeft: `5px solid ${pri.color}`,
-        borderRadius: 16,
-        padding: 16,
-        boxShadow: 'var(--shadow-sm)'
+        borderTop: idx > 0 ? '1px solid var(--border)' : 'none',
+        borderLeft: `4px solid ${pri.color}`,
+        background: !isDoneItem && item.status === 'waiting' ? 'rgba(59,130,246,.05)' : !isDoneItem && item.status === 'resistant' ? 'rgba(239,68,68,.05)' : 'transparent'
       }
     }, React.createElement("div", {
+      role: "button",
+      tabIndex: 0,
+      "aria-expanded": showDetail,
+      onClick: toggleOpen,
+      onKeyDown: e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleOpen();
+        }
+      },
       style: {
-        display: 'grid',
-        gridTemplateColumns: '42px minmax(0, 1fr) auto',
-        gap: 10,
-        alignItems: 'flex-start'
-      }
-    }, React.createElement("button", {
-      className: open ? "btn-dark" : "btn-ghost",
-      "aria-label": open ? "詳細を閉じる" : "詳細を開く",
-      title: open ? "詳細を閉じる" : "詳細を開く",
-      onClick: () => setExpanded(prev => ({
-        ...prev,
-        [item.id]: !prev[item.id]
-      })),
-      style: {
-        width: 38,
-        height: 38,
-        minWidth: 38,
-        padding: 0,
-        borderRadius: 12,
-        justifyContent: 'center',
+        display: 'flex',
         alignItems: 'center',
-        boxShadow: open ? '0 6px 16px rgba(47,111,237,.28)' : 'none'
+        gap: 8,
+        padding: '11px 12px 11px 10px',
+        minHeight: 48,
+        cursor: isWorkEditing ? 'default' : 'pointer'
       }
-    }, open ? React.createElement(ChevronDown, {
-      size: 18
+    }, showDetail ? React.createElement(ChevronDown, {
+      size: 14,
+      color: "var(--text-3)"
     }) : React.createElement(ChevronRight, {
-      size: 18
-    })), React.createElement("div", {
+      size: 14,
+      color: "var(--text-3)"
+    }), React.createElement("span", {
       style: {
-        minWidth: 0
+        flex: 1,
+        minWidth: 0,
+        fontSize: 14,
+        fontWeight: 800,
+        color: 'var(--text)',
+        lineHeight: 1.4,
+        whiteSpace: showDetail ? 'normal' : 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        textDecoration: isDoneItem ? 'line-through' : 'none',
+        opacity: isDoneItem ? .6 : 1
+      }
+    }, item.title), !isDoneItem && item.status === 'waiting' && React.createElement("span", {
+      title: "外部要因の待ち",
+      style: {
+        fontSize: 12,
+        flexShrink: 0
+      }
+    }, "⏸"), !isDoneItem && item.status === 'resistant' && React.createElement("span", {
+      title: "抵抗あり",
+      style: {
+        fontSize: 12,
+        flexShrink: 0
+      }
+    }, "😣"), !isDoneItem && days !== null && days <= 3 && React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 800,
+        color: '#DC2626',
+        flexShrink: 0
+      }
+    }, days < 0 ? '〆超過' : `〆あと${days}日`), progress.total > 0 ? React.createElement("span", {
+      title: `進捗 ${progress.done}/${progress.total}`,
+      style: {
+        fontSize: 11,
+        fontWeight: 900,
+        color: progress.pct === 100 ? 'var(--done)' : 'var(--text-3)',
+        flexShrink: 0,
+        fontVariantNumeric: 'tabular-nums'
+      }
+    }, progress.pct, "%") : React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 700,
+        color: 'var(--text-3)',
+        flexShrink: 0
+      }
+    }, "未分解")), showDetail && React.createElement("div", {
+      style: {
+        padding: '0 12px 12px 14px',
+        display: 'grid',
+        gap: 10
       }
     }, React.createElement("div", {
       style: {
         display: 'flex',
         gap: 6,
-        flexWrap: 'wrap',
-        marginBottom: 8
+        flexWrap: 'wrap'
       }
     }, React.createElement("span", {
       className: "tag",
@@ -8613,7 +8686,9 @@ function WorkingTriageView({
       className: "tag"
     }, workStatusLabel(item.status)), item.startDate && React.createElement("span", {
       className: "tag",
-      style: { color: 'var(--text-2)' },
+      style: {
+        color: 'var(--text-2)'
+      },
       title: "着手日"
     }, "着手 ", formatDateShort(item.startDate)), item.deadline && React.createElement("span", {
       className: "tag",
@@ -8660,7 +8735,13 @@ function WorkingTriageView({
       key: p.id,
       value: p.id
     }, p.label))), React.createElement("label", {
-      style: { display: 'grid', gap: 2, fontSize: 10, color: 'var(--text-3)', fontWeight: 700 }
+      style: {
+        display: 'grid',
+        gap: 2,
+        fontSize: 10,
+        color: 'var(--text-3)',
+        fontWeight: 700
+      }
     }, "着手日", React.createElement("input", {
       className: "inp",
       type: "date",
@@ -8674,7 +8755,13 @@ function WorkingTriageView({
         fontSize: 12
       }
     })), React.createElement("label", {
-      style: { display: 'grid', gap: 2, fontSize: 10, color: 'var(--text-3)', fontWeight: 700 }
+      style: {
+        display: 'grid',
+        gap: 2,
+        fontSize: 10,
+        color: 'var(--text-3)',
+        fontWeight: 700
+      }
     }, "リミット", React.createElement("input", {
       className: "inp",
       type: "date",
@@ -8742,17 +8829,14 @@ function WorkingTriageView({
     }, "保存"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => setEditingWorkId(null)
-    }, "閉じる"))) : React.createElement(React.Fragment, null, React.createElement("h3", {
+    }, "閉じる"))) : (item.outcome || item.memo || item.currentFocus) && React.createElement("div", {
+      style: {
+        display: 'grid',
+        gap: 6
+      }
+    }, item.outcome && React.createElement("p", {
       style: {
         margin: 0,
-        fontSize: 17,
-        fontWeight: 900,
-        color: 'var(--text)',
-        lineHeight: 1.35
-      }
-    }, item.title), item.outcome && React.createElement("p", {
-      style: {
-        margin: '8px 0 0',
         color: 'var(--text-2)',
         fontSize: 12,
         lineHeight: 1.6,
@@ -8760,7 +8844,7 @@ function WorkingTriageView({
       }
     }, item.outcome), item.memo && React.createElement("p", {
       style: {
-        margin: '6px 0 0',
+        margin: 0,
         padding: '8px 10px',
         background: 'var(--surface-2)',
         borderRadius: 8,
@@ -8772,60 +8856,24 @@ function WorkingTriageView({
         fontWeight: 500
       },
       title: "メモ"
-    }, item.memo))), React.createElement("div", {
+    }, item.memo), item.currentFocus && React.createElement("div", {
       style: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-        flexShrink: 0
+        color: 'var(--text-2)',
+        fontSize: 12,
+        fontWeight: 800
       }
-    }, React.createElement("div", {
-      style: { display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }
-    }, item.status === 'done' || item.status === 'abandoned' ? React.createElement(React.Fragment, null, React.createElement("button", {
-      className: "btn-sm",
-      onClick: () => setItemStatus(item.id, 'active'),
-      style: { fontSize: 11, padding: '4px 9px', color: 'var(--accent)' }
-    }, "activeに戻す"), React.createElement("button", {
-      className: "btn-sm",
-      onClick: async () => {
-        if (await appConfirm({
-          title: '仕事を削除',
-          message: `「${item.title}」を削除しますか？`,
-          confirmText: '削除する',
-          danger: true
-        })) removeItem(item.id);
-      },
-      style: { fontSize: 11, padding: '4px 9px', color: '#DC2626' }
-    }, "削除")) : React.createElement(React.Fragment, null, React.createElement("button", {
-      className: isWorkEditing ? "btn-dark" : "btn-sm",
-      onClick: () => isWorkEditing ? setEditingWorkId(null) : startEditWork(item),
-      style: { fontSize: 11, padding: '4px 9px' }
-    }, isWorkEditing ? '閉' : '編集'), item.status !== 'done' && React.createElement("button", {
-      className: "btn-sm",
-      onClick: async () => {
-        if (await appConfirm({
-          title: '仕事を終了',
-          message: `「${item.title}」を終了にしますか？`,
-          confirmText: '終了にする'
-        })) setItemStatus(item.id, 'done');
-      },
-      style: { fontSize: 11, padding: '4px 9px', color: 'var(--done)' }
-    }, "終了"))))), React.createElement("div", {
-      style: {
-        marginTop: 12
-      }
-    }, React.createElement("div", {
+    }, "現在の焦点: ", item.currentFocus)), progress.total > 0 && React.createElement("div", null, React.createElement("div", {
       style: {
         display: 'flex',
         justifyContent: 'space-between',
         color: 'var(--text-3)',
         fontSize: 11,
         fontWeight: 900,
-        marginBottom: 5
+        marginBottom: 4
       }
     }, React.createElement("span", null, "進捗 ", progress.done, "/", progress.total), React.createElement("span", null, progress.pct, "%")), React.createElement("div", {
       style: {
-        height: 9,
+        height: 6,
         borderRadius: 99,
         background: 'var(--surface-3)',
         overflow: 'hidden'
@@ -8836,48 +8884,83 @@ function WorkingTriageView({
         height: '100%',
         background: `linear-gradient(90deg, ${pri.color}, var(--accent))`
       }
-    }))), next && React.createElement("div", {
+    }))), topSteps.length > 0 && React.createElement("div", {
       style: {
-        marginTop: 12
-      }
-    }, React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: 'var(--text-3)',
-        fontWeight: 900,
-        marginBottom: 6
-      }
-    }, "次の一手"), renderStep(item, next)), open && React.createElement("div", {
-      style: {
-        marginTop: 12,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10
+        gap: 4
       }
-    }, item.currentFocus && React.createElement("div", {
-      style: {
-        color: 'var(--text-2)',
-        fontSize: 12,
-        fontWeight: 800
-      }
-    }, "現在の焦点: ", item.currentFocus), React.createElement("div", {
+    }, topSteps.map(step => renderStep(item, step))), React.createElement("div", {
       style: {
         display: 'flex',
-        gap: 8,
+        gap: 6,
         flexWrap: 'wrap',
         alignItems: 'center'
       }
-    }, React.createElement("button", {
+    }, isDoneItem ? React.createElement(React.Fragment, null, React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setItemStatus(item.id, 'active'),
+      style: {
+        fontSize: 11,
+        padding: '5px 10px',
+        color: 'var(--accent)'
+      }
+    }, "activeに戻す"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: async () => {
+        if (await appConfirm({
+          title: '仕事を削除',
+          message: `「${item.title}」を削除しますか？`,
+          confirmText: '削除する',
+          danger: true
+        })) removeItem(item.id);
+      },
+      style: {
+        fontSize: 11,
+        padding: '5px 10px',
+        color: '#DC2626'
+      }
+    }, "削除")) : React.createElement(React.Fragment, null, React.createElement("button", {
       className: "btn-dark",
       onClick: () => addStep(item.id),
-      style: { fontSize: 13, padding: '8px 14px', fontWeight: 800 }
+      style: {
+        fontSize: 12,
+        padding: '6px 12px',
+        fontWeight: 800
+      }
     }, React.createElement(Plus, {
-      size: 14
-    }), "タスク追加"), React.createElement("button", {
+      size: 13
+    }), "タスク追加"), !isWorkEditing && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => startEditWork(item),
+      style: {
+        fontSize: 11,
+        padding: '5px 10px'
+      }
+    }, "編集"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => reSplitItem(item.id),
-      style: { fontSize: 11, padding: '5px 10px', opacity: .75, marginLeft: 'auto' }
-    }, "再分割JSON"), item.status !== 'abandoned' && React.createElement("button", {
+      style: {
+        fontSize: 11,
+        padding: '5px 10px',
+        opacity: .75
+      }
+    }, "再分割JSON"), item.status !== 'done' && React.createElement("button", {
+      className: "btn-sm",
+      onClick: async () => {
+        if (await appConfirm({
+          title: '仕事を終了',
+          message: `「${item.title}」を終了にしますか？`,
+          confirmText: '終了にする'
+        })) setItemStatus(item.id, 'done');
+      },
+      style: {
+        fontSize: 11,
+        padding: '5px 10px',
+        color: 'var(--done)',
+        marginLeft: 'auto'
+      }
+    }, "終了"), item.status !== 'abandoned' && React.createElement("button", {
       className: "btn-sm",
       onClick: async () => {
         if (await appConfirm({
@@ -8887,8 +8970,12 @@ function WorkingTriageView({
           danger: true
         })) setItemStatus(item.id, 'abandoned');
       },
-      style: { fontSize: 11, padding: '5px 10px', color: 'var(--text-3)' }
-    }, "撤退")), workStepChildren(item, null).map(step => renderStep(item, step)), (() => {
+      style: {
+        fontSize: 11,
+        padding: '5px 10px',
+        color: 'var(--text-3)'
+      }
+    }, "撤退"))), (() => {
       const doneSteps = (item.steps || []).filter(s => s.status === 'done');
       if (!doneSteps.length) return null;
       const preview = doneSteps.slice(0, 5).map(s => s.title).join('、') + (doneSteps.length > 5 ? `…ほか${doneSteps.length - 5}件` : '');
@@ -8904,9 +8991,21 @@ function WorkingTriageView({
           flexWrap: 'wrap'
         }
       }, React.createElement("span", {
-        style: { fontSize: 11, color: 'var(--done)', fontWeight: 800 }
+        style: {
+          fontSize: 11,
+          color: 'var(--done)',
+          fontWeight: 800
+        }
       }, "✓ 完了 ", doneSteps.length, "件"), React.createElement("span", {
-        style: { fontSize: 11, color: 'var(--text-3)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+        style: {
+          fontSize: 11,
+          color: 'var(--text-3)',
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        },
         title: doneSteps.map(s => s.title).join('\n')
       }, preview), React.createElement("button", {
         className: "btn-sm",
@@ -8917,7 +9016,12 @@ function WorkingTriageView({
             confirmText: 'ログに送る'
           })) archiveCompletedSteps(item.id);
         },
-        style: { fontSize: 11, padding: '5px 10px', color: 'var(--done)', fontWeight: 700 }
+        style: {
+          fontSize: 11,
+          padding: '5px 10px',
+          color: 'var(--done)',
+          fontWeight: 700
+        }
       }, "ログ送り"));
     })(), (item.logs || []).length > 0 && React.createElement("ul", {
       style: {
@@ -9333,7 +9437,15 @@ function WorkingTriageView({
     style: { padding: 12, display: 'grid', gap: 8 }
   }, React.createElement("p", {
     style: { margin: 0, fontSize: 11, color: 'var(--text-3)', lineHeight: 1.55 }
-  }, "待ち=外部要因、抵抗あり=自分側の引っかかり。5日以上経過すると ⚠ 催促候補マークが付きます。"), blockedSteps.map(renderBlockedRow))), activeItems.length ? activeItems.map(renderWorkCard) : React.createElement("div", {
+  }, "待ち=外部要因、抵抗あり=自分側の引っかかり。5日以上経過すると ⚠ 催促候補マークが付きます。"), blockedSteps.map(renderBlockedRow))), activeItems.length ? React.createElement("div", {
+    style: {
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 14,
+      overflow: 'hidden',
+      boxShadow: 'var(--shadow-sm)'
+    }
+  }, activeItems.map(renderWorkCard)) : React.createElement("div", {
     style: {
       textAlign: 'center',
       padding: '42px 20px',
@@ -9382,10 +9494,12 @@ function WorkingTriageView({
   }), "完了/撤退した仕事 (", doneItems.length, ")"), doneOpen && React.createElement("div", {
     style: {
       marginTop: 10,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 10,
-      opacity: .82
+      opacity: .82,
+      background: 'var(--surface)',
+      border: '1.5px solid var(--border)',
+      borderRadius: 14,
+      overflow: 'hidden',
+      boxShadow: 'var(--shadow-sm)'
     }
   }, doneItems.map(renderWorkCard))));
 }
