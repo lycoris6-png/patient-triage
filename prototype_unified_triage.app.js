@@ -2723,9 +2723,12 @@ function PatientCard({
   const [setOpen, setSetOpen] = useState(false);
   const [examQuickItem, setExamQuickItem] = useState(PATIENT_EXAM_QUICK_ITEMS[0].id);
   const [reservationsOpen, setReservationsOpen] = useState(false);
+  const [reservationQuickOpen, setReservationQuickOpen] = useState(false);
   const [reservationDraft, setReservationDraft] = useState({
     title: '',
-    reservedDate: ''
+    reservedDate: '',
+    type: 'other',
+    estimate: '5'
   });
   const reservedTasks = patient.tasks.filter(isFutureReserved).sort((a, b) => a.reservedDate.localeCompare(b.reservedDate));
   const visibleTaskCount = open.length + done.length;
@@ -2746,10 +2749,12 @@ function PatientCard({
     const title = (reservationDraft.title || '').trim();
     const reservedDate = reservationDraft.reservedDate || '';
     if (!title || !reservedDate || !onAddReserved) return;
-    onAddReserved(title, reservedDate);
+    onAddReserved(title, reservedDate, reservationDraft);
     setReservationDraft(prev => ({
       ...prev,
-      title: ''
+      title: '',
+      type: 'other',
+      estimate: '5'
     }));
   };
   const sortedOpen = [...open].sort((a, b) => {
@@ -2833,7 +2838,54 @@ function PatientCard({
     style: {
       color: '#DC2626'
     }
-  }, "\u524A\u9664")))), React.createElement("div", {
+  }, "\u524A\u9664")))), quickTasks && quickTasks.length > 0 && React.createElement("div", {
+    style: {
+      borderTop: '1px solid var(--border)',
+      paddingTop: 12
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setReservationQuickOpen(v => !v),
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      border: '1px solid var(--border)',
+      borderRadius: 99,
+      padding: '4px 10px'
+    }
+  }, reservationQuickOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "\u3088\u304F\u4F7F\u3046 (", quickTasks.length, ")"), reservationQuickOpen && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginTop: 7
+    }
+  }, quickTasks.map(q => React.createElement("button", {
+    key: q.id || q.title,
+    type: "button",
+    className: "set-chip",
+    onClick: () => setReservationDraft(prev => ({
+      ...prev,
+      title: q.title || '',
+      type: q.type || 'docs',
+      estimate: q.estimate || '5'
+    })),
+    title: "\u30BF\u30B9\u30AF\u5185\u5BB9\u306B\u30BB\u30C3\u30C8"
+  }, "+ ", q.title, React.createElement("span", {
+    style: {
+      opacity: .55,
+      fontSize: 10
+    }
+  }, q.estimate, "\u5206"))))), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'minmax(8.5rem,auto) minmax(0,1fr) auto',
@@ -10594,7 +10646,7 @@ function PatientTriage() {
       }
     }));
   };
-  const addReservedTask = (patientId, title, reservedDate) => {
+  const addReservedTask = (patientId, title, reservedDate, details = {}) => {
     const t = (title || '').trim();
     if (!t || !reservedDate) return;
     rememberUndo('予約タスク追加');
@@ -10603,8 +10655,8 @@ function PatientTriage() {
       tasks: [...p.tasks, {
         id: uid(),
         title: t,
-        type: 'other',
-        estimate: '5',
+        type: details.type || 'other',
+        estimate: details.estimate || '5',
         scheduledTime: null,
         reservedDate,
         status: 'todo',
@@ -12973,7 +13025,7 @@ function PatientTriage() {
       askNext: true
     }),
     onUpdateTask: (tid, upd) => updateTask(p.id, tid, upd),
-    onAddReserved: (title, date) => addReservedTask(p.id, title, date),
+    onAddReserved: (title, date, details) => addReservedTask(p.id, title, date, details),
     onClearDone: () => clearDoneTasks(p.id),
     typeMeta: typeMeta,
     estMeta: estMeta,
