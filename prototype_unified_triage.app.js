@@ -2764,7 +2764,8 @@ function PatientCard({
   const checked = showCheckStamp && isCheckedToday(patient, checkMode);
   const checkedAt = showCheckStamp ? patient[checkMeta.atField] : null;
   const examQuickSelected = PATIENT_EXAM_QUICK_ITEMS.find(item => item.id === examQuickItem) || PATIENT_EXAM_QUICK_ITEMS[0];
-  const reservationDialog = reservationsOpen && React.createElement("div", {
+  // カード内レンダリングだと祖先のfilter/overflowでfixed配置が崩れるためbody直下へポータル
+  const reservationDialogNode = reservationsOpen && React.createElement("div", {
     className: "dialog-bg",
     onClick: () => setReservationsOpen(false)
   }, React.createElement("div", {
@@ -2886,6 +2887,7 @@ function PatientCard({
     className: "btn-sm",
     onClick: () => setReservationsOpen(false)
   }, "\u9589\u3058\u308B"))));
+  const reservationDialog = reservationDialogNode ? ReactDOM.createPortal(reservationDialogNode, document.body) : null;
   return React.createElement("div", {
     className: `card ${pri.cls}`,
     style: {
