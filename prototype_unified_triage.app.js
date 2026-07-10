@@ -886,7 +886,8 @@ const addDaysStr = (dateStr, days) => {
   return d.toLocaleDateString('sv-SE');
 };
 const nextWorkdayStr = () => addDaysStr(todayStr(), 1);
-const isActionableTask = task => task && task.status !== 'done' && task.status !== 'hold';
+const isFutureReserved = task => !!(task && task.reservedDate && task.reservedDate > todayStr());
+const isActionableTask = task => task && task.status !== 'done' && task.status !== 'hold' && !isFutureReserved(task);
 const withTaskStatusDefaults = updates => {
   if (!Object.prototype.hasOwnProperty.call(updates || {}, 'status')) return updates || {};
   if (updates.status === 'hold') {
@@ -2446,7 +2447,14 @@ function TaskRow({
       color: type.dot,
       fontSize: 10
     }
-  }, type.label), editingTitle ? React.createElement("input", {
+  }, type.label), task.reservedDate && task.reservedDate <= todayStr() && React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(108,62,248,.08)',
+      color: 'var(--accent)',
+      fontSize: 10
+    }
+  }, "\uD83D\uDCC5\u4E88\u7D04\u5206"), editingTitle ? React.createElement("input", {
     autoFocus: true,
     value: draftTitle,
     onChange: e => setDraftTitle(e.target.value),
@@ -2691,6 +2699,7 @@ function PatientCard({
   onUnstick,
   onAdvanceStuckStep,
   onUpdateTask,
+  onAddReserved,
   onClearDone,
   typeMeta,
   estMeta,
@@ -2703,16 +2712,23 @@ function PatientCard({
   const pri = priMeta(getPri(patient));
   const ward = getWard(patient);
   const isPlannedPatient = getPri(patient) === 'planned';
-  const open = patient.tasks.filter(t => t.status !== 'done');
+  const open = patient.tasks.filter(t => t.status !== 'done' && !isFutureReserved(t));
   const todayOpen = open.filter(isActionableTask);
   const deferred = open.filter(t => t.status === 'hold');
-  const done = patient.tasks.filter(t => t.status === 'done');
+  const done = patient.tasks.filter(t => t.status === 'done' && !isFutureReserved(t));
   const activeAlerts = showAlerts ? getPatientAlerts(patient) : [];
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(patient.name);
   const [quickOpen, setQuickOpen] = useState(false);
   const [setOpen, setSetOpen] = useState(false);
   const [examQuickItem, setExamQuickItem] = useState(PATIENT_EXAM_QUICK_ITEMS[0].id);
+  const [reservationsOpen, setReservationsOpen] = useState(false);
+  const [reservationDraft, setReservationDraft] = useState({
+    title: '',
+    reservedDate: ''
+  });
+  const reservedTasks = patient.tasks.filter(isFutureReserved).sort((a, b) => a.reservedDate.localeCompare(b.reservedDate));
+  const visibleTaskCount = open.length + done.length;
   useEffect(() => {
     setDraftName(patient.name);
   }, [patient.name]);
@@ -2726,18 +2742,150 @@ function PatientCard({
     if (n && n !== patient.name) onRename(n);else setDraftName(patient.name);
     setEditingName(false);
   };
+  const addReservedFromDialog = () => {
+    const title = (reservationDraft.title || '').trim();
+    const reservedDate = reservationDraft.reservedDate || '';
+    if (!title || !reservedDate || !onAddReserved) return;
+    onAddReserved(title, reservedDate);
+    setReservationDraft(prev => ({
+      ...prev,
+      title: ''
+    }));
+  };
   const sortedOpen = [...open].sort((a, b) => {
     if (a.scheduledTime && !b.scheduledTime) return -1;
     if (!a.scheduledTime && b.scheduledTime) return 1;
     if (a.scheduledTime && b.scheduledTime) return a.scheduledTime.localeCompare(b.scheduledTime);
     return (a.createdAt || 0) - (b.createdAt || 0);
   });
-  const allDone = todayOpen.length === 0 && patient.tasks.length > 0;
+  const allDone = todayOpen.length === 0 && visibleTaskCount > 0;
   const checkMeta = checkMode ? PATIENT_CHECK_MODES[checkMode] : null;
   const showCheckStamp = !!checkMeta && isRoundTarget(patient);
   const checked = showCheckStamp && isCheckedToday(patient, checkMode);
   const checkedAt = showCheckStamp ? patient[checkMeta.atField] : null;
   const examQuickSelected = PATIENT_EXAM_QUICK_ITEMS.find(item => item.id === examQuickItem) || PATIENT_EXAM_QUICK_ITEMS[0];
+  const reservationDialog = reservationsOpen && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => setReservationsOpen(false)
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 560
+    }
+  }, React.createElement("h3", {
+    style: {
+      marginTop: 0,
+      marginBottom: 12
+    }
+  }, "\uD83D\uDCC5 ", patient.name, " \u306E\u4E88\u7D04\u30BF\u30B9\u30AF"), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 8,
+      marginBottom: 14
+    }
+  }, reservedTasks.length === 0 ? React.createElement("p", {
+    style: {
+      margin: 0,
+      color: 'var(--text-3)',
+      fontSize: 13
+    }
+  }, "\u4E88\u7D04\u30BF\u30B9\u30AF\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u306E\u6B04\u304B\u3089\u8FFD\u52A0\u3067\u304D\u307E\u3059\u3002") : reservedTasks.map(task => React.createElement("div", {
+    key: task.id,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+      padding: '8px 10px',
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      background: 'var(--surface-2)'
+    }
+  }, React.createElement("input", {
+    type: "date",
+    value: task.reservedDate || '',
+    onChange: e => onUpdateTask(task.id, {
+      reservedDate: e.target.value || null
+    }),
+    className: "inp",
+    style: {
+      width: 'auto',
+      padding: '4px 8px',
+      fontSize: 12
+    }
+  }), React.createElement("span", {
+    style: {
+      flex: '1 1 12rem',
+      minWidth: 0,
+      fontSize: 13,
+      fontWeight: 600
+    }
+  }, task.title), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onUpdateTask(task.id, {
+      reservedDate: todayStr()
+    })
+  }, "\u4ECA\u65E5\u3084\u308B"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => onTaskRemove(task.id),
+    style: {
+      color: '#DC2626'
+    }
+  }, "\u524A\u9664")))), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(8.5rem,auto) minmax(0,1fr) auto',
+      gap: 8,
+      alignItems: 'center',
+      borderTop: '1px solid var(--border)',
+      paddingTop: 12
+    }
+  }, React.createElement("input", {
+    type: "date",
+    value: reservationDraft.reservedDate || '',
+    onChange: e => setReservationDraft(prev => ({
+      ...prev,
+      reservedDate: e.target.value
+    })),
+    className: "inp",
+    style: {
+      minWidth: 0
+    }
+  }), React.createElement("input", {
+    value: reservationDraft.title,
+    onChange: e => setReservationDraft(prev => ({
+      ...prev,
+      title: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') addReservedFromDialog();
+      if (e.key === 'Escape') setReservationsOpen(false);
+    },
+    placeholder: "\u30BF\u30B9\u30AF\u540D",
+    className: "inp",
+    style: {
+      minWidth: 0
+    }
+  }), React.createElement("button", {
+    className: "btn-dark",
+    onClick: addReservedFromDialog,
+    disabled: !reservationDraft.title.trim() || !reservationDraft.reservedDate,
+    style: {
+      padding: '8px 14px',
+      fontSize: 12,
+      opacity: !reservationDraft.title.trim() || !reservationDraft.reservedDate ? .45 : 1
+    }
+  }, "\u8FFD\u52A0")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      marginTop: 14
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setReservationsOpen(false)
+  }, "\u9589\u3058\u308B"))));
   return React.createElement("div", {
     className: `card ${pri.cls}`,
     style: {
@@ -3043,7 +3191,7 @@ function PatientCard({
       resize: 'vertical',
       minHeight: 48
     }
-  }), patient.tasks.length === 0 && !adding && React.createElement("p", {
+  }), visibleTaskCount === 0 && !adding && React.createElement("p", {
     style: {
       textAlign: 'center',
       padding: '20px 0',
@@ -3087,13 +3235,30 @@ function PatientCard({
     onTodo: () => onTaskTodo(t.id),
     onUpdate: updates => onUpdateTask(t.id, updates),
     muted: true
-  }))), done.length > 0 && !adding && React.createElement("div", {
+  }))), !adding && React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'flex-end',
+      gap: 6,
+      flexWrap: 'wrap',
       marginTop: 4
     }
   }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: e => {
+      e.stopPropagation();
+      setReservationsOpen(true);
+    },
+    style: {
+      fontSize: 11,
+      color: 'var(--accent)',
+      gap: 4,
+      opacity: .86,
+      border: '1px solid rgba(108,62,248,.22)',
+      borderRadius: 99,
+      padding: '3px 10px'
+    }
+  }, "\uD83D\uDCC5 \u4E88\u7D04 (", reservedTasks.length, ")"), done.length > 0 && React.createElement("button", {
     className: "btn-sm",
     onClick: onClearDone,
     style: {
@@ -3216,6 +3381,33 @@ function PatientCard({
   }, React.createElement(X, {
     size: 12,
     color: "var(--text-2)"
+  })), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      marginLeft: 4
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 12,
+      lineHeight: 1,
+      color: 'var(--text-3)'
+    }
+  }, "\uD83D\uDCC5"), React.createElement("input", {
+    type: "date",
+    value: addForm.reservedDate || '',
+    onChange: e => setAddForm({
+      ...addForm,
+      reservedDate: e.target.value
+    }),
+    title: "\u4E88\u7D04\u65E5 (\u8A2D\u5B9A\u3059\u308B\u3068\u5F53\u65E5\u307E\u3067\u975E\u8868\u793A)",
+    className: "inp",
+    style: {
+      width: 'auto',
+      padding: '3px 8px',
+      fontSize: 12
+    }
   }))), React.createElement("div", {
     style: {
       marginLeft: 'auto',
@@ -3264,7 +3456,7 @@ function PatientCard({
     }
   }, React.createElement(Plus, {
     size: 13
-  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), adding && React.createElement("div", {
+  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), reservationDialog, adding && React.createElement("div", {
     style: {
       display: 'grid',
       gap: 7,
@@ -10110,7 +10302,7 @@ function PatientTriage() {
   }))), [activePatients]);
   const visibleFlatTasks = useMemo(() => erOnly && !isDailyMode ? flatTasks.filter(t => t.patientPriority === 'er') : wardOnly && !isDailyMode ? flatTasks.filter(t => t.patientPriority !== 'er') : flatTasks, [flatTasks, erOnly, wardOnly, isDailyMode]);
   const stuckTasks = useMemo(() => flatTasks.filter(t => t.status === 'stuck'), [flatTasks]);
-  const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done').length, [flatTasks]);
+  const openTaskCount = useMemo(() => flatTasks.filter(t => t.status !== 'done' && !isFutureReserved(t)).length, [flatTasks]);
   const remainingPatientTasks = useMemo(() => flatTasks.filter(isActionableTask), [flatTasks]);
   const remainingGeneralTasks = useMemo(() => activeGeneralTasks.filter(isActionableTask), [activeGeneralTasks]);
   const donePatientTaskCount = useMemo(() => flatTasks.filter(t => t.status === 'done').length + (isDailyMode ? 0 : closedPatientTasks.length), [flatTasks, closedPatientTasks, isDailyMode]);
@@ -10379,6 +10571,7 @@ function PatientTriage() {
       type: form.type || 'other',
       estimate: form.estimate || '5',
       scheduledTime: form.scheduledTime || null,
+      reservedDate: form.reservedDate || null,
       status: 'todo',
       stuckReason: '',
       tinyStep: '',
@@ -10394,9 +10587,30 @@ function PatientTriage() {
       [patientId]: {
         ...form,
         title: '',
-        scheduledTime: ''
+        scheduledTime: '',
+        reservedDate: ''
       }
     }));
+  };
+  const addReservedTask = (patientId, title, reservedDate) => {
+    const t = (title || '').trim();
+    if (!t || !reservedDate) return;
+    rememberUndo('予約タスク追加');
+    setActivePatients(prev => prev.map(p => p.id === patientId ? {
+      ...p,
+      tasks: [...p.tasks, {
+        id: uid(),
+        title: t,
+        type: 'other',
+        estimate: '5',
+        scheduledTime: null,
+        reservedDate,
+        status: 'todo',
+        stuckReason: '',
+        tinyStep: '',
+        createdAt: Date.now()
+      }]
+    } : p));
   };
   const addQuickPatientTask = (patientId, preset) => {
     if (!preset?.title?.trim()) return;
@@ -11248,7 +11462,7 @@ function PatientTriage() {
     showToast(`${newPatient.name} を受け持ちに登録しました`);
   };
   const suggestNext = (lowEnergy = focusMode) => {
-    let pool = flatTasks.filter(t => (t.status === 'todo' || t.status === 'doing') && !t.patientPlanned);
+    let pool = flatTasks.filter(t => (t.status === 'todo' || t.status === 'doing') && !t.patientPlanned && !isFutureReserved(t));
     if (erOnly) {
       pool = pool.filter(t => t.patientPriority === 'er');
     }
@@ -12131,7 +12345,7 @@ function PatientTriage() {
     color: 'rgba(255,255,255,.9)'
   }, {
     label: isWorkMode ? '一手' : '未完了',
-    val: isWorkMode ? workItems.reduce((sum, item) => sum + openWorkSteps(item).length, 0) : erOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done').length : wardOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done').length + openGeneralCount : openTaskCount + openGeneralCount,
+    val: isWorkMode ? workItems.reduce((sum, item) => sum + openWorkSteps(item).length, 0) : erOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done' && !isFutureReserved(t)).length : wardOnly && !isDailyMode ? visibleFlatTasks.filter(t => t.status !== 'done' && !isFutureReserved(t)).length + openGeneralCount : openTaskCount + openGeneralCount,
     color: 'rgba(255,255,255,.9)'
   }, {
     label: isWorkMode ? '今日の前進' : '今日の済',
@@ -12735,7 +12949,8 @@ function PatientTriage() {
       title: '',
       type: 'other',
       estimate: '5',
-      scheduledTime: ''
+      scheduledTime: '',
+      reservedDate: ''
     },
     setAddForm: f => setAddForm(prev => ({
       ...prev,
@@ -12756,6 +12971,7 @@ function PatientTriage() {
       askNext: true
     }),
     onUpdateTask: (tid, upd) => updateTask(p.id, tid, upd),
+    onAddReserved: (title, date) => addReservedTask(p.id, title, date),
     onClearDone: () => clearDoneTasks(p.id),
     typeMeta: typeMeta,
     estMeta: estMeta,
