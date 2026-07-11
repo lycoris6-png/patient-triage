@@ -367,6 +367,10 @@ const LAST_DONE_CYCLES = [{
   label: '毎週',
   due: 8
 }, {
+  id: 'biweekly',
+  label: '隔週',
+  due: 16
+}, {
   id: 'monthly',
   label: '毎月',
   due: 32
@@ -378,6 +382,14 @@ const LAST_DONE_CYCLES = [{
 const DEFAULT_LAST_DONE_CYCLE = 'days';
 function lastDoneCycle(id) {
   return LAST_DONE_CYCLES.find(c => c.id === id) || LAST_DONE_CYCLES[0];
+}
+// 項目ごとのカスタム「そろそろ」日数(1以上の整数のみ有効、無効ならundefined=プリセット値を使う)
+function normalizeLastDoneDueDays(value) {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+function lastDoneDueDaysFor(item) {
+  return normalizeLastDoneDueDays(item?.dueDays) || lastDoneCycle(item?.cycle).due;
 }
 const DEFAULT_LAST_DONE_ITEMS = [{
   id: 'laundry',
@@ -6156,7 +6168,9 @@ function lastDoneLabel(date) {
   if (days === null) return '未記録';
   if (days === 0) return '今日';
   if (days === 1) return '昨日';
-  return `${days}日前`;
+  if (days < 14) return `${days}日前`;
+  if (days < 60) return `約${Math.round(days / 7)}週間`;
+  return `約${Math.round(days / 30)}ヶ月`;
 }
 function LastDoneSection({
   items,
@@ -6171,21 +6185,23 @@ function LastDoneSection({
   onClear
 }) {
   const [editingId, setEditingId] = React.useState(null);
-  const [draft, setDraft] = React.useState({ label: '', lastDone: '', cycle: DEFAULT_LAST_DONE_CYCLE });
+  const [draft, setDraft] = React.useState({ label: '', lastDone: '', cycle: DEFAULT_LAST_DONE_CYCLE, dueDays: '' });
   const [collapsedOverrides, setCollapsedOverrides] = React.useState({});
   const startEdit = item => {
     setEditingId(item.id);
     setDraft({
       label: item.label || '',
       lastDone: item.lastDone || '',
-      cycle: item.cycle || DEFAULT_LAST_DONE_CYCLE
+      cycle: item.cycle || DEFAULT_LAST_DONE_CYCLE,
+      dueDays: item.dueDays || ''
     });
   };
   const saveEdit = id => {
     onUpdate(id, {
       label: draft.label,
       lastDone: draft.lastDone,
-      cycle: draft.cycle || DEFAULT_LAST_DONE_CYCLE
+      cycle: draft.cycle || DEFAULT_LAST_DONE_CYCLE,
+      dueDays: normalizeLastDoneDueDays(draft.dueDays)
     });
     setEditingId(null);
   };
@@ -6209,14 +6225,21 @@ function LastDoneSection({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   };
+  // 3段階: 期限内(ティール) / そろそろ=期限〜1.5倍(やわらか黄) / ひさしぶり=1.5倍超(静かなグレー)
+  // 長期放置ほど「静かになる」設計。急かさない・数えない・Doで何事もなく戻る。
   const dueInfo = item => {
     const days = lastDoneDays(item.lastDone);
     const cyc = lastDoneCycle(item.cycle);
+    const dueDays = lastDoneDueDaysFor(item);
+    const unrecorded = days === null;
+    const quiet = !unrecorded && days > dueDays * 1.5;
     return {
       days,
       cyc,
-      unrecorded: days === null,
-      due: days !== null && days > cyc.due
+      dueDays,
+      unrecorded,
+      quiet,
+      due: !unrecorded && !quiet && days > dueDays
     };
   };
   const badgeStyleFor = info => ({
@@ -6225,23 +6248,21 @@ function LastDoneSection({
     textAlign: 'center',
     padding: '4px 10px',
     borderRadius: 999,
-    background: info.unrecorded ? 'var(--surface-2)' : info.due ? 'rgba(245,158,11,.16)' : 'rgba(20,184,166,.14)',
-    color: info.unrecorded ? 'var(--text-3)' : info.due ? '#92400E' : '#0F766E',
+    background: info.unrecorded || info.quiet ? 'var(--surface-2)' : info.due ? 'rgba(245,158,11,.16)' : 'rgba(20,184,166,.14)',
+    color: info.unrecorded || info.quiet ? 'var(--text-3)' : info.due ? '#92400E' : '#0F766E',
     border: '1px solid var(--border)',
     fontSize: 12,
     fontWeight: 800,
     letterSpacing: '.02em',
     whiteSpace: 'nowrap'
   });
-  const soonPillStyle = {
+  const soonDotStyle = {
     flex: '0 0 auto',
-    padding: '3px 8px',
+    width: 8,
+    height: 8,
     borderRadius: 999,
-    background: 'rgba(245,158,11,.14)',
-    color: '#92400E',
-    fontSize: 10,
-    fontWeight: 800,
-    whiteSpace: 'nowrap'
+    background: '#F59E0B',
+    opacity: .85
   };
   const doBtnStyle = {
     flex: '0 0 auto',
@@ -6272,8 +6293,8 @@ function LastDoneSection({
     padding: '6px 9px',
     fontSize: 12
   };
-  const cyclePicker = (value, onPick) => React.createElement("div", {
-    style: { display: 'flex', gap: 5, flexWrap: 'wrap', flex: '1 1 100%', marginTop: 2 }
+  const cyclePicker = (value, onPick, dueDaysValue, onDueDays) => React.createElement("div", {
+    style: { display: 'flex', gap: 5, flexWrap: 'wrap', flex: '1 1 100%', marginTop: 2, alignItems: 'center' }
   }, LAST_DONE_CYCLES.map(c => {
     const sel = (value || DEFAULT_LAST_DONE_CYCLE) === c.id;
     return React.createElement("button", {
@@ -6291,7 +6312,19 @@ function LastDoneSection({
         color: sel ? '#0F766E' : 'var(--text-3)'
       }
     }, c.label);
-  }));
+  }), onDueDays && React.createElement("span", {
+    style: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
+  }, React.createElement("input", {
+    type: "number",
+    min: 1,
+    inputMode: "numeric",
+    value: dueDaysValue || '',
+    onChange: e => onDueDays(e.target.value),
+    placeholder: String(lastDoneCycle(value).due),
+    className: "inp",
+    style: { width: 58, padding: '3px 7px', fontSize: 11 },
+    "aria-label": "「そろそろ」になる日数(空欄ならプリセット値)"
+  }), "日で「そろそろ」"));
   const sortItems = arr => [...arr].sort((a, b) => {
     const da = lastDoneDays(a.lastDone);
     const db = lastDoneDays(b.lastDone);
@@ -6329,13 +6362,13 @@ function LastDoneSection({
         className: "btn-sm",
         onClick: () => onRemove(item.id),
         style: { color: 'var(--stuck-fg)' }
-      }, "削除"), cyclePicker(draft.cycle, id => setDraft(prev => ({ ...prev, cycle: id }))));
+      }, "削除"), cyclePicker(draft.cycle, id => setDraft(prev => ({ ...prev, cycle: id })), draft.dueDays, v => setDraft(prev => ({ ...prev, dueDays: v }))));
     }
     const info = dueInfo(item);
     return React.createElement("div", {
       key: item.id,
       style: rowStyle,
-      title: item.lastDone ? `前回: ${item.lastDone}` : '未記録'
+      title: (item.lastDone ? `前回: ${item.lastDone}` : '未記録') + ` / そろそろ目安: ${info.dueDays}日`
     }, React.createElement("strong", {
       style: labelStyle
     }, item.label), React.createElement("span", {
@@ -6419,8 +6452,9 @@ function LastDoneSection({
     }, group.cyc.label), React.createElement("span", {
       style: { fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
     }, group.rows.length, "件"), dueCount > 0 ? React.createElement("span", {
-      style: { ...soonPillStyle, marginLeft: 'auto' }
-    }, "そろそろ ", dueCount) : null), groupOpen ? React.createElement("div", {
+      title: "そろそろの項目があります",
+      style: { ...soonDotStyle, marginLeft: 'auto' }
+    }) : null), groupOpen ? React.createElement("div", {
       style: { display: 'grid', gap: 6 }
     }, group.rows.map(renderItemRow)) : null);
   }), React.createElement("div", {
@@ -6457,7 +6491,7 @@ function LastDoneSection({
       fontSize: 12,
       flex: '0 0 auto'
     }
-  }, "追加"), cyclePicker(form.cycle, id => setForm(prev => ({ ...prev, cycle: id }))))));
+  }, "追加"), cyclePicker(form.cycle, id => setForm(prev => ({ ...prev, cycle: id })), form.dueDays, v => setForm(prev => ({ ...prev, dueDays: v }))))));
 }
 function EndDayLogSection({
   logs,
@@ -9854,7 +9888,7 @@ function PatientTriage() {
   const [closedPatientTasks, setClosedPatientTasks] = useState([]);
   const [lastDoneItems, setLastDoneItems] = useState(DEFAULT_LAST_DONE_ITEMS);
   const [lastDoneOpen, setLastDoneOpen] = useState(false);
-  const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr(), cycle: DEFAULT_LAST_DONE_CYCLE });
+  const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr(), cycle: DEFAULT_LAST_DONE_CYCLE, dueDays: '' });
   const [endDayLogs, setEndDayLogs] = useState([]);
   const [missedEndDayPrompt, setMissedEndDayPrompt] = useState(null);
   const [rolloverLogsPromptOpen, setRolloverLogsPromptOpen] = useState(false);
@@ -11436,12 +11470,14 @@ function PatientTriage() {
       id: uid(),
       label,
       lastDone: lastDoneForm.lastDone || '',
-      cycle: lastDoneForm.cycle || DEFAULT_LAST_DONE_CYCLE
+      cycle: lastDoneForm.cycle || DEFAULT_LAST_DONE_CYCLE,
+      dueDays: normalizeLastDoneDueDays(lastDoneForm.dueDays)
     }]);
     setLastDoneForm({
       label: '',
       lastDone: todayStr(),
-      cycle: lastDoneForm.cycle || DEFAULT_LAST_DONE_CYCLE
+      cycle: lastDoneForm.cycle || DEFAULT_LAST_DONE_CYCLE,
+      dueDays: ''
     });
     setLastDoneOpen(true);
   };
