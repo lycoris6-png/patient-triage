@@ -1005,7 +1005,19 @@ const MILESTONE_LINES = Object.assign({
   25: '今日25件終了。少し息を入れつつ、この調子です。',
   30: '今日30件終了。ここまで来たら十分すごいです。'
 }, (typeof window !== 'undefined' && window.APP_DIALOGUE && window.APP_DIALOGUE.milestones) || {});
-const milestoneForDone = count => count <= 30 && count % 5 === 0 ? count : null;
+const milestoneForDone = count => count <= 30 ? (count % 5 === 0 ? count : null) : (count % 10 === 0 ? count : null);
+const milestoneLineFor = count => {
+  const line = MILESTONE_LINES[count];
+  if (line) return line;
+  const generic = (typeof window !== 'undefined' && window.APP_DIALOGUE && window.APP_DIALOGUE.milestones && window.APP_DIALOGUE.milestones.generic) || '今日{count}件終了。ここまで来ると立派な記録です。';
+  return String(generic).replace(/\{count\}/g, String(count));
+};
+const LIFETIME_MILESTONES = [50, 100, 250, 500, 1000, 2000, 5000, 10000];
+const lifetimeMilestoneFor = total => LIFETIME_MILESTONES.includes(total) ? total : null;
+const lifetimeLineFor = total => {
+  const tpl = (typeof window !== 'undefined' && window.APP_DIALOGUE && window.APP_DIALOGUE.milestones && window.APP_DIALOGUE.milestones.lifetime) || '🎉 これで累計{total}件目の完了。積み重ねがちゃんと形になっています。';
+  return String(tpl).replace(/\{total\}/g, String(total));
+};
 const PATIENT_ALERTS = [{ id: 'medHold', icon: '💊', label: '中断薬あり' }, { id: 'fasting', icon: '🍙', label: '欠食あり' }, { id: 'rehabMissing', icon: '🏃‍♀️', label: 'リハビリ未介入' }];
 const getPatientAlerts = patient => PATIENT_ALERTS.filter(alert => patient?.alerts?.[alert.id]);
 const getPri = p => p?.priority || 'normal';
@@ -9805,6 +9817,8 @@ function PatientTriage() {
   });
   const [stats, setStats] = useState({
     doneToday: 0,
+    lifetimeDone: 0,
+    lastLifetimeMilestone: 0,
     date: todayStr()
   });
   const [now, setNow] = useState(Date.now());
@@ -10758,9 +10772,11 @@ function PatientTriage() {
       const baseCount = prev.date === workDate ? prev.doneToday : 0;
       const nextCount = baseCount + 1;
       const milestone = milestoneForDone(nextCount);
+      const nextLifetime = (prev.lifetimeDone || 0) + 1;
+      const lifetimeMilestone = lifetimeMilestoneFor(nextLifetime);
       if (milestone && prev.lastMilestone !== milestone) {
         setTimeout(() => {
-          showToast(MILESTONE_LINES[milestone]);
+          showToast(milestoneLineFor(milestone));
           window.dispatchEvent(new CustomEvent('chibi-coach', {
             detail: {
               kind: 'done'
@@ -10768,11 +10784,24 @@ function PatientTriage() {
           }));
         }, 260);
       }
+      if (lifetimeMilestone && prev.lastLifetimeMilestone !== lifetimeMilestone) {
+        setTimeout(() => {
+          showToast(lifetimeLineFor(lifetimeMilestone));
+          window.dispatchEvent(new CustomEvent('chibi-coach', {
+            detail: {
+              kind: 'allclear',
+              text: lifetimeLineFor(lifetimeMilestone)
+            }
+          }));
+        }, 900);
+      }
       return {
         ...prev,
         doneToday: nextCount,
         date: workDate,
-        lastMilestone: milestone || prev.lastMilestone || 0
+        lastMilestone: milestone || prev.lastMilestone || 0,
+        lifetimeDone: nextLifetime,
+        lastLifetimeMilestone: lifetimeMilestone || prev.lastLifetimeMilestone || 0
       };
     });
     if (suggestion?.task?.id === taskId) setSuggestion(null);
@@ -11272,9 +11301,11 @@ function PatientTriage() {
       const baseCount = prev.date === workDate ? prev.doneToday : 0;
       const nextCount = baseCount + 1;
       const milestone = milestoneForDone(nextCount);
+      const nextLifetime = (prev.lifetimeDone || 0) + 1;
+      const lifetimeMilestone = lifetimeMilestoneFor(nextLifetime);
       if (milestone && prev.lastMilestone !== milestone) {
         setTimeout(() => {
-          showToast(MILESTONE_LINES[milestone]);
+          showToast(milestoneLineFor(milestone));
           window.dispatchEvent(new CustomEvent('chibi-coach', {
             detail: {
               kind: 'done'
@@ -11282,11 +11313,24 @@ function PatientTriage() {
           }));
         }, 260);
       }
+      if (lifetimeMilestone && prev.lastLifetimeMilestone !== lifetimeMilestone) {
+        setTimeout(() => {
+          showToast(lifetimeLineFor(lifetimeMilestone));
+          window.dispatchEvent(new CustomEvent('chibi-coach', {
+            detail: {
+              kind: 'allclear',
+              text: lifetimeLineFor(lifetimeMilestone)
+            }
+          }));
+        }, 900);
+      }
       return {
         ...prev,
         doneToday: nextCount,
         date: workDate,
-        lastMilestone: milestone || prev.lastMilestone || 0
+        lastMilestone: milestone || prev.lastMilestone || 0,
+        lifetimeDone: nextLifetime,
+        lastLifetimeMilestone: lifetimeMilestone || prev.lastLifetimeMilestone || 0
       };
     });
   };
@@ -12007,7 +12051,11 @@ function PatientTriage() {
       if (Array.isArray(value)) setter(value);else if (withDefaults) setter(fallback);
     };
     apply(setPatients, parsed.patients, []);
-    if (parsed.stats?.date === todayStr()) setStats(parsed.stats);
+    if (parsed.stats?.date === todayStr()) setStats(parsed.stats);else if (parsed.stats) setStats(prev => ({
+      ...prev,
+      lifetimeDone: parsed.stats.lifetimeDone || 0,
+      lastLifetimeMilestone: parsed.stats.lastLifetimeMilestone || 0
+    }));
     apply(setTemplates, parsed.templates, DEFAULT_TEMPLATES);
     apply(setQuickPatientPresets, Array.isArray(parsed.quickPatientPresets) ? parsed.quickPatientPresets : parsed.quickGeneralPresets, QUICK_PATIENT_TASKS);
     apply(setQuickGeneralPresets, parsed.quickGeneralPresets, QUICK_GENERAL_TASKS);
