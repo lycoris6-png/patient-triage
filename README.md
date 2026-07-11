@@ -128,76 +128,17 @@ The schedule and enabled cast are read from the latest GAS-synced app data. A sa
 
 The unified prototype can ask the existing GAS endpoint for a generated chibi coach line on app startup and when `今日はおしまい！` runs. The browser sends only coarse context: trigger, app mode, selected character voice guide, season, time band, fixed location label, rounded end-time label / whether the end time is after 20:00, and Open-Meteo weather summary. It does not send patient names, wards, task titles, or clinical details.
 
-Store the Gemini API key in Apps Script **Script properties** as `GEMINI_API_KEY`; do not commit it to this repo. Extend the GAS `doGet(e)` handler so `action=coachLine` returns JSONP:
+The AI coach uses the OpenAI Responses API through GAS. Add [`gas-openai-coach-addon.gs`](gas-openai-coach-addon.gs) to the same Apps Script project as the sync backend, then set these **Script properties**:
+
+- `OPENAI_API_KEY` (required): OpenAI API key. Never put this key in the browser or repository.
+- `OPENAI_COACH_MODEL` (optional): defaults to `gpt-5-mini`. Set this to another model your API project can use if desired.
+
+In the existing `doGet(e)`, after `SECRET` has been validated and `p` / `callback` have been created, add this before the normal sync response:
 
 ```js
-const GEMINI_MODEL = 'gemini-2.5-flash';
-
-function jsonp_(callback, obj) {
-  const body = `${callback}(${JSON.stringify(obj)})`;
-  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JAVASCRIPT);
-}
-
-function doGet(e) {
-  const p = e.parameter || {};
-  const callback = p.callback || 'callback';
-  if (p.secret !== SECRET) return jsonp_(callback, { ok: false, error: 'bad secret' });
-  if (p.action === 'coachLine') return coachLine_(callback, p.payload || '{}');
-
-  // Existing data-sync JSONP response goes here.
-}
-
-function coachLine_(callback, payloadText) {
-  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  if (!key) return jsonp_(callback, { ok: false, error: 'missing GEMINI_API_KEY' });
-
-  const ctx = JSON.parse(payloadText || '{}');
-  const weather = ctx.weather
-    ? `${ctx.weather.label}、${ctx.weather.temperature}${ctx.weather.temperatureUnit}、降水${ctx.weather.precipitation}${ctx.weather.precipitationUnit}`
-    : '天気情報なし';
-  const triggerLabel = ctx.trigger === 'endday' ? '今日はおしまい時' : '起動時';
-  const modeLabel = ctx.mode === 'daily' ? 'でいとり' : 'ぺいとり';
-  const character = ctx.character || {};
-  const voiceGuide = [
-    `話者: ${character.name || 'アプリキャラクター'}`,
-    `人物像: ${character.persona || ''}`,
-    `口調ルール: ${(character.rules || []).join(' / ')}`,
-    `避ける表現: ${(character.avoid || []).join(' / ')}`,
-    `参考例: ${(character.examples || []).join(' | ')}`
-  ].filter(line => !/:\s*$/.test(line)).join('\n');
-  const lateEndNote = ctx.isLateEnd
-    ? '20時を過ぎた遅いおしまいです。具体的な時刻は言わず、「夜遅く」「20時過ぎ」程度に丸めて、帰りが遅くなったことを労い、早く休む方向に短く寄り添ってください。'
-    : '';
-  const prompt = [
-    'あなたはタスク整理アプリの小さなキャラクターです。',
-    '医療判断、診療助言、患者情報への言及は禁止。',
-    'ユーザーを軽く励ます日本語の一言だけを返してください。80字以内。',
-    '話者本人の口調を最優先してください。一人称、語尾、温度感、粗さ/丁寧さを守ります。',
-    '参考例の丸写しは避け、同じ人物が今言いそうな新しい短文にしてください。',
-    '不自然な比喩や硬い言い回しは避け、普通に人へ声をかける口調にしてください。',
-    voiceGuide,
-    `場面: ${triggerLabel}`,
-    `モード: ${modeLabel}`,
-    `場所: ${ctx.locationLabel || '職場'}`,
-    `季節: ${ctx.season || ''}`,
-    `時間帯: ${ctx.timeBand || ''}`,
-    `おしまい時刻区分: ${ctx.lateEndLabel || (ctx.isLateEnd ? '20時過ぎ' : '')}`,
-    lateEndNote,
-    `天気: ${weather}`
-  ].filter(Boolean).join('\n');
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-  const res = UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    muteHttpExceptions: true,
-    payload: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 80, temperature: 0.85 }
-    })
-  });
-  const data = JSON.parse(res.getContentText() || '{}');
-  const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120);
-  return jsonp_(callback, { ok: !!text, text });
-}
+if (p.action === 'coachLine') return openAiCoachLine_(callback, p.payload || '{}');
 ```
+
+Deploy a new web-app version and use the existing **データ → GAS設定 → AI一言 テスト** button to verify it. The add-on sends `store: false` to the Responses API and returns `{ ok, text }`, which the current app already understands.
+
+OpenAI API billing is separate from ChatGPT subscriptions. Complimentary API tokens, when your account/project qualifies for them, are tied to the relevant OpenAI API program and may still require a positive API balance. Check the project usage/billing dashboard before enabling automatic daily lines. The API sends the same deliberately limited context as before; no patient name, ward, task title, or clinical data is included.
