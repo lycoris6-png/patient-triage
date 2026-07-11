@@ -6168,9 +6168,7 @@ function lastDoneLabel(date) {
   if (days === null) return '未記録';
   if (days === 0) return '今日';
   if (days === 1) return '昨日';
-  if (days < 14) return `${days}日前`;
-  if (days < 60) return `約${Math.round(days / 7)}週間`;
-  return `約${Math.round(days / 30)}ヶ月`;
+  return `${days}日前`;
 }
 function LastDoneSection({
   items,
@@ -6225,21 +6223,17 @@ function LastDoneSection({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   };
-  // 3段階: 期限内(ティール) / そろそろ=期限〜1.5倍(やわらか黄) / ひさしぶり=1.5倍超(静かなグレー)
-  // 長期放置ほど「静かになる」設計。急かさない・数えない・Doで何事もなく戻る。
+  // 2段階: 期限内(ティール) / 期限超え(やわらか黄「そろそろ」)。閾値は項目ごとのdueDaysが優先。
   const dueInfo = item => {
     const days = lastDoneDays(item.lastDone);
     const cyc = lastDoneCycle(item.cycle);
     const dueDays = lastDoneDueDaysFor(item);
-    const unrecorded = days === null;
-    const quiet = !unrecorded && days > dueDays * 1.5;
     return {
       days,
       cyc,
       dueDays,
-      unrecorded,
-      quiet,
-      due: !unrecorded && !quiet && days > dueDays
+      unrecorded: days === null,
+      due: days !== null && days > dueDays
     };
   };
   const badgeStyleFor = info => ({
@@ -6248,21 +6242,23 @@ function LastDoneSection({
     textAlign: 'center',
     padding: '4px 10px',
     borderRadius: 999,
-    background: info.unrecorded || info.quiet ? 'var(--surface-2)' : info.due ? 'rgba(245,158,11,.16)' : 'rgba(20,184,166,.14)',
-    color: info.unrecorded || info.quiet ? 'var(--text-3)' : info.due ? '#92400E' : '#0F766E',
+    background: info.unrecorded ? 'var(--surface-2)' : info.due ? 'rgba(245,158,11,.16)' : 'rgba(20,184,166,.14)',
+    color: info.unrecorded ? 'var(--text-3)' : info.due ? '#92400E' : '#0F766E',
     border: '1px solid var(--border)',
     fontSize: 12,
     fontWeight: 800,
     letterSpacing: '.02em',
     whiteSpace: 'nowrap'
   });
-  const soonDotStyle = {
+  const soonPillStyle = {
     flex: '0 0 auto',
-    width: 8,
-    height: 8,
+    padding: '3px 8px',
     borderRadius: 999,
-    background: '#F59E0B',
-    opacity: .85
+    background: 'rgba(245,158,11,.14)',
+    color: '#92400E',
+    fontSize: 10,
+    fontWeight: 800,
+    whiteSpace: 'nowrap'
   };
   const doBtnStyle = {
     flex: '0 0 auto',
@@ -6452,9 +6448,8 @@ function LastDoneSection({
     }, group.cyc.label), React.createElement("span", {
       style: { fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
     }, group.rows.length, "件"), dueCount > 0 ? React.createElement("span", {
-      title: "そろそろの項目があります",
-      style: { ...soonDotStyle, marginLeft: 'auto' }
-    }) : null), groupOpen ? React.createElement("div", {
+      style: { ...soonPillStyle, marginLeft: 'auto' }
+    }, "そろそろ ", dueCount) : null), groupOpen ? React.createElement("div", {
       style: { display: 'grid', gap: 6 }
     }, group.rows.map(renderItemRow)) : null);
   }), React.createElement("div", {
