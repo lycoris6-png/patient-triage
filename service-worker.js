@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patient-triage-pwa-v110';
+const CACHE_NAME = 'patient-triage-pwa-v111';
 const APP_SHELL = [
   './',
   './index.html',

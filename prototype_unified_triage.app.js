@@ -1012,8 +1012,12 @@ const milestoneLineFor = count => {
   const generic = (typeof window !== 'undefined' && window.APP_DIALOGUE && window.APP_DIALOGUE.milestones && window.APP_DIALOGUE.milestones.generic) || '今日{count}件終了。ここまで来ると立派な記録です。';
   return String(generic).replace(/\{count\}/g, String(count));
 };
-const LIFETIME_MILESTONES = [50, 100, 250, 500, 1000, 2000, 5000, 10000];
-const lifetimeMilestoneFor = total => LIFETIME_MILESTONES.includes(total) ? total : null;
+// 累計お祝い: 序盤は50/100/250/500、それ以降は500件ごとに無期限で発火
+const LIFETIME_MILESTONES = [50, 100, 250, 500];
+const lifetimeMilestoneFor = total => {
+  if (total > 500) return total % 500 === 0 ? total : null;
+  return LIFETIME_MILESTONES.includes(total) ? total : null;
+};
 const lifetimeLineFor = total => {
   const tpl = (typeof window !== 'undefined' && window.APP_DIALOGUE && window.APP_DIALOGUE.milestones && window.APP_DIALOGUE.milestones.lifetime) || '🎉 これで累計{total}件目の完了。積み重ねがちゃんと形になっています。';
   return String(tpl).replace(/\{total\}/g, String(total));
