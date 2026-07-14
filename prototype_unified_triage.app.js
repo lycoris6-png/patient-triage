@@ -2753,6 +2753,13 @@ function PatientCard({
   const [reservationsOpen, setReservationsOpen] = useState(false);
   const [reservationQuickOpen, setReservationQuickOpen] = useState(false);
   const [reservationSetOpen, setReservationSetOpen] = useState(false);
+  const [reservationAddOpen, setReservationAddOpen] = useState(false);
+  const [reservationEditId, setReservationEditId] = useState(null);
+  useEffect(() => {
+    if (!reservationsOpen) return;
+    setReservationAddOpen(false);
+    setReservationEditId(null);
+  }, [reservationsOpen]);
   const [reservationDraft, setReservationDraft] = useState({
     title: '',
     reservedDate: '',
@@ -2825,49 +2832,119 @@ function PatientCard({
       color: 'var(--text-3)',
       fontSize: 13
     }
-  }, "\u4E88\u7D04\u30BF\u30B9\u30AF\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u306E\u6B04\u304B\u3089\u8FFD\u52A0\u3067\u304D\u307E\u3059\u3002") : reservedTasks.map(task => React.createElement("div", {
-    key: task.id,
+  }, "\u4E88\u7D04\u30BF\u30B9\u30AF\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u300C\uFF0B \u30BF\u30B9\u30AF\u3092\u8FFD\u52A0\u300D\u304B\u3089\u767B\u9332\u3067\u304D\u307E\u3059\u3002") : reservedTasks.map(task => {
+    const isEditingRes = reservationEditId === task.id;
+    return React.createElement("div", {
+      key: task.id,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '7px 10px',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        background: 'var(--surface-2)'
+      }
+    }, isEditingRes ? React.createElement("input", {
+      type: "date",
+      value: task.reservedDate || '',
+      onChange: e => onUpdateTask(task.id, {
+        reservedDate: e.target.value || null
+      }),
+      className: "inp",
+      style: {
+        width: 'auto',
+        padding: '4px 8px',
+        fontSize: 12,
+        flexShrink: 0
+      }
+    }) : React.createElement("span", {
+      style: {
+        flexShrink: 0,
+        fontSize: 12,
+        fontWeight: 800,
+        color: 'var(--text-2)',
+        fontVariantNumeric: 'tabular-nums'
+      }
+    }, formatDateShort(task.reservedDate), "(", weekdayLabel(task.reservedDate), ")"), React.createElement("span", {
+      title: task.title,
+      style: {
+        flex: 1,
+        minWidth: 0,
+        fontSize: 13,
+        fontWeight: 600,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }
+    }, task.title), isEditingRes ? React.createElement(React.Fragment, null, React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => {
+        onUpdateTask(task.id, {
+          reservedDate: todayStr()
+        });
+        setReservationEditId(null);
+      },
+      style: {
+        flexShrink: 0,
+        padding: '4px 9px',
+        fontSize: 11
+      }
+    }, "\u4ECA\u65E5\u3084\u308B"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setReservationEditId(null),
+      style: {
+        flexShrink: 0,
+        padding: '4px 9px',
+        fontSize: 11,
+        color: 'var(--accent)',
+        fontWeight: 800
+      }
+    }, "\u5B8C\u4E86")) : React.createElement(React.Fragment, null, React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setReservationEditId(task.id),
+      style: {
+        flexShrink: 0,
+        padding: '4px 9px',
+        fontSize: 11
+      }
+    }, "\u7DE8\u96C6"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onTaskRemove(task.id),
+      style: {
+        flexShrink: 0,
+        padding: '4px 9px',
+        fontSize: 11,
+        color: '#DC2626'
+      }
+    }, "\u524A\u9664")));
+  })), React.createElement("div", {
     style: {
+      borderTop: '1px solid var(--border)',
+      paddingTop: 12
+    }
+  }, React.createElement("button", {
+    type: "button",
+    onClick: () => setReservationAddOpen(v => !v),
+    style: {
+      width: '100%',
+      padding: '9px',
+      fontSize: 12,
+      background: 'transparent',
+      border: '1.5px dashed var(--border-2)',
+      borderRadius: 10,
+      cursor: 'pointer',
+      color: reservationAddOpen ? 'var(--accent)' : 'var(--text-3)',
       display: 'flex',
       alignItems: 'center',
-      gap: 8,
-      flexWrap: 'wrap',
-      padding: '8px 10px',
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-      background: 'var(--surface-2)'
-    }
-  }, React.createElement("input", {
-    type: "date",
-    value: task.reservedDate || '',
-    onChange: e => onUpdateTask(task.id, {
-      reservedDate: e.target.value || null
-    }),
-    className: "inp",
-    style: {
-      width: 'auto',
-      padding: '4px 8px',
-      fontSize: 12
-    }
-  }), React.createElement("span", {
-    style: {
-      flex: '1 1 12rem',
-      minWidth: 0,
-      fontSize: 13,
+      justifyContent: 'center',
+      gap: 5,
+      fontFamily: 'var(--font-sans)',
       fontWeight: 600
     }
-  }, task.title), React.createElement("button", {
-    className: "btn-sm",
-    onClick: () => onUpdateTask(task.id, {
-      reservedDate: todayStr()
-    })
-  }, "\u4ECA\u65E5\u3084\u308B"), React.createElement("button", {
-    className: "btn-sm",
-    onClick: () => onTaskRemove(task.id),
-    style: {
-      color: '#DC2626'
-    }
-  }, "\u524A\u9664")))), React.createElement("div", {
+  }, React.createElement(Plus, {
+    size: 13
+  }), reservationAddOpen ? '\u30BF\u30B9\u30AF\u8FFD\u52A0\u3092\u305F\u305F\u3080' : '\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0')), reservationAddOpen && React.createElement(React.Fragment, null, React.createElement("div", {
     style: {
       borderTop: '1px solid var(--border)',
       paddingTop: 12,
@@ -3135,7 +3212,7 @@ function PatientCard({
       transition: 'all .12s',
       boxShadow: reservationDraft.estimate === e.id ? '0 3px 10px rgba(108,62,248,.30)' : 'none'
     }
-  }, e.label)))), React.createElement("div", {
+  }, e.label))))), React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'flex-end',
