@@ -2752,6 +2752,7 @@ function PatientCard({
   const [examQuickItem, setExamQuickItem] = useState(PATIENT_EXAM_QUICK_ITEMS[0].id);
   const [reservationsOpen, setReservationsOpen] = useState(false);
   const [reservationQuickOpen, setReservationQuickOpen] = useState(false);
+  const [reservationSetOpen, setReservationSetOpen] = useState(false);
   const [reservationDraft, setReservationDraft] = useState({
     title: '',
     reservedDate: '',
@@ -2866,7 +2867,74 @@ function PatientCard({
     style: {
       color: '#DC2626'
     }
-  }, "\u524A\u9664")))), quickTasks && quickTasks.length > 0 && React.createElement("div", {
+  }, "\u524A\u9664")))), React.createElement("div", {
+    style: {
+      borderTop: '1px solid var(--border)',
+      paddingTop: 12,
+      display: 'grid',
+      gap: 6
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 5,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 900,
+      marginRight: 2
+    }
+  }, "\u691C\u67FB"), PATIENT_EXAM_QUICK_ITEMS.map(item => React.createElement("button", {
+    key: item.id,
+    type: "button",
+    className: `btn-sm${examQuickSelected.id === item.id ? ' btn-ghost-active' : ''}`,
+    onClick: () => setExamQuickItem(item.id),
+    style: {
+      fontSize: 11,
+      padding: '4px 8px',
+      border: examQuickSelected.id === item.id ? '1px solid var(--accent)' : '1px solid var(--border)',
+      borderRadius: 99,
+      background: examQuickSelected.id === item.id ? 'rgba(108,62,248,.10)' : 'var(--surface)'
+    }
+  }, item.label))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, PATIENT_EXAM_QUICK_ACTIONS.map(action => React.createElement("button", {
+    key: action.id,
+    type: "button",
+    className: action.id === 'order' ? 'btn-dark' : 'btn-ghost',
+    onClick: async () => {
+      let examTitle = examQuickSelected.title || examQuickSelected.label || '\u691C\u67FB';
+      if (examQuickSelected.id === 'other') {
+        const input = await appPrompt({
+          title: '\u691C\u67FB\u30BF\u30B9\u30AF',
+          label: '\u691C\u67FB\u540D',
+          defaultValue: ''
+        });
+        if (!input || !input.trim()) return;
+        examTitle = input.trim();
+      }
+      setReservationDraft(prev => ({
+        ...prev,
+        title: `${examTitle}${action.suffix}`,
+        type: action.type,
+        estimate: action.estimate
+      }));
+    },
+    style: {
+      padding: '6px 12px',
+      fontSize: 11,
+      boxShadow: 'none'
+    },
+    title: `${examQuickSelected.label}${action.label}\u3092\u30BF\u30B9\u30AF\u5185\u5BB9\u306B\u30BB\u30C3\u30C8`
+  }, "+ ", action.label)))), quickTasks && quickTasks.length > 0 && React.createElement("div", {
     style: {
       borderTop: '1px solid var(--border)',
       paddingTop: 12
@@ -2913,7 +2981,67 @@ function PatientCard({
       opacity: .55,
       fontSize: 10
     }
-  }, q.estimate, "\u5206"))))), React.createElement("div", {
+  }, q.estimate, "\u5206"))))), templates && templates.length > 0 && React.createElement("div", {
+    style: {
+      borderTop: '1px solid var(--border)',
+      paddingTop: 12
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setReservationSetOpen(v => !v),
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800,
+      border: '1px solid var(--border)',
+      borderRadius: 99,
+      padding: '4px 10px'
+    }
+  }, reservationSetOpen ? React.createElement(ChevronDown, {
+    size: 12
+  }) : React.createElement(ChevronRight, {
+    size: 12
+  }), "\u30bb\u30c3\u30c8 (", templates.length, ")"), reservationSetOpen && React.createElement(React.Fragment, null, !reservationDraft.reservedDate && React.createElement("p", {
+    style: {
+      margin: '7px 0 0',
+      fontSize: 11,
+      color: 'var(--text-3)'
+    }
+  }, "\u4e0b\u306e\u6b04\u3067\u4e88\u7d04\u65e5\u3092\u9078\u3076\u3068\u3001\u30bb\u30c3\u30c8\u3092\u4e00\u62ec\u8ffd\u52a0\u3067\u304d\u307e\u3059"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginTop: 7
+    }
+  }, templates.map(tpl => React.createElement("button", {
+    key: tpl.id,
+    type: "button",
+    className: "set-chip",
+    disabled: !reservationDraft.reservedDate,
+    onClick: () => {
+      const date = reservationDraft.reservedDate;
+      if (!date || !onAddReserved) return;
+      (tpl.items || []).filter(item => item.title && item.title.trim()).forEach(item => onAddReserved(item.title.trim(), date, {
+        type: item.type,
+        estimate: item.estimate
+      }));
+    },
+    style: {
+      opacity: reservationDraft.reservedDate ? 1 : .45,
+      cursor: reservationDraft.reservedDate ? 'pointer' : 'not-allowed'
+    },
+    title: reservationDraft.reservedDate ? `${(tpl.items || []).length}\u4ef6\u3092${reservationDraft.reservedDate}\u306e\u4e88\u7d04\u3067\u4e00\u62ec\u8ffd\u52a0` : '\u5148\u306b\u4e88\u7d04\u65e5\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044'
+  }, "+ ", tpl.name, React.createElement("span", {
+    style: {
+      opacity: .5,
+      fontSize: 10
+    }
+  }, "(", (tpl.items || []).length, ")")))))), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'minmax(8.5rem,auto) minmax(0,1fr) auto',
@@ -2957,7 +3085,57 @@ function PatientCard({
       fontSize: 12,
       opacity: !reservationDraft.title.trim() || !reservationDraft.reservedDate ? .45 : 1
     }
-  }, "\u8FFD\u52A0")), React.createElement("div", {
+  }, "\u8FFD\u52A0"), React.createElement("div", {
+    style: {
+      gridColumn: '1 / -1',
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 5
+    }
+  }, TASK_TYPES.map(tt => React.createElement("button", {
+    key: tt.id,
+    type: "button",
+    onClick: () => setReservationDraft(prev => ({
+      ...prev,
+      type: tt.id
+    })),
+    className: "tag",
+    style: {
+      background: reservationDraft.type === tt.id ? tt.dot : 'var(--surface)',
+      color: reservationDraft.type === tt.id ? '#fff' : tt.dot,
+      border: `1.5px solid ${tt.dot}40`,
+      cursor: 'pointer',
+      fontSize: 11,
+      padding: '4px 10px',
+      transition: 'all .12s',
+      boxShadow: reservationDraft.type === tt.id ? `0 3px 10px ${tt.dot}40` : 'none'
+    }
+  }, tt.label))), React.createElement("div", {
+    style: {
+      gridColumn: '1 / -1',
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 5
+    }
+  }, ESTIMATES.map(e => React.createElement("button", {
+    key: e.id,
+    type: "button",
+    onClick: () => setReservationDraft(prev => ({
+      ...prev,
+      estimate: e.id
+    })),
+    className: "tag",
+    style: {
+      background: reservationDraft.estimate === e.id ? 'var(--accent)' : 'var(--surface)',
+      color: reservationDraft.estimate === e.id ? '#fff' : 'var(--text-2)',
+      border: '1.5px solid var(--border)',
+      cursor: 'pointer',
+      fontSize: 11,
+      padding: '4px 10px',
+      transition: 'all .12s',
+      boxShadow: reservationDraft.estimate === e.id ? '0 3px 10px rgba(108,62,248,.30)' : 'none'
+    }
+  }, e.label)))), React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'flex-end',
