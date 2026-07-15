@@ -2702,6 +2702,10 @@ function PatientCard({
   onSetPriority,
   onSetWard,
   onToggleAlert,
+  onAddProblem,
+  onToggleProblem,
+  onRemoveProblem,
+  onMedHoldNoteChange,
   showAlerts = true,
   checkMode = '',
   dimmed = false,
@@ -2745,6 +2749,10 @@ function PatientCard({
   const deferred = open.filter(t => t.status === 'hold');
   const done = patient.tasks.filter(t => t.status === 'done' && !isFutureReserved(t));
   const activeAlerts = showAlerts ? getPatientAlerts(patient) : [];
+  const problems = patient.problems || [];
+  const unresolvedProblems = problems.filter(problem => !problem.resolved);
+  const resolvedProblems = problems.filter(problem => problem.resolved);
+  const medHoldNote = (patient.medHoldNote || '').trim();
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(patient.name);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -2755,6 +2763,8 @@ function PatientCard({
   const [reservationSetOpen, setReservationSetOpen] = useState(false);
   const [reservationAddOpen, setReservationAddOpen] = useState(false);
   const [reservationEditId, setReservationEditId] = useState(null);
+  const [problemsOpen, setProblemsOpen] = useState(false);
+  const [problemDraft, setProblemDraft] = useState('');
   useEffect(() => {
     if (!reservationsOpen) return;
     setReservationAddOpen(false);
@@ -2793,6 +2803,52 @@ function PatientCard({
       estimate: '5'
     }));
   };
+  const addProblemFromDialog = () => {
+    const label = problemDraft.trim();
+    if (!label || !onAddProblem) return;
+    onAddProblem(label);
+    setProblemDraft('');
+  };
+  const renderProblemRow = problem => React.createElement("div", {
+    key: problem.id,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 9,
+      minWidth: 0,
+      padding: '7px 8px',
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      background: 'var(--surface-2)',
+      opacity: problem.resolved ? .55 : 1
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: `check-circle${problem.resolved ? ' done' : ''}`,
+    onClick: () => onToggleProblem && onToggleProblem(problem.id),
+    title: problem.resolved ? '未解決に戻す' : '解決済みにする',
+    "aria-label": problem.resolved ? `${problem.label}を未解決に戻す` : `${problem.label}を解決済みにする`
+  }, problem.resolved && React.createElement(Check, {
+    size: 11,
+    color: "#fff"
+  })), React.createElement("span", {
+    style: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 13,
+      fontWeight: 700,
+      overflowWrap: 'anywhere',
+      textDecoration: problem.resolved ? 'line-through' : 'none'
+    }
+  }, problem.label), React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => onRemoveProblem && onRemoveProblem(problem.id),
+    style: {
+      flexShrink: 0,
+      color: '#DC2626'
+    }
+  }, "削除"));
   const sortedOpen = [...open].sort((a, b) => {
     if (a.scheduledTime && !b.scheduledTime) return -1;
     if (!a.scheduledTime && b.scheduledTime) return 1;
@@ -2944,12 +3000,125 @@ function PatientCard({
     }
   }, React.createElement(Plus, {
     size: 13
-  }), reservationAddOpen ? '\u30BF\u30B9\u30AF\u8FFD\u52A0\u3092\u305F\u305F\u3080' : '\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0')), reservationAddOpen && React.createElement(React.Fragment, null, React.createElement("div", {
+  }), reservationAddOpen ? '\u30BF\u30B9\u30AF\u8FFD\u52A0\u3092\u305F\u305F\u3080' : '\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0')), reservationAddOpen && React.createElement("div", {
     style: {
-      borderTop: '1px solid var(--border)',
-      paddingTop: 12,
       display: 'grid',
-      gap: 6
+      gap: 7,
+      marginTop: 10
+    }
+  }, React.createElement("div", {
+    style: {
+      background: 'var(--surface-2)',
+      borderRadius: 12,
+      padding: 14,
+      border: '1.5px solid var(--border)'
+    }
+  }, React.createElement("input", {
+    value: reservationDraft.title,
+    onChange: e => setReservationDraft(prev => ({
+      ...prev,
+      title: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') addReservedFromDialog();
+      if (e.key === 'Escape') setReservationsOpen(false);
+    },
+    placeholder: "\u30BF\u30B9\u30AF\u540D",
+    className: "inp",
+    style: {
+      width: '100%',
+      marginBottom: 10
+    }
+  }), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 5,
+      marginBottom: 10
+    }
+  }, TASK_TYPES.map(tt => React.createElement("button", {
+    key: tt.id,
+    type: "button",
+    onClick: () => setReservationDraft(prev => ({
+      ...prev,
+      type: tt.id
+    })),
+    className: "tag",
+    style: {
+      background: reservationDraft.type === tt.id ? tt.dot : 'var(--surface)',
+      color: reservationDraft.type === tt.id ? '#fff' : tt.dot,
+      border: `1.5px solid ${tt.dot}40`,
+      cursor: 'pointer',
+      fontSize: 11,
+      padding: '4px 10px',
+      transition: 'all .12s',
+      boxShadow: reservationDraft.type === tt.id ? `0 3px 10px ${tt.dot}40` : 'none'
+    }
+  }, tt.label))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 5,
+      alignItems: 'center'
+    }
+  }, ESTIMATES.map(e => React.createElement("button", {
+    key: e.id,
+    type: "button",
+    onClick: () => setReservationDraft(prev => ({
+      ...prev,
+      estimate: e.id
+    })),
+    className: "tag",
+    style: {
+      background: reservationDraft.estimate === e.id ? 'var(--accent)' : 'var(--surface)',
+      color: reservationDraft.estimate === e.id ? '#fff' : 'var(--text-2)',
+      border: '1.5px solid var(--border)',
+      cursor: 'pointer',
+      fontSize: 11,
+      padding: '4px 10px',
+      transition: 'all .12s',
+      boxShadow: reservationDraft.estimate === e.id ? '0 3px 10px rgba(108,62,248,.30)' : 'none'
+    }
+  }, e.label)), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginLeft: 'auto',
+      maxWidth: '100%'
+    }
+  }, React.createElement("input", {
+    type: "date",
+    value: reservationDraft.reservedDate || '',
+    onChange: e => setReservationDraft(prev => ({
+      ...prev,
+      reservedDate: e.target.value
+    })),
+    className: "inp",
+    style: {
+      width: 'auto',
+      minWidth: 0,
+      padding: '3px 8px',
+      fontSize: 12
+    }
+  }), React.createElement("button", {
+    className: "btn-dark",
+    onClick: addReservedFromDialog,
+    disabled: !reservationDraft.title.trim() || !reservationDraft.reservedDate,
+    style: {
+      padding: '7px 16px',
+      fontSize: 12,
+      opacity: !reservationDraft.title.trim() || !reservationDraft.reservedDate ? .45 : 1
+    }
+  }, "\u8FFD\u52A0")))), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 6,
+      padding: '7px 8px',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      background: 'var(--surface-2)'
     }
   }, React.createElement("div", {
     style: {
@@ -3011,12 +3180,7 @@ function PatientCard({
       boxShadow: 'none'
     },
     title: `${examQuickSelected.label}${action.label}\u3092\u30BF\u30B9\u30AF\u5185\u5BB9\u306B\u30BB\u30C3\u30C8`
-  }, "+ ", action.label)))), quickTasks && quickTasks.length > 0 && React.createElement("div", {
-    style: {
-      borderTop: '1px solid var(--border)',
-      paddingTop: 12
-    }
-  }, React.createElement("button", {
+  }, "+ ", action.label)))), quickTasks && quickTasks.length > 0 && React.createElement("div", null, React.createElement("button", {
     type: "button",
     className: "btn-sm",
     onClick: () => setReservationQuickOpen(v => !v),
@@ -3058,12 +3222,7 @@ function PatientCard({
       opacity: .55,
       fontSize: 10
     }
-  }, q.estimate, "\u5206"))))), templates && templates.length > 0 && React.createElement("div", {
-    style: {
-      borderTop: '1px solid var(--border)',
-      paddingTop: 12
-    }
-  }, React.createElement("button", {
+  }, q.estimate, "\u5206"))))), templates && templates.length > 0 && React.createElement("div", null, React.createElement("button", {
     type: "button",
     className: "btn-sm",
     onClick: () => setReservationSetOpen(v => !v),
@@ -3088,7 +3247,7 @@ function PatientCard({
       fontSize: 11,
       color: 'var(--text-3)'
     }
-  }, "\u4e0b\u306e\u6b04\u3067\u4e88\u7d04\u65e5\u3092\u9078\u3076\u3068\u3001\u30bb\u30c3\u30c8\u3092\u4e00\u62ec\u8ffd\u52a0\u3067\u304d\u307e\u3059"), React.createElement("div", {
+  }, "\u4e0a\u306e\u6b04\u3067\u4e88\u7d04\u65e5\u3092\u9078\u3076\u3068\u3001\u30bb\u30c3\u30c8\u3092\u4e00\u62ec\u8ffd\u52a0\u3067\u304d\u307e\u3059"), React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -3118,101 +3277,7 @@ function PatientCard({
       opacity: .5,
       fontSize: 10
     }
-  }, "(", (tpl.items || []).length, ")")))))), React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'minmax(8.5rem,auto) minmax(0,1fr) auto',
-      gap: 8,
-      alignItems: 'center',
-      borderTop: '1px solid var(--border)',
-      paddingTop: 12
-    }
-  }, React.createElement("input", {
-    type: "date",
-    value: reservationDraft.reservedDate || '',
-    onChange: e => setReservationDraft(prev => ({
-      ...prev,
-      reservedDate: e.target.value
-    })),
-    className: "inp",
-    style: {
-      minWidth: 0
-    }
-  }), React.createElement("input", {
-    value: reservationDraft.title,
-    onChange: e => setReservationDraft(prev => ({
-      ...prev,
-      title: e.target.value
-    })),
-    onKeyDown: e => {
-      if (e.key === 'Enter') addReservedFromDialog();
-      if (e.key === 'Escape') setReservationsOpen(false);
-    },
-    placeholder: "\u30BF\u30B9\u30AF\u540D",
-    className: "inp",
-    style: {
-      minWidth: 0
-    }
-  }), React.createElement("button", {
-    className: "btn-dark",
-    onClick: addReservedFromDialog,
-    disabled: !reservationDraft.title.trim() || !reservationDraft.reservedDate,
-    style: {
-      padding: '8px 14px',
-      fontSize: 12,
-      opacity: !reservationDraft.title.trim() || !reservationDraft.reservedDate ? .45 : 1
-    }
-  }, "\u8FFD\u52A0"), React.createElement("div", {
-    style: {
-      gridColumn: '1 / -1',
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 5
-    }
-  }, TASK_TYPES.map(tt => React.createElement("button", {
-    key: tt.id,
-    type: "button",
-    onClick: () => setReservationDraft(prev => ({
-      ...prev,
-      type: tt.id
-    })),
-    className: "tag",
-    style: {
-      background: reservationDraft.type === tt.id ? tt.dot : 'var(--surface)',
-      color: reservationDraft.type === tt.id ? '#fff' : tt.dot,
-      border: `1.5px solid ${tt.dot}40`,
-      cursor: 'pointer',
-      fontSize: 11,
-      padding: '4px 10px',
-      transition: 'all .12s',
-      boxShadow: reservationDraft.type === tt.id ? `0 3px 10px ${tt.dot}40` : 'none'
-    }
-  }, tt.label))), React.createElement("div", {
-    style: {
-      gridColumn: '1 / -1',
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 5
-    }
-  }, ESTIMATES.map(e => React.createElement("button", {
-    key: e.id,
-    type: "button",
-    onClick: () => setReservationDraft(prev => ({
-      ...prev,
-      estimate: e.id
-    })),
-    className: "tag",
-    style: {
-      background: reservationDraft.estimate === e.id ? 'var(--accent)' : 'var(--surface)',
-      color: reservationDraft.estimate === e.id ? '#fff' : 'var(--text-2)',
-      border: '1.5px solid var(--border)',
-      cursor: 'pointer',
-      fontSize: 11,
-      padding: '4px 10px',
-      transition: 'all .12s',
-      boxShadow: reservationDraft.estimate === e.id ? '0 3px 10px rgba(108,62,248,.30)' : 'none'
-    }
-  }, e.label))))), React.createElement("div", {
+  }, "(", (tpl.items || []).length, ")"))))))), React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'flex-end',
@@ -3223,6 +3288,90 @@ function PatientCard({
     onClick: () => setReservationsOpen(false)
   }, "\u9589\u3058\u308B"))));
   const reservationDialog = reservationDialogNode ? ReactDOM.createPortal(reservationDialogNode, document.body) : null;
+  const problemDialogNode = problemsOpen && React.createElement("div", {
+    className: "dialog-bg",
+    onClick: () => setProblemsOpen(false)
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 520
+    }
+  }, React.createElement("h3", {
+    style: {
+      marginTop: 0,
+      marginBottom: 12,
+      overflowWrap: 'anywhere'
+    }
+  }, "📋 ", patient.name, " のプロブレム"), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 7
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 800,
+      color: 'var(--text-3)'
+    }
+  }, "未解決 (", unresolvedProblems.length, ")"), unresolvedProblems.length > 0 ? unresolvedProblems.map(renderProblemRow) : React.createElement("p", {
+    style: {
+      margin: 0,
+      padding: '8px 0',
+      color: 'var(--text-3)',
+      fontSize: 12
+    }
+  }, "未解決の問題はありません"), resolvedProblems.length > 0 && React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      marginTop: 6,
+      fontSize: 11,
+      fontWeight: 800,
+      color: 'var(--text-3)'
+    }
+  }, "解決済み (", resolvedProblems.length, ")"), resolvedProblems.map(renderProblemRow))), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      gap: 7,
+      alignItems: 'center',
+      marginTop: 14,
+      paddingTop: 12,
+      borderTop: '1px solid var(--border)'
+    }
+  }, React.createElement("input", {
+    value: problemDraft,
+    onChange: e => setProblemDraft(e.target.value),
+    onKeyDown: e => {
+      if (e.key === 'Enter') addProblemFromDialog();
+      if (e.key === 'Escape') setProblemsOpen(false);
+    },
+    placeholder: "未解決の問題 (例: 肺炎、退院調整)",
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 12
+    }
+  }), React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: addProblemFromDialog,
+    disabled: !problemDraft.trim(),
+    style: {
+      padding: '8px 14px',
+      fontSize: 12,
+      opacity: problemDraft.trim() ? 1 : .45
+    }
+  }, "追加")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      marginTop: 14
+    }
+  }, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setProblemsOpen(false)
+  }, "閉じる"))));
+  const problemDialog = problemDialogNode ? ReactDOM.createPortal(problemDialogNode, document.body) : null;
   return React.createElement("div", {
     className: `card ${pri.cls}`,
     style: {
@@ -3323,24 +3472,44 @@ function PatientCard({
       marginLeft: 'auto',
       flexShrink: 0
     }
-  }, activeAlerts.length > 0 && React.createElement("div", {
+  }, (activeAlerts.length > 0 || unresolvedProblems.length > 0) && React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
       gap: 2,
       flex: '0 0 auto',
-      maxWidth: 52,
+      maxWidth: 'min(14em, 44vw)',
       overflow: 'hidden'
     },
-    title: activeAlerts.map(alert => alert.label).join(' / ')
-  }, activeAlerts.map(alert => React.createElement("span", {
-    key: alert.id,
+    title: [...activeAlerts.map(alert => alert.id === 'medHold' && medHoldNote ? `${alert.label}: ${medHoldNote}` : alert.label), ...unresolvedProblems.length > 0 ? [`未解決: ${unresolvedProblems.map(problem => problem.label).join(' / ')}`] : []].join(' / ')
+  }, unresolvedProblems.length > 0 && React.createElement("span", {
     style: {
+      flexShrink: 0,
+      fontSize: 10,
+      fontWeight: 900,
+      lineHeight: 1,
+      color: '#B45309'
+    }
+  }, "📋", unresolvedProblems.length), activeAlerts.map(alert => React.createElement(React.Fragment, {
+    key: alert.id
+  }, React.createElement("span", {
+    style: {
+      flexShrink: 0,
       fontSize: 12,
       lineHeight: 1,
       filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.12))'
     }
-  }, alert.icon))), React.createElement("span", {
+  }, alert.icon), alert.id === 'medHold' && medHoldNote && React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontWeight: 800,
+      color: '#B91C1C',
+      maxWidth: '9em',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    }
+  }, medHoldNote)))), React.createElement("span", {
     style: {
       fontSize: 11,
       fontWeight: 700,
@@ -3419,7 +3588,7 @@ function PatientCard({
       gap: 8,
       marginTop: 12,
       marginBottom: 10,
-      padding: '10px 12px',
+      padding: '8px 10px',
       borderRadius: 12,
       background: 'var(--surface-2)',
       border: '1.5px solid var(--border)'
@@ -3430,7 +3599,7 @@ function PatientCard({
       display: 'flex',
       alignItems: 'center',
       flexWrap: 'wrap',
-      gap: 6
+      gap: 5
     }
   }, React.createElement("span", {
     style: {
@@ -3458,7 +3627,7 @@ function PatientCard({
       display: 'flex',
       alignItems: 'center',
       flexWrap: 'wrap',
-      gap: 6
+      gap: 5
     }
   }, React.createElement("span", {
     style: {
@@ -3514,7 +3683,31 @@ function PatientCard({
         boxShadow: active ? '0 2px 8px rgba(220,38,38,.12)' : 'none'
       }
     }, alert.icon);
-  })))), React.createElement("textarea", {
+  })), React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setProblemsOpen(true),
+    style: {
+      border: '1px solid var(--border)',
+      borderColor: unresolvedProblems.length > 0 ? 'rgba(245,158,11,.5)' : 'var(--border)',
+      borderRadius: 99,
+      padding: '4px 10px',
+      fontSize: 11,
+      color: unresolvedProblems.length > 0 ? '#B45309' : 'var(--text-3)',
+      fontWeight: 800,
+      whiteSpace: 'nowrap'
+    }
+  }, "📋 プロブレム (", unresolvedProblems.length, ")")), showAlerts && patient.alerts?.medHold && React.createElement("input", {
+    value: patient.medHoldNote || '',
+    onChange: e => onMedHoldNoteChange && onMedHoldNoteChange(e.target.value),
+    onClick: e => e.stopPropagation(),
+    placeholder: "中断中の薬 (例: DOAC、メトホルミン)",
+    className: "inp",
+    style: {
+      width: '100%',
+      fontSize: 12
+    }
+  })), React.createElement("textarea", {
     value: patient.memo || '',
     onChange: e => onMemoChange(e.target.value),
     onClick: e => e.stopPropagation(),
@@ -3793,7 +3986,7 @@ function PatientCard({
     }
   }, React.createElement(Plus, {
     size: 13
-  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), reservationDialog, adding && React.createElement("div", {
+  }), "\u30BF\u30B9\u30AF\u3092\u8FFD\u52A0"), reservationDialog, problemDialog, adding && React.createElement("div", {
     style: {
       display: 'grid',
       gap: 7,
@@ -10804,6 +10997,8 @@ function PatientTriage() {
       ward: newPatientWard,
       memo: '',
       alerts: {},
+      medHoldNote: '',
+      problems: [],
       tasks: [],
       createdAt: Date.now()
     };
@@ -10902,6 +11097,43 @@ function PatientTriage() {
       return { ...p, alerts };
     }));
   };
+  const addPatientProblem = (patientId, label) => {
+    const trimmedLabel = (label || '').trim();
+    if (!trimmedLabel) return;
+    rememberUndo('プロブレム追加');
+    setActivePatients(prev => prev.map(patient => patient.id === patientId ? {
+      ...patient,
+      problems: [...(patient.problems || []), {
+        id: uid(),
+        label: trimmedLabel,
+        resolved: false,
+        createdAt: Date.now(),
+        resolvedAt: null
+      }]
+    } : patient));
+  };
+  const togglePatientProblem = (patientId, problemId) => {
+    rememberUndo('プロブレム更新');
+    setActivePatients(prev => prev.map(patient => patient.id === patientId ? {
+      ...patient,
+      problems: (patient.problems || []).map(problem => problem.id === problemId ? {
+        ...problem,
+        resolved: !problem.resolved,
+        resolvedAt: problem.resolved ? null : Date.now()
+      } : problem)
+    } : patient));
+  };
+  const removePatientProblem = (patientId, problemId) => {
+    rememberUndo('プロブレム削除');
+    setActivePatients(prev => prev.map(patient => patient.id === patientId ? {
+      ...patient,
+      problems: (patient.problems || []).filter(problem => problem.id !== problemId)
+    } : patient));
+  };
+  const setPatientMedHoldNote = (id, medHoldNote) => setActivePatients(prev => prev.map(patient => patient.id === id ? {
+    ...patient,
+    medHoldNote
+  } : patient));
   const renamePatient = (id, name) => {
     const t = name.trim();
     if (t) setActivePatients(prev => prev.map(p => p.id === id ? {
@@ -13311,12 +13543,20 @@ function PatientTriage() {
     patient: p,
     expanded: activeExpandedPatients[p.id],
     onToggle: () => toggleExpand(p.id),
-    onRemove: () => {
-      if (confirm(`「${p.name}」を終了にしますか？`)) removePatient(p.id);
+    onRemove: async () => {
+      if (await appConfirm({
+        title: '患者を終了',
+        message: `「${p.name}」を終了にしますか？`,
+        confirmText: '終了にする'
+      })) removePatient(p.id);
     },
     onSetPriority: pri => setPatientPriority(p.id, pri),
     onSetWard: ward => setPatientWard(p.id, ward),
     onToggleAlert: alertId => togglePatientAlert(p.id, alertId),
+    onAddProblem: label => addPatientProblem(p.id, label),
+    onToggleProblem: problemId => togglePatientProblem(p.id, problemId),
+    onRemoveProblem: problemId => removePatientProblem(p.id, problemId),
+    onMedHoldNoteChange: value => setPatientMedHoldNote(p.id, value),
     showAlerts: !isDailyMode,
     checkMode: !isDailyMode ? checkMode : '',
     dimmed: !!checkMode && !isDailyMode && isCheckedToday(p, checkMode),
