@@ -2765,6 +2765,7 @@ function PatientCard({
   const [reservationEditId, setReservationEditId] = useState(null);
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [problemDraft, setProblemDraft] = useState('');
+  const [medHoldEditing, setMedHoldEditing] = useState(false);
   useEffect(() => {
     if (!reservationsOpen) return;
     setReservationAddOpen(false);
@@ -3664,7 +3665,10 @@ function PatientCard({
     return React.createElement("button", {
       key: alert.id,
       type: "button",
-      onClick: () => onToggleAlert && onToggleAlert(alert.id),
+      onClick: () => {
+        if (alert.id === 'medHold' && !active && !medHoldNote) setMedHoldEditing(true);
+        if (onToggleAlert) onToggleAlert(alert.id);
+      },
       title: alert.label,
       "aria-pressed": active,
       style: {
@@ -3697,17 +3701,69 @@ function PatientCard({
       fontWeight: 800,
       whiteSpace: 'nowrap'
     }
-  }, "📋 プロブレム (", unresolvedProblems.length, ")")), showAlerts && patient.alerts?.medHold && React.createElement("input", {
+  }, "📋 プロブレム (", unresolvedProblems.length, ")")), showAlerts && patient.alerts?.medHold && (medHoldEditing ? React.createElement("input", {
+    autoFocus: true,
     value: patient.medHoldNote || '',
     onChange: e => onMedHoldNoteChange && onMedHoldNoteChange(e.target.value),
     onClick: e => e.stopPropagation(),
+    onBlur: () => setMedHoldEditing(false),
+    onKeyDown: e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        setMedHoldEditing(false);
+      }
+      if (e.key === 'Escape') setMedHoldEditing(false);
+    },
     placeholder: "中断中の薬 (例: DOAC、メトホルミン)",
     className: "inp",
     style: {
       width: '100%',
       fontSize: 12
     }
-  })), React.createElement("textarea", {
+  }) : React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: e => {
+      e.stopPropagation();
+      setMedHoldEditing(true);
+    },
+    title: medHoldNote ? `中断薬: ${medHoldNote}（タップで編集）` : '中断薬の名前を入力',
+    style: {
+      justifySelf: 'start',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      minWidth: 0,
+      maxWidth: '100%',
+      padding: '4px 9px',
+      border: '1px solid rgba(220,38,38,.28)',
+      borderRadius: 99,
+      background: 'rgba(254,226,226,.55)',
+      color: '#B91C1C',
+      fontSize: 10,
+      fontWeight: 800
+    }
+  }, React.createElement("span", {
+    style: {
+      flexShrink: 0,
+      color: 'var(--text-3)'
+    }
+  }, "中断薬:"), React.createElement("span", {
+    style: {
+      minWidth: 0,
+      maxWidth: 'min(18em, 50vw)',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      color: medHoldNote ? '#B91C1C' : 'var(--text-3)'
+    }
+  }, medHoldNote || "薬剤名を入力"), React.createElement("span", {
+    "aria-hidden": true,
+    style: {
+      flexShrink: 0,
+      opacity: .55
+    }
+  }, "✎")))), React.createElement("textarea", {
     value: patient.memo || '',
     onChange: e => onMemoChange(e.target.value),
     onClick: e => e.stopPropagation(),
