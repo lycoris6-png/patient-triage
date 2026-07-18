@@ -897,11 +897,11 @@ const startPointerReorder = (event, {
   if (event.button !== undefined && event.button !== 0) return;
   event.preventDefault();
   event.stopPropagation();
-  const selector = `[data-reorder-group="${group}"]`;
   let targetId = draggedId;
   const updateTarget = pointerEvent => {
     if (pointerEvent.cancelable) pointerEvent.preventDefault();
-    const target = document.elementFromPoint(pointerEvent.clientX, pointerEvent.clientY)?.closest(selector);
+    let target = document.elementFromPoint(pointerEvent.clientX, pointerEvent.clientY);
+    while (target && target.getAttribute?.('data-reorder-group') !== group) target = target.parentElement;
     const nextTargetId = target?.getAttribute('data-reorder-id');
     if (!nextTargetId || nextTargetId === targetId) return;
     targetId = nextTargetId;
@@ -5936,9 +5936,11 @@ function TemplatesSection({
   onMoveTemplate,
   onAddItem,
   onUpdateItem,
-  onRemoveItem
+  onRemoveItem,
+  onMoveItem
 }) {
   const [dragState, setDragState] = React.useState(null);
+  const [itemDragState, setItemDragState] = React.useState(null);
   const inpStyle = {
     background: 'var(--surface)',
     border: '1.5px solid var(--border)',
@@ -6048,11 +6050,15 @@ function TemplatesSection({
     }
   }, tpl.items.map((item, idx) => React.createElement("div", {
     key: idx,
+    "data-reorder-group": `patient-template-item-${tpl.id}`,
+    "data-reorder-id": String(idx),
     style: {
-      display: 'flex',
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1fr) minmax(60px,.45fr) auto auto',
       gap: 5,
       alignItems: 'center',
-      flexWrap: 'wrap'
+      outline: itemDragState?.templateId === tpl.id && itemDragState.targetId === String(idx) ? '2px solid var(--accent)' : 'none',
+      opacity: itemDragState?.templateId === tpl.id && itemDragState.draggedId === String(idx) ? .65 : 1
     }
   }, React.createElement("input", {
     value: item.title,
@@ -6062,8 +6068,8 @@ function TemplatesSection({
     placeholder: "\u30BF\u30B9\u30AF\u540D",
     style: {
       ...inpStyle,
-      flex: '1 1 140px',
-      minWidth: 0
+      minWidth: 0,
+      gridColumn: '1 / 3'
     }
   }), React.createElement("select", {
     value: item.type || 'other',
@@ -6072,7 +6078,9 @@ function TemplatesSection({
     }),
     style: {
       ...inpStyle,
-      flexShrink: 0
+      minWidth: 0,
+      gridColumn: 1,
+      gridRow: 2
     }
   }, TASK_TYPES.map(tt => React.createElement("option", {
     key: tt.id,
@@ -6084,7 +6092,9 @@ function TemplatesSection({
     }),
     style: {
       ...inpStyle,
-      flexShrink: 0
+      minWidth: 0,
+      gridColumn: 2,
+      gridRow: 2
     }
   }, ESTIMATES.map(es => React.createElement("option", {
     key: es.id,
@@ -6097,12 +6107,43 @@ function TemplatesSection({
       cursor: 'pointer',
       padding: 3,
       opacity: .5,
-      lineHeight: 1
+      lineHeight: 1,
+      gridColumn: 3,
+      gridRow: '1 / 3'
     }
   }, React.createElement(X, {
     size: 13,
     color: "#EF4444"
-  }))))), React.createElement("button", {
+  })), React.createElement("button", {
+    className: "btn-sm",
+    onPointerDown: event => startPointerReorder(event, {
+      group: `patient-template-item-${tpl.id}`,
+      draggedId: String(idx),
+      onTargetChange: targetId => setItemDragState({ templateId: tpl.id, draggedId: String(idx), targetId }),
+      onDrop: targetId => {
+        setItemDragState(null);
+        if (targetId !== String(idx)) onMoveItem(tpl.id, idx, Number(targetId));
+      },
+      onCancel: () => setItemDragState(null)
+    }),
+    onKeyDown: event => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      onMoveItem(tpl.id, idx, idx + (event.key === 'ArrowUp' ? -1 : 1));
+    },
+    title: "ドラッグして並べ替え",
+    "aria-label": `${item.title || '項目'}をドラッグして並べ替え`,
+    style: {
+      padding: '3px 7px',
+      cursor: itemDragState?.templateId === tpl.id && itemDragState.draggedId === String(idx) ? 'grabbing' : 'grab',
+      touchAction: 'none',
+      userSelect: 'none',
+      fontSize: 16,
+      lineHeight: 1,
+      gridColumn: 4,
+      gridRow: '1 / 3'
+    }
+  }, "⠿")))), React.createElement("button", {
     className: "btn-sm",
     onClick: () => onAddItem(tpl.id),
     style: {
@@ -6444,9 +6485,11 @@ function DailyTaskSetManager({
   onMoveSet,
   onAddItem,
   onUpdateItem,
-  onRemoveItem
+  onRemoveItem,
+  onMoveItem
 }) {
   const [dragState, setDragState] = React.useState(null);
+  const [itemDragState, setItemDragState] = React.useState(null);
   const inpStyle = {
     background: 'var(--surface)',
     border: '1.5px solid var(--border)',
@@ -6530,11 +6573,15 @@ function DailyTaskSetManager({
     style: { display: 'grid', gap: 5 }
   }, (set.items || []).map((item, idx) => React.createElement("div", {
     key: idx,
+    "data-reorder-group": `daily-task-set-item-${set.id}`,
+    "data-reorder-id": String(idx),
     style: {
       display: 'grid',
-      gridTemplateColumns: 'minmax(0,1.4fr) minmax(74px,.65fr) minmax(64px,.5fr) minmax(64px,.5fr) auto',
+      gridTemplateColumns: 'minmax(0,1.2fr) minmax(58px,.65fr) minmax(54px,.5fr) minmax(54px,.5fr) auto auto',
       gap: 5,
-      alignItems: 'center'
+      alignItems: 'center',
+      outline: itemDragState?.setId === set.id && itemDragState.targetId === String(idx) ? '2px solid var(--accent)' : 'none',
+      opacity: itemDragState?.setId === set.id && itemDragState.draggedId === String(idx) ? .65 : 1
     }
   }, React.createElement("input", {
     value: item.title || '',
@@ -6554,10 +6601,51 @@ function DailyTaskSetManager({
     onChange: e => onUpdateItem(set.id, idx, { dailyPriority: e.target.value }),
     style: inpStyle
   }, DAILY_TASK_PRIORITIES.map(p => React.createElement("option", { key: p.id, value: p.id }, p.label))), React.createElement("button", {
-    className: "btn-sm",
     onClick: () => onRemoveItem(set.id, idx),
-    style: { opacity: .65 }
-  }, "削除"))), React.createElement("button", {
+    "aria-label": `${item.title || '項目'}を削除`,
+    style: {
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      padding: 3,
+      opacity: .5,
+      lineHeight: 1,
+      gridColumn: 5,
+      gridRow: 1
+    }
+  }, React.createElement(X, {
+    size: 13,
+    color: "#EF4444"
+  })), React.createElement("button", {
+    className: "btn-sm",
+    onPointerDown: event => startPointerReorder(event, {
+      group: `daily-task-set-item-${set.id}`,
+      draggedId: String(idx),
+      onTargetChange: targetId => setItemDragState({ setId: set.id, draggedId: String(idx), targetId }),
+      onDrop: targetId => {
+        setItemDragState(null);
+        if (targetId !== String(idx)) onMoveItem(set.id, idx, Number(targetId));
+      },
+      onCancel: () => setItemDragState(null)
+    }),
+    onKeyDown: event => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      onMoveItem(set.id, idx, idx + (event.key === 'ArrowUp' ? -1 : 1));
+    },
+    title: "ドラッグして並べ替え",
+    "aria-label": `${item.title || '項目'}をドラッグして並べ替え`,
+    style: {
+      padding: '3px 7px',
+      cursor: itemDragState?.setId === set.id && itemDragState.draggedId === String(idx) ? 'grabbing' : 'grab',
+      touchAction: 'none',
+      userSelect: 'none',
+      fontSize: 16,
+      lineHeight: 1,
+      gridColumn: 6,
+      gridRow: 1
+    }
+  }, "⠿"))), React.createElement("button", {
     className: "btn-sm",
     onClick: () => onAddItem(set.id),
     style: { marginTop: 7, color: 'var(--accent)' }
@@ -12563,6 +12651,13 @@ function PatientTriage() {
       return moveArrayItem(prev, fromIndex, toIndex);
     });
   };
+  const moveTemplateItem = (id, fromIndex, toIndex) => {
+    rememberUndo('ぺいとりセット項目並べ替え');
+    setTemplates(prev => prev.map(template => template.id === id ? {
+      ...template,
+      items: moveArrayItem(template.items || [], fromIndex, toIndex)
+    } : template));
+  };
   const addQuickPreset = mode => {
     rememberUndo('よく使う項目追加');
     const item = mode === 'daily' ? {
@@ -12641,6 +12736,13 @@ function PatientTriage() {
       const toIndex = typeof target === 'number' ? fromIndex + target : prev.findIndex(set => set.id === target);
       return moveArrayItem(prev, fromIndex, toIndex);
     });
+  };
+  const moveDailyTaskSetItem = (id, fromIndex, toIndex) => {
+    rememberUndo('でいとりセット項目並べ替え');
+    setDailyTaskSets(prev => prev.map(set => set.id === id ? {
+      ...set,
+      items: moveArrayItem(set.items || [], fromIndex, toIndex)
+    } : set));
   };
   const addRoutinePreset = () => {
     rememberUndo('固定項目追加');
@@ -13698,7 +13800,8 @@ function PatientTriage() {
     onMoveSet: moveDailyTaskSet,
     onAddItem: addDailyTaskSetItem,
     onUpdateItem: updateDailyTaskSetItem,
-    onRemoveItem: removeDailyTaskSetItem
+    onRemoveItem: removeDailyTaskSetItem,
+    onMoveItem: moveDailyTaskSetItem
   })), React.createElement(RoutinePresetSection, {
     presets: routinePresets,
     open: routineOpen,
@@ -14281,7 +14384,8 @@ function PatientTriage() {
     onMoveTemplate: moveTemplate,
     onAddItem: addTemplateItem,
     onUpdateItem: updateTemplateItem,
-    onRemoveItem: removeTemplateItem
+    onRemoveItem: removeTemplateItem,
+    onMoveItem: moveTemplateItem
   })), React.createElement("div", {
     style: {
       marginTop: 10
