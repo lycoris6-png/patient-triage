@@ -6050,17 +6050,15 @@ function TemplatesSection({
     }
   }, tpl.items.map((item, idx) => React.createElement("div", {
     key: idx,
+    className: "tpl-item-row",
     "data-reorder-group": `patient-template-item-${tpl.id}`,
     "data-reorder-id": String(idx),
     style: {
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0,1fr) minmax(60px,.45fr) auto auto',
-      gap: 5,
-      alignItems: 'center',
       outline: itemDragState?.templateId === tpl.id && itemDragState.targetId === String(idx) ? '2px solid var(--accent)' : 'none',
       opacity: itemDragState?.templateId === tpl.id && itemDragState.draggedId === String(idx) ? .65 : 1
     }
   }, React.createElement("input", {
+    className: "tpl-item-title",
     value: item.title,
     onChange: e => onUpdateItem(tpl.id, idx, {
       title: e.target.value
@@ -6068,38 +6066,36 @@ function TemplatesSection({
     placeholder: "\u30BF\u30B9\u30AF\u540D",
     style: {
       ...inpStyle,
-      minWidth: 0,
-      gridColumn: '1 / 3'
+      minWidth: 0
     }
   }), React.createElement("select", {
+    className: "tpl-item-type",
     value: item.type || 'other',
     onChange: e => onUpdateItem(tpl.id, idx, {
       type: e.target.value
     }),
     style: {
       ...inpStyle,
-      minWidth: 0,
-      gridColumn: 1,
-      gridRow: 2
+      minWidth: 0
     }
   }, TASK_TYPES.map(tt => React.createElement("option", {
     key: tt.id,
     value: tt.id
   }, tt.label))), React.createElement("select", {
+    className: "tpl-item-estimate",
     value: item.estimate || '5',
     onChange: e => onUpdateItem(tpl.id, idx, {
       estimate: e.target.value
     }),
     style: {
       ...inpStyle,
-      minWidth: 0,
-      gridColumn: 2,
-      gridRow: 2
+      minWidth: 0
     }
   }, ESTIMATES.map(es => React.createElement("option", {
     key: es.id,
     value: es.id
   }, es.label))), React.createElement("button", {
+    className: "tpl-item-remove",
     onClick: () => onRemoveItem(tpl.id, idx),
     style: {
       background: 'none',
@@ -6107,15 +6103,13 @@ function TemplatesSection({
       cursor: 'pointer',
       padding: 3,
       opacity: .5,
-      lineHeight: 1,
-      gridColumn: 3,
-      gridRow: '1 / 3'
+      lineHeight: 1
     }
   }, React.createElement(X, {
     size: 13,
     color: "#EF4444"
   })), React.createElement("button", {
-    className: "btn-sm",
+    className: "btn-sm tpl-item-handle",
     onPointerDown: event => startPointerReorder(event, {
       group: `patient-template-item-${tpl.id}`,
       draggedId: String(idx),
@@ -6139,9 +6133,7 @@ function TemplatesSection({
       touchAction: 'none',
       userSelect: 'none',
       fontSize: 16,
-      lineHeight: 1,
-      gridColumn: 4,
-      gridRow: '1 / 3'
+      lineHeight: 1
     }
   }, "⠿")))), React.createElement("button", {
     className: "btn-sm",
@@ -6164,6 +6156,37 @@ function TemplatesSection({
     size: 13
   }), "\u65B0\u898F\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8"));
 }
+const SCHEDULED_REMINDER_OPTIONS = Object.freeze([{
+  value: -1,
+  label: '通知なし'
+}, {
+  value: 0,
+  label: '時刻ちょうど'
+}, {
+  value: 5,
+  label: '5分前'
+}, {
+  value: 10,
+  label: '10分前'
+}, {
+  value: 15,
+  label: '15分前'
+}, {
+  value: 30,
+  label: '30分前'
+}, {
+  value: 60,
+  label: '1時間前'
+}]);
+const scheduledReminderMinutes = value => SCHEDULED_REMINDER_OPTIONS.some(option => option.value === Number(value)) ? Number(value) : 10;
+const nativeScheduledEventPayload = events => (events || []).map(event => ({
+  id: String(event.id || ''),
+  title: String(event.title || '').trim(),
+  scheduledDate: String(event.scheduledDate || ''),
+  scheduledTime: String(event.scheduledTime || ''),
+  reminderMinutes: scheduledReminderMinutes(event.reminderMinutes),
+  status: event.status === 'done' ? 'done' : 'todo'
+}));
 function ScheduledEventSection({
   events,
   open,
@@ -6174,6 +6197,8 @@ function ScheduledEventSection({
   onUpdate,
   onRemove,
   onClearDone,
+  nativeNotificationsAvailable,
+  onRequestNativeNotifications,
   now
 }) {
   const activeEvents = events.filter(e => e.status !== 'done');
@@ -6207,9 +6232,11 @@ function ScheduledEventSection({
     const meta = statusMeta(event);
     return React.createElement("li", {
       key: event.id,
+      className: "scheduled-event-row",
       style: {
         display: 'flex',
         alignItems: 'center',
+        flexWrap: 'wrap',
         gap: 8,
         padding: '8px 0',
         borderTop: '1px solid var(--border)'
@@ -6232,7 +6259,7 @@ function ScheduledEventSection({
       onChange: e => onUpdate(event.id, {
         title: e.target.value
       }),
-      className: "inp",
+      className: "inp scheduled-event-row-title",
       style: {
         flex: 1,
         minWidth: 0,
@@ -6241,7 +6268,24 @@ function ScheduledEventSection({
         fontWeight: 650
       },
       "aria-label": "予定名"
-    }), React.createElement("span", {
+    }), React.createElement("select", {
+      value: scheduledReminderMinutes(event.reminderMinutes),
+      onChange: e => onUpdate(event.id, {
+        reminderMinutes: Number(e.target.value)
+      }),
+      className: "inp scheduled-event-reminder-select",
+      style: {
+        width: 102,
+        flexShrink: 0,
+        padding: '6px 7px',
+        fontSize: 11,
+        fontWeight: 750
+      },
+      "aria-label": `${event.title || '予定'}の通知タイミング`
+    }, SCHEDULED_REMINDER_OPTIONS.map(option => React.createElement("option", {
+      key: option.value,
+      value: option.value
+    }, option.label))), React.createElement("span", {
       className: "tag",
       style: {
         background: meta.bg,
@@ -6296,14 +6340,36 @@ function ScheduledEventSection({
     size: 14
   }), React.createElement(Clock, {
     size: 14
-  }), "予定", activeEvents.length ? ` (${activeEvents.length})` : ''), doneEvents.length > 0 && React.createElement("button", {
+  }), "予定", activeEvents.length ? ` (${activeEvents.length})` : ''), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 7,
+      flexWrap: 'wrap'
+    }
+  }, nativeNotificationsAvailable && React.createElement("button", {
+    className: "btn-sm",
+    onClick: onRequestNativeNotifications,
+    title: "Androidの通知許可を確認し、予定通知を予約します"
+  }, "🔔 通知許可"), doneEvents.length > 0 && React.createElement("button", {
     className: "btn-sm",
     onClick: onClearDone
-  }, "済みを片づける")), React.createElement(React.Fragment, null, React.createElement("div", {
+  }, "済みを片づける"))), React.createElement(React.Fragment, null, nativeNotificationsAvailable && React.createElement("p", {
+    style: {
+      margin: '10px 0 0',
+      padding: '8px 10px',
+      borderRadius: 9,
+      background: 'var(--surface-2)',
+      color: 'var(--text-2)',
+      fontSize: 11,
+      lineHeight: 1.5,
+      overflowWrap: 'anywhere'
+    }
+  }, "Android通知では予定名が通知欄・ロック画面に表示されます。患者情報は予定名に入れないでください。"), React.createElement("div", {
     className: "scheduled-event-form",
     style: {
       display: 'grid',
-      gridTemplateColumns: 'minmax(128px, 150px) minmax(86px, 110px) minmax(0, 1fr) auto',
+      gridTemplateColumns: 'minmax(128px, 150px) minmax(86px, 110px) minmax(92px, 110px) minmax(0, 1fr) auto',
       gap: 8,
       marginTop: 12
     }
@@ -6325,7 +6391,18 @@ function ScheduledEventSection({
     })),
     className: "inp scheduled-time-input",
     "aria-label": "予定時刻"
-  }), React.createElement("input", {
+  }), React.createElement("select", {
+    value: scheduledReminderMinutes(form.reminderMinutes),
+    onChange: e => setForm(prev => ({
+      ...prev,
+      reminderMinutes: Number(e.target.value)
+    })),
+    className: "inp scheduled-reminder-input",
+    "aria-label": "通知タイミング"
+  }, SCHEDULED_REMINDER_OPTIONS.map(option => React.createElement("option", {
+    key: option.value,
+    value: option.value
+  }, option.label))), React.createElement("input", {
     value: form.title,
     onChange: e => setForm(prev => ({
       ...prev,
@@ -6573,34 +6650,36 @@ function DailyTaskSetManager({
     style: { display: 'grid', gap: 5 }
   }, (set.items || []).map((item, idx) => React.createElement("div", {
     key: idx,
+    className: "daily-task-set-item-row",
     "data-reorder-group": `daily-task-set-item-${set.id}`,
     "data-reorder-id": String(idx),
     style: {
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0,1.2fr) minmax(58px,.65fr) minmax(54px,.5fr) minmax(54px,.5fr) auto auto',
-      gap: 5,
-      alignItems: 'center',
       outline: itemDragState?.setId === set.id && itemDragState.targetId === String(idx) ? '2px solid var(--accent)' : 'none',
       opacity: itemDragState?.setId === set.id && itemDragState.draggedId === String(idx) ? .65 : 1
     }
   }, React.createElement("input", {
+    className: "daily-task-set-item-title",
     value: item.title || '',
     onChange: e => onUpdateItem(set.id, idx, { title: e.target.value }),
     placeholder: "タスク名",
     style: { ...inpStyle, minWidth: 0 }
   }), React.createElement("select", {
+    className: "daily-task-set-item-type",
     value: item.type || 'home',
     onChange: e => onUpdateItem(set.id, idx, { type: e.target.value }),
     style: inpStyle
   }, DAILY_TASK_TYPES.map(t => React.createElement("option", { key: t.id, value: t.id }, t.label))), React.createElement("select", {
+    className: "daily-task-set-item-estimate",
     value: item.estimate || '5',
     onChange: e => onUpdateItem(set.id, idx, { estimate: e.target.value }),
     style: inpStyle
   }, ESTIMATES.map(e => React.createElement("option", { key: e.id, value: e.id }, e.label))), React.createElement("select", {
+    className: "daily-task-set-item-priority",
     value: item.dailyPriority || 'normal',
     onChange: e => onUpdateItem(set.id, idx, { dailyPriority: e.target.value }),
     style: inpStyle
   }, DAILY_TASK_PRIORITIES.map(p => React.createElement("option", { key: p.id, value: p.id }, p.label))), React.createElement("button", {
+    className: "daily-task-set-item-remove",
     onClick: () => onRemoveItem(set.id, idx),
     "aria-label": `${item.title || '項目'}を削除`,
     style: {
@@ -6609,15 +6688,13 @@ function DailyTaskSetManager({
       cursor: 'pointer',
       padding: 3,
       opacity: .5,
-      lineHeight: 1,
-      gridColumn: 5,
-      gridRow: 1
+      lineHeight: 1
     }
   }, React.createElement(X, {
     size: 13,
     color: "#EF4444"
   })), React.createElement("button", {
-    className: "btn-sm",
+    className: "btn-sm daily-task-set-item-handle",
     onPointerDown: event => startPointerReorder(event, {
       group: `daily-task-set-item-${set.id}`,
       draggedId: String(idx),
@@ -6641,9 +6718,7 @@ function DailyTaskSetManager({
       touchAction: 'none',
       userSelect: 'none',
       fontSize: 16,
-      lineHeight: 1,
-      gridColumn: 6,
-      gridRow: 1
+      lineHeight: 1
     }
   }, "⠿"))), React.createElement("button", {
     className: "btn-sm",
@@ -7771,7 +7846,14 @@ function DataToolsPanel({
       fontSize: 11,
       padding: '7px 14px'
     }
-  }, "🎭 セリフ編集…")), React.createElement(SettingsSubSection, {
+  }, "🎭 セリフ編集…"), window.Capacitor?.isNativePlatform?.() && React.createElement("button", {
+    className: "btn-ghost",
+    onClick: () => window.dispatchEvent(new CustomEvent('patient-triage-open-hourly-settings')),
+    style: {
+      fontSize: 11,
+      padding: '7px 14px'
+    }
+  }, "🔔 時報通知（Android）…")), React.createElement(SettingsSubSection, {
     icon: "💾",
     title: "バックアップ",
     summary: "書き出し / 復元",
@@ -10637,8 +10719,10 @@ function PatientTriage() {
   const [scheduledForm, setScheduledForm] = useState({
     title: '',
     scheduledDate: todayStr(),
-    scheduledTime: ''
+    scheduledTime: '',
+    reminderMinutes: 10
   });
+  const nativeNotificationsAvailable = !!window.Capacitor?.isNativePlatform?.();
   const [workModeEnabled, setWorkModeEnabled] = useState(false);
   const [workItems, setWorkItems] = useState([]);
   const [toast, setToast] = useState(null);
@@ -10980,6 +11064,41 @@ function PatientTriage() {
     }
     setLoaded(true);
   }, []);
+  useEffect(() => {
+    if (!nativeNotificationsAvailable) return;
+    const onNavigation = event => {
+      if (event.detail?.source !== 'scheduled_event_notification') return;
+      setAppMode('patient');
+      setFocusMode(false);
+      setWorkModeEnabled(false);
+      setScheduledOpen(true);
+    };
+    const onStatus = event => {
+      const detail = event.detail || {};
+      if (!detail.requested && !detail.error) return;
+      const message = detail.error ? `予定通知を予約できませんでした: ${detail.error}` : `${detail.count || 0}件の予定通知を予約しました`;
+      setToast(message);
+      setTimeout(() => setToast(null), 3500);
+    };
+    window.addEventListener('patient-triage-native-navigation', onNavigation);
+    window.addEventListener('patient-triage-scheduled-events-status', onStatus);
+    return () => {
+      window.removeEventListener('patient-triage-native-navigation', onNavigation);
+      window.removeEventListener('patient-triage-scheduled-events-status', onStatus);
+    };
+  }, [nativeNotificationsAvailable]);
+  useEffect(() => {
+    if (!loaded || !nativeNotificationsAvailable) return;
+    const dispatchSync = () => window.dispatchEvent(new CustomEvent('patient-triage-scheduled-events-sync', {
+      detail: {
+        events: nativeScheduledEventPayload(scheduledEvents),
+        requestPermission: false
+      }
+    }));
+    window.addEventListener('patient-triage-native-ready', dispatchSync);
+    dispatchSync();
+    return () => window.removeEventListener('patient-triage-native-ready', dispatchSync);
+  }, [loaded, scheduledEvents, nativeNotificationsAvailable]);
   const saveFailWarnedRef = React.useRef(0);
   useEffect(() => {
     if (!loaded) return;
@@ -11699,6 +11818,18 @@ function PatientTriage() {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   };
+  const requestScheduledNotificationPermission = () => {
+    if (!nativeNotificationsAvailable) {
+      showToast('予定の端末通知はAndroid版で利用できます');
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('patient-triage-scheduled-events-sync', {
+      detail: {
+        events: nativeScheduledEventPayload(scheduledEvents),
+        requestPermission: true
+      }
+    }));
+  };
   const aiCoachReady = () => {
     const cfg = normalizeGasConfig(gasConfig);
     return !!(cfg.url && cfg.secret && cfg.aiCoach?.enabled);
@@ -12127,6 +12258,7 @@ function PatientTriage() {
       title,
       scheduledDate,
       scheduledTime,
+      reminderMinutes: scheduledReminderMinutes(scheduledForm.reminderMinutes),
       status: 'todo',
       createdAt: Date.now(),
       scheduledEvent: true
@@ -12134,7 +12266,8 @@ function PatientTriage() {
     setScheduledForm({
       title: '',
       scheduledDate,
-      scheduledTime
+      scheduledTime,
+      reminderMinutes: scheduledReminderMinutes(scheduledForm.reminderMinutes)
     });
     setScheduledOpen(true);
   };
@@ -13613,6 +13746,8 @@ function PatientTriage() {
     onUpdate: updateScheduledEvent,
     onRemove: removeScheduledEvent,
     onClearDone: clearDoneScheduledEvents,
+    nativeNotificationsAvailable: nativeNotificationsAvailable,
+    onRequestNativeNotifications: requestScheduledNotificationPermission,
     now: now
   }), focusMode && React.createElement("div", {
     className: "focus-card",
