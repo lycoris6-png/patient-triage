@@ -727,6 +727,7 @@ const formatBytes = bytes => {
 };
 const AI_COACH_START_STORAGE_KEY = 'patient-triage-ai-coach-start-date';
 const ROUTINE_PROMPT_STORAGE_KEY = 'patient-triage-routine-prompt-date';
+const LUNCH_NUDGE_STORAGE_KEY = 'patient-triage-lunch-nudge-date';
 const THEMES = [{
   id: 'lavender',
   label: 'ラベンダー',
@@ -1218,6 +1219,7 @@ function CheckPanel({
   }, meta.hint));
 }
 const estimateMinutes = task => Number.parseInt(task?.estimate, 10) || 0;
+const isLunchWindow = now => now.getHours() === 12 || now.getHours() === 13;
 const formatDuration = minutes => {
   if (minutes <= 0) return '0\u5206';
   const h = Math.floor(minutes / 60);
@@ -11899,6 +11901,44 @@ function PatientTriage() {
     const t = setTimeout(() => requestAiCoachLine('start'), 2300);
     return () => clearTimeout(t);
   }, [loaded, gasConfig, isDailyMode]);
+  useEffect(() => {
+    if (!loaded || isDailyMode || isWorkMode || !isLunchWindow(new Date())) return;
+    const stamp = todayStr();
+    if (loadLocal(LUNCH_NUDGE_STORAGE_KEY) === stamp) return;
+    const lunchTask = [...generalTasks].filter(task => {
+      const minutes = estimateMinutes(task);
+      return task.status === 'todo' && minutes >= 1 && minutes < 10;
+    }).sort((a, b) => {
+      if (!!a.dueDate !== !!b.dueDate) return a.dueDate ? -1 : 1;
+      if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      const estimateDiff = estimateMinutes(a) - estimateMinutes(b);
+      if (estimateDiff) return estimateDiff;
+      return (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0);
+    })[0];
+    if (!lunchTask) return;
+    const t = setTimeout(() => {
+      const displayStamp = todayStr();
+      if (!isLunchWindow(new Date()) || loadLocal(LUNCH_NUDGE_STORAGE_KEY) === displayStamp) return;
+      setSuggestion({
+        task: {
+          ...lunchTask,
+          general: true,
+          patientName: 'すきまタスク',
+          patientPriority: 'low'
+        },
+        fromGeneral: true
+      });
+      saveLocal(LUNCH_NUDGE_STORAGE_KEY, displayStamp);
+      window.dispatchEvent(new CustomEvent('chibi-coach', {
+        detail: {
+          kind: 'suggest',
+          text: `お昼休みに1件どうですか？「${lunchTask.title}」（${estimateMinutes(lunchTask)}分）`,
+          pose: 'clipboard'
+        }
+      }));
+    }, 2800);
+    return () => clearTimeout(t);
+  }, [loaded, isDailyMode, isWorkMode]);
   const mergeEndDayEntries = entries => setEndDayLogs(prev => {
     let next = [...(prev || [])];
     entries.forEach(entry => {
