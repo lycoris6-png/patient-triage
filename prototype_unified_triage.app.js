@@ -11907,7 +11907,7 @@ function PatientTriage() {
     if (loadLocal(LUNCH_NUDGE_STORAGE_KEY) === stamp) return;
     const lunchTask = [...generalTasks].filter(task => {
       const minutes = estimateMinutes(task);
-      return task.status === 'todo' && minutes >= 1 && minutes < 10;
+      return task.status === 'todo' && minutes >= 1 && minutes <= 10;
     }).sort((a, b) => {
       if (!!a.dueDate !== !!b.dueDate) return a.dueDate ? -1 : 1;
       if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);

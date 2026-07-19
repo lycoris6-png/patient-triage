@@ -23,7 +23,7 @@ AGENTS.md の規約に従うこと。対象は `prototype_unified_triage.app.js`
 
 - `generalTasks`（ぺいとりのすきまタスク。`dailyGeneralTasks` ではない）のうち
   - `status === 'todo'`
-  - `estimateMinutes(task)` が **1以上10未満**（既存ヘルパー `estimateMinutes` を使う。ESTIMATES の '2' と '5' が該当）
+  - `estimateMinutes(task)` が **1以上10以下**（既存ヘルパー `estimateMinutes` を使う。ESTIMATES の '2'・'5'・'10' が該当。当初は10分未満だったが2026-07-19に10分以下へ変更）
 - 並び順: `dueDate` があるものを日付昇順で優先 → 同順位は `estimateMinutes` 昇順 → `createdAt` 昇順。先頭の1件。
 - 該当が0件なら何もしない（フラグも消費しない）。
 
