@@ -5721,6 +5721,233 @@ function GasConfigDialog({
     }
   }, "\u4FDD\u5B58"))));
 }
+function RemainingTaskDialog({
+  patientTasks,
+  generalTasks,
+  scheduledEvents,
+  isDailyMode,
+  typeMeta,
+  generalTypeMeta,
+  estMeta,
+  onClose
+}) {
+  const tasks = [...patientTasks, ...generalTasks];
+  const totalMinutes = tasks.reduce((sum, task) => sum + estimateMinutes(task), 0);
+  const upcomingEvents = [...scheduledEvents].filter(event => event.status !== 'done').sort((a, b) => (a.scheduledDate || '').localeCompare(b.scheduledDate || '') || (a.scheduledTime || '').localeCompare(b.scheduledTime || ''));
+  const statusLabel = task => task.status === 'doing' ? '進行中' : task.status === 'stuck' ? '詰まり' : '';
+  const renderTaskRow = (task, general = false) => {
+    const meta = general ? generalTypeMeta(task.type) : typeMeta(task.type);
+    const state = statusLabel(task);
+    return React.createElement("li", {
+      key: `${general ? 'general' : task.patientId || 'patient'}-${task.id}`,
+      style: {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        alignItems: 'center',
+        gap: '4px 10px',
+        padding: '9px 10px',
+        borderRadius: 10,
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)'
+      }
+    }, React.createElement("div", {
+      style: {
+        minWidth: 0
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 800,
+        color: 'var(--text)',
+        lineHeight: 1.45,
+        overflowWrap: 'anywhere'
+      }
+    }, task.title || '名称なし'), React.createElement("div", {
+      style: {
+        marginTop: 2,
+        color: 'var(--text-3)',
+        fontSize: 10,
+        fontWeight: 700,
+        lineHeight: 1.4,
+        overflowWrap: 'anywhere'
+      }
+    }, general ? isDailyMode ? '生活タスク' : 'すきまタスク' : task.patientName || '患者タスク')), React.createElement("div", {
+      style: {
+        display: 'flex',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: 5,
+        flexWrap: 'wrap',
+        maxWidth: 150
+      }
+    }, state && React.createElement("span", {
+      className: "tag",
+      style: {
+        background: state === '詰まり' ? 'rgba(239,68,68,.12)' : 'rgba(108,62,248,.12)',
+        color: state === '詰まり' ? 'var(--stuck-fg)' : 'var(--accent)',
+        fontSize: 9
+      }
+    }, state), task.scheduledTime && React.createElement("span", {
+      className: "tag",
+      style: {
+        fontSize: 9
+      }
+    }, task.scheduledTime), React.createElement("span", {
+      style: {
+        color: meta.dot,
+        fontSize: 10,
+        fontWeight: 800,
+        whiteSpace: 'nowrap'
+      }
+    }, meta.label), React.createElement("span", {
+      style: {
+        color: 'var(--text-3)',
+        fontSize: 10,
+        fontWeight: 700,
+        whiteSpace: 'nowrap'
+      }
+    }, estMeta(task.estimate).label)));
+  };
+  const renderEventRow = event => React.createElement("li", {
+    key: `event-${event.id}`,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'auto minmax(0, 1fr)',
+      alignItems: 'center',
+      gap: 9,
+      padding: '9px 10px',
+      borderRadius: 10,
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border)'
+    }
+  }, React.createElement("span", {
+    className: "time-tag",
+    style: {
+      justifyContent: 'center',
+      minWidth: 56,
+      fontSize: 10
+    }
+  }, event.scheduledTime || '--:--'), React.createElement("div", {
+    style: {
+      minWidth: 0
+    }
+  }, React.createElement("div", {
+    style: {
+      color: 'var(--text)',
+      fontSize: 13,
+      fontWeight: 800,
+      lineHeight: 1.45,
+      overflowWrap: 'anywhere'
+    }
+  }, event.title || '名称なし'), event.scheduledDate && React.createElement("div", {
+    style: {
+      marginTop: 2,
+      color: 'var(--text-3)',
+      fontSize: 10,
+      fontWeight: 700
+    }
+  }, dateLabel(event.scheduledDate))));
+  const renderSection = (title, values, renderRow) => values.length ? React.createElement("section", {
+    style: {
+      marginTop: 16
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      marginBottom: 7
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: 'var(--text-2)',
+      fontSize: 12
+    }
+  }, title), React.createElement("span", {
+    className: "tag",
+    style: {
+      fontSize: 9
+    }
+  }, values.length, "件")), React.createElement("ul", {
+    style: {
+      display: 'grid',
+      gap: 6,
+      listStyle: 'none',
+      margin: 0,
+      padding: 0
+    }
+  }, values.map(renderRow))) : null;
+  return React.createElement("div", {
+    className: "dialog-bg",
+    onClick: onClose
+  }, React.createElement("div", {
+    className: "dialog",
+    onClick: event => event.stopPropagation(),
+    style: {
+      maxWidth: 560
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 12
+    }
+  }, React.createElement("div", null, React.createElement("h3", {
+    style: {
+      margin: '0 0 4px',
+      color: 'var(--text)',
+      fontFamily: 'var(--font-serif)',
+      fontSize: 18,
+      fontWeight: 800
+    }
+  }, "現在残っているタスク"), React.createElement("p", {
+    style: {
+      margin: 0,
+      color: 'var(--text-3)',
+      fontSize: 11,
+      lineHeight: 1.5
+    }
+  }, "保留中・未来予約のタスクは除外しています。")), React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: onClose,
+    "aria-label": "閉じる",
+    style: {
+      flexShrink: 0,
+      padding: '5px 9px'
+    }
+  }, "閉じる")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginTop: 12
+    }
+  }, React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(108,62,248,.12)',
+      color: 'var(--accent)'
+    }
+  }, "実行可能 ", tasks.length, "件"), React.createElement("span", {
+    className: "tag"
+  }, "見積 ", formatDuration(totalMinutes)), upcomingEvents.length > 0 && React.createElement("span", {
+    className: "tag"
+  }, "予定 ", upcomingEvents.length, "件")), tasks.length === 0 && upcomingEvents.length === 0 && React.createElement("div", {
+    style: {
+      marginTop: 18,
+      padding: '24px 14px',
+      borderRadius: 12,
+      border: '1.5px dashed var(--border-2)',
+      color: 'var(--done)',
+      textAlign: 'center',
+      fontSize: 13,
+      fontWeight: 800
+    }
+  }, "現在残っているタスクはありません。"), renderSection(isDailyMode ? 'カテゴリ内のタスク' : '患者タスク', patientTasks, task => renderTaskRow(task, false)), renderSection(isDailyMode ? '生活タスク' : 'すきまタスク', generalTasks, task => renderTaskRow(task, true)), renderSection('予定', upcomingEvents, renderEventRow)));
+}
 function StuckDialog({
   form,
   setForm,
@@ -10728,6 +10955,7 @@ function PatientTriage() {
   const [workModeEnabled, setWorkModeEnabled] = useState(false);
   const [workItems, setWorkItems] = useState([]);
   const [toast, setToast] = useState(null);
+  const [remainingTaskDialogOpen, setRemainingTaskDialogOpen] = useState(false);
   const [endDayConfirm, setEndDayConfirm] = useState(false);
   const [endDayCelebrate, setEndDayCelebrate] = useState(null);
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
@@ -13771,7 +13999,12 @@ function PatientTriage() {
     onClick: showFinishEstimate,
     "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",
     title: "\u6B8B\u30BF\u30B9\u30AF\u306E\u898B\u7A4D\u3082\u308A\u5408\u8A08\u3068\u6682\u5B9A\u7D42\u4E86\u6642\u523B"
-  }, "⏰️")), !isWorkMode && stuckTasks.length > 0 && React.createElement("button", {
+  }, "⏰️"), React.createElement("button", {
+    className: "btn-ghost dock-icon",
+    onClick: () => setRemainingTaskDialogOpen(true),
+    "aria-label": "現在残っているタスクを一覧表示",
+    title: `現在残っているタスクを一覧表示（実行可能 ${remainingPatientTasks.length + remainingGeneralTasks.length}件）`
+  }, "📋")), !isWorkMode && stuckTasks.length > 0 && React.createElement("button", {
     className: "btn-rose dock-alert",
     onClick: suggestFromStuck
   }, React.createElement(AlertCircle, {
@@ -14779,6 +15012,15 @@ function PatientTriage() {
       showToast('GAS設定を保存しました');
     },
     onCancel: () => setGasDialog(false)
+  }), remainingTaskDialogOpen && React.createElement(RemainingTaskDialog, {
+    patientTasks: remainingPatientTasks,
+    generalTasks: remainingGeneralTasks,
+    scheduledEvents: scheduledEvents,
+    isDailyMode: isDailyMode,
+    typeMeta: typeMeta,
+    generalTypeMeta: generalTypeMeta,
+    estMeta: estMeta,
+    onClose: () => setRemainingTaskDialogOpen(false)
   }), addPatientDialog && React.createElement("div", {
     className: "dialog-bg",
     onClick: () => setAddPatientDialog(false)
