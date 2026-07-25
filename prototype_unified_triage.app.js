@@ -5729,6 +5729,9 @@ function RemainingTaskDialog({
   typeMeta,
   generalTypeMeta,
   estMeta,
+  onCompletePatient,
+  onCompleteGeneral,
+  onCompleteEvent,
   onClose
 }) {
   const tasks = [...patientTasks, ...generalTasks];
@@ -5778,7 +5781,7 @@ function RemainingTaskDialog({
         alignItems: 'center',
         gap: 5,
         flexWrap: 'wrap',
-        maxWidth: 150
+        maxWidth: 200
       }
     }, state && React.createElement("span", {
       className: "tag",
@@ -5806,13 +5809,24 @@ function RemainingTaskDialog({
         fontWeight: 700,
         whiteSpace: 'nowrap'
       }
-    }, estMeta(task.estimate).label)));
+    }, estMeta(task.estimate).label), React.createElement("button", {
+      type: "button",
+      className: "btn-green",
+      onClick: () => general ? onCompleteGeneral(task.id) : onCompletePatient(task.patientId, task.id),
+      "aria-label": `${task.title || 'タスク'}を完了にする`,
+      style: {
+        padding: '4px 8px',
+        fontSize: 10,
+        flexShrink: 0,
+        whiteSpace: 'nowrap'
+      }
+    }, "✓ 完了")));
   };
   const renderEventRow = event => React.createElement("li", {
     key: `event-${event.id}`,
     style: {
       display: 'grid',
-      gridTemplateColumns: 'auto minmax(0, 1fr)',
+      gridTemplateColumns: 'auto minmax(0, 1fr) auto',
       alignItems: 'center',
       gap: 9,
       padding: '9px 10px',
@@ -5846,7 +5860,18 @@ function RemainingTaskDialog({
       fontSize: 10,
       fontWeight: 700
     }
-  }, dateLabel(event.scheduledDate))));
+  }, dateLabel(event.scheduledDate))), React.createElement("button", {
+    type: "button",
+    className: "btn-green",
+    onClick: () => onCompleteEvent(event.id),
+    "aria-label": `${event.title || '予定'}を完了にする`,
+    style: {
+      padding: '4px 8px',
+      fontSize: 10,
+      flexShrink: 0,
+      whiteSpace: 'nowrap'
+    }
+  }, "✓ 完了"));
   const renderSection = (title, values, renderRow) => values.length ? React.createElement("section", {
     style: {
       marginTop: 16
@@ -15020,6 +15045,12 @@ function PatientTriage() {
     typeMeta: typeMeta,
     generalTypeMeta: generalTypeMeta,
     estMeta: estMeta,
+    onCompletePatient: completeTask,
+    onCompleteGeneral: completeGeneralTask,
+    onCompleteEvent: eventId => updateScheduledEvent(eventId, {
+      status: 'done',
+      completedAt: Date.now()
+    }),
     onClose: () => setRemainingTaskDialogOpen(false)
   }), addPatientDialog && React.createElement("div", {
     className: "dialog-bg",
