@@ -1307,7 +1307,7 @@ body.rpg-mode .chibi-coach-bubble {
 <div id="root"></div>
 <script src="dialogue.js?v=20260702-tally-minutes-per-item"></script>
 <script src="dialogue-packs.js?v=20260704-seasonal-packs"></script>
-<script src="prototype_unified_triage.app.js?v=20260702-tally-minutes-per-item"></script>
+<script src="prototype_unified_triage.app.js?v=20260731-est-art-choice"></script>
 
 
 
@@ -1357,10 +1357,20 @@ body.rpg-mode .chibi-coach-bubble {
   };
   const charMeta = who => (D.characters || {})[who] || {};
   const fmt = (tpl, meta) => String(tpl || '').replace(/\{(\w+)\}/g, (m, k) => meta && meta[k] != null ? String(meta[k]) : '');
-  const cast = {
-    mentor: {
+  const mentorArtVariants = {
+    classic: {
       alt: '白い服の落ち着いたエスト',
       img: { neutral: 'blue_white_girl_01_neutral.png', thumb: 'blue_white_girl_02_thumbsup.png', cheer: 'blue_white_girl_03_cheer.png', thinking: 'blue_white_girl_04_thinking.png', hurry: 'blue_white_girl_05_hurrying.png', pointing: 'blue_white_girl_05_hurrying.png', clipboard: 'blue_white_girl_06_clipboard.png', done: 'blue_white_girl_07_completed.png', sleep: 'blue_white_girl_08_sleeping.png' }
+    },
+    variant: {
+      alt: '茶色い髪と赤い服の色違いエスト',
+      img: { neutral: 'est_variant_01_neutral.png', thumb: 'est_variant_02_thumbsup.png', cheer: 'est_variant_03_cheer.png', thinking: 'est_variant_04_thinking.png', hurry: 'est_variant_05_hurrying.png', pointing: 'est_variant_05_hurrying.png', clipboard: 'est_variant_06_clipboard.png', done: 'est_variant_07_completed.png', sleep: 'est_variant_08_sleeping.png' }
+    }
+  };
+  const cast = {
+    mentor: {
+      ...mentorArtVariants.classic,
+      artVariants: mentorArtVariants
     },
     spark: {
       alt: '赤い髪の元気なナディア',
@@ -1384,14 +1394,24 @@ body.rpg-mode .chibi-coach-bubble {
   const DEFAULT_CAST_ENABLED = Object.freeze({ mentor: true, spark: true, butler: true, yushka: true, adjutant: true });
   function normalizeEnabledCast(value){
     const next = { ...DEFAULT_CAST_ENABLED, ...(value && typeof value === 'object' ? value : {}) };
+    next.mentorArt = next.mentorArt === 'variant' ? 'variant' : 'classic';
     const hasEnabled = Object.keys(DEFAULT_CAST_ENABLED).some(id => next[id] !== false);
-    return hasEnabled ? next : { ...DEFAULT_CAST_ENABLED };
+    return hasEnabled ? next : { ...DEFAULT_CAST_ENABLED, mentorArt: next.mentorArt };
   }
   function readEnabledCast(){
     try { return normalizeEnabledCast(JSON.parse(localStorage.getItem(COACH_CAST_STORAGE_KEY) || 'null')); }
     catch { return { ...DEFAULT_CAST_ENABLED }; }
   }
   let enabledCast = readEnabledCast();
+  const actorView = who => {
+    const actor = cast[who];
+    if (!actor || who !== 'mentor') return actor;
+    return actor.artVariants[enabledCast.mentorArt] || actor.artVariants.classic;
+  };
+  const actorImageFile = (who, pose) => {
+    const actor = actorView(who);
+    return actor && (actor.img[pose] || actor.img.neutral);
+  };
   const isActorEnabled = who => !!cast[who] && enabledCast[who] !== false;
   const enabledEntries = entries => {
     const valid = (entries || []).filter(([who]) => cast[who]);
@@ -1501,12 +1521,12 @@ body.rpg-mode .chibi-coach-bubble {
     return fmt(tpl, { text: r.text || '', when });
   }
   const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['adjutant','thumb'], ['spark','certificate']];
-  let el, img, partnerImg, textEl, hideTimer, lastShown = 0, lastAutoStartAt = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false;
+  let el, img, partnerImg, textEl, hideTimer, lastShown = 0, lastAutoStartAt = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false, currentCoachEntries = [];
   const headerCastClasses = ['', 'header-cast-b', 'header-cast-c'];
   const headerCastSets = [
-    [['yushka','yushka_09_smug.png'], ['spark','red_antler_girl_03_cheer.png'], ['adjutant','purple_adjutant_01_neutral.png'], ['butler','bat_wing_girl_01_neutral.png'], ['mentor','blue_white_girl_06_clipboard.png']],
-    [['mentor','blue_white_girl_07_completed.png'], ['yushka','yushka_06_laptop.png'], ['adjutant','purple_adjutant_06_clipboard.png'], ['spark','red_antler_girl_02_thumbsup.png']],
-    [['butler','bat_wing_girl_02_thumbsup.png'], ['spark','red_antler_girl_06_clipboard.png'], ['adjutant','purple_adjutant_04_thinking.png'], ['yushka','yushka_03_cheer.png'], ['mentor','blue_white_girl_01_neutral.png']]
+    [['yushka','smug'], ['spark','cheer'], ['adjutant','neutral'], ['butler','neutral'], ['mentor','clipboard']],
+    [['mentor','done'], ['yushka','clipboard'], ['adjutant','clipboard'], ['spark','thumb']],
+    [['butler','thumb'], ['spark','clipboard'], ['adjutant','thinking'], ['yushka','cheer'], ['mentor','neutral']]
   ];
   let headerCastStyle = null, headerLastSelectionKey = '';
   const headerCastMedia = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;
@@ -1542,7 +1562,7 @@ body.rpg-mode .chibi-coach-bubble {
       ? ['right 4px bottom 12px', 'right 82px bottom 13px']
       : ['right 18px bottom -8px', 'right 128px bottom -6px', 'right 238px bottom -7px', 'right 348px bottom -7px'];
     const sizes = selected.map((_, i) => mobile ? (i === 0 ? 'auto 96px' : 'auto 94px') : 'auto 124px');
-    style.textContent = '.app-header::before{background-image:' + selected.map(([, file]) => cssUrl(file)).join(',') + '!important;background-size:' + sizes.join(',') + '!important;background-position:' + positions.slice(0, selected.length).join(',') + '!important;}';
+    style.textContent = '.app-header::before{background-image:' + selected.map(([who, pose]) => cssUrl(actorImageFile(who, pose))).join(',') + '!important;background-size:' + sizes.join(',') + '!important;background-position:' + positions.slice(0, selected.length).join(',') + '!important;}';
   }
   if (headerCastMedia?.addEventListener) headerCastMedia.addEventListener('change', updateHeaderCastImages);
   function rotateHeaderCast(force){
@@ -1615,12 +1635,13 @@ body.rpg-mode .chibi-coach-bubble {
     const primary = valid[0];
     const secondary = valid[1];
     if (!primary) return;
-    const primaryActor = cast[primary.actor];
+    currentCoachEntries = valid.slice(0, 2).map(entry => ({ ...entry }));
+    const primaryActor = actorView(primary.actor);
     img.src = CHIBI_BASE + (primaryActor.img[primary.pose] || primaryActor.img.neutral);
     img.alt = primaryActor.alt;
     el.dataset.actor = primary.actor;
     if (secondary) {
-      const secondaryActor = cast[secondary.actor];
+      const secondaryActor = actorView(secondary.actor);
       partnerImg.src = CHIBI_BASE + (secondaryActor.img[secondary.pose] || secondaryActor.img.neutral);
       partnerImg.alt = secondaryActor.alt;
       partnerImg.hidden = false;
@@ -1730,11 +1751,13 @@ body.rpg-mode .chibi-coach-bubble {
   window.addEventListener('triage-coach-cast-change', event => {
     enabledCast = normalizeEnabledCast(event.detail?.cast);
     updateHeaderCastImages();
+    if (el && currentCoachEntries.length) renderCoachImages(currentCoachEntries);
   });
   window.addEventListener('storage', event => {
     if (event.key !== COACH_CAST_STORAGE_KEY) return;
     enabledCast = readEnabledCast();
     updateHeaderCastImages();
+    if (el && currentCoachEntries.length) renderCoachImages(currentCoachEntries);
   });
 
   window.addEventListener('load', () => {
