@@ -705,12 +705,20 @@ const COACH_CAST_OPTIONS = [
   { id: 'yushka', label: 'ユシュカ' },
   { id: 'adjutant', label: 'ナジーン' }
 ];
-const DEFAULT_COACH_CAST = Object.freeze(COACH_CAST_OPTIONS.reduce((acc, item) => {
-  acc[item.id] = true;
-  return acc;
-}, {}));
+const COACH_MENTOR_ART_OPTIONS = [
+  { id: 'classic', label: '既存エスト', preview: 'blue_white_girl_01_neutral.png' },
+  { id: 'variant', label: '色違いエスト', preview: 'est_variant_01_neutral.png' }
+];
+const DEFAULT_COACH_CAST = Object.freeze({
+  ...COACH_CAST_OPTIONS.reduce((acc, item) => {
+    acc[item.id] = true;
+    return acc;
+  }, {}),
+  mentorArt: 'classic'
+});
 function normalizeCoachCast(value) {
   const next = { ...DEFAULT_COACH_CAST, ...(value && typeof value === 'object' ? value : {}) };
+  next.mentorArt = next.mentorArt === 'variant' ? 'variant' : 'classic';
   const hasEnabled = COACH_CAST_OPTIONS.some(item => next[item.id] !== false);
   return hasEnabled ? next : { ...DEFAULT_COACH_CAST };
 }
@@ -7890,6 +7898,7 @@ function DataToolsPanel({
   ntfySettings,
   coachCast,
   onToggleCast,
+  onMentorArtChange,
   onOpenGasDialog,
   onAiTest,
   onNtfyTest,
@@ -8093,7 +8102,74 @@ function DataToolsPanel({
       margin: 0,
       accentColor: 'var(--accent)'
     }
-  }), c.label))), React.createElement("button", {
+  }), c.label))), React.createElement("div", {
+    style: {
+      width: '100%',
+      display: 'grid',
+      gap: 6,
+      marginTop: 2
+    }
+  }, React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 800
+    }
+  }, "エストの見た目"), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+      gap: 7,
+      maxWidth: 320
+    }
+  }, COACH_MENTOR_ART_OPTIONS.map(option => {
+    const selected = coachCast.mentorArt === option.id;
+    return React.createElement("label", {
+      key: option.id,
+      style: {
+        minWidth: 0,
+        display: 'grid',
+        gridTemplateColumns: '44px minmax(0, 1fr)',
+        alignItems: 'center',
+        gap: 7,
+        padding: '5px 8px 5px 5px',
+        borderRadius: 10,
+        border: selected ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+        background: selected ? 'rgba(108,62,248,.10)' : 'var(--surface)',
+        color: selected ? 'var(--accent)' : 'var(--text-2)',
+        cursor: 'pointer',
+        fontSize: 11,
+        fontWeight: 800
+      }
+    }, React.createElement("input", {
+      type: "radio",
+      name: "coach-mentor-art",
+      value: option.id,
+      checked: selected,
+      onChange: () => onMentorArtChange(option.id),
+      style: {
+        position: 'absolute',
+        opacity: 0,
+        pointerEvents: 'none'
+      }
+    }), React.createElement("img", {
+      src: `chibi_split_pngs/${option.preview}`,
+      alt: "",
+      width: 44,
+      height: 56,
+      style: {
+        width: 44,
+        height: 56,
+        objectFit: 'contain'
+      }
+    }), React.createElement("span", {
+      style: {
+        minWidth: 0,
+        overflowWrap: 'anywhere',
+        lineHeight: 1.35
+      }
+    }, option.label));
+  }))), React.createElement("button", {
     className: "btn-ghost",
     onClick: () => window.open('./dialogue-editor.html', '_blank'),
     style: {
@@ -12160,7 +12236,7 @@ function PatientTriage() {
     if (loadLocal(LUNCH_NUDGE_STORAGE_KEY) === stamp) return;
     const lunchTask = [...generalTasks].filter(task => {
       const minutes = estimateMinutes(task);
-      return task.status === 'todo' && minutes >= 1 && minutes <= 10;
+      return task.status === 'todo' && !task.closer && minutes >= 1 && minutes <= 10;
     }).sort((a, b) => {
       if (!!a.dueDate !== !!b.dueDate) return a.dueDate ? -1 : 1;
       if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
@@ -14491,6 +14567,10 @@ function PatientTriage() {
     onToggleCast: (id, checked) => setCoachCast(prev => normalizeCoachCast({
       ...prev,
       [id]: checked
+    })),
+    onMentorArtChange: mentorArt => setCoachCast(prev => normalizeCoachCast({
+      ...prev,
+      mentorArt
     })),
     onOpenGasDialog: () => setGasDialog(true),
     onAiTest: async () => {
