@@ -569,6 +569,15 @@ const daysUntilDateStr = dateStr => {
   if (Number.isNaN(target)) return null;
   return Math.round((target - today) / (24 * 60 * 60 * 1000));
 };
+const hospitalDayForDate = dateStr => {
+  const [year, month, day] = String(dateStr || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const now = new Date();
+  const admission = Date.UTC(year, month - 1, day);
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const elapsed = Math.floor((today - admission) / (24 * 60 * 60 * 1000));
+  return elapsed >= 0 ? elapsed + 1 : null;
+};
 const DEFAULT_TEMPLATES = [{
   id: 'tpl-admission',
   name: '入院時セット',
@@ -2759,12 +2768,15 @@ function PatientCard({
   onRemove,
   onSetPriority,
   onSetWard,
+  onAdmissionDateChange,
+  onTogglePreDischargeDone,
   onToggleAlert,
   onAddProblem,
   onToggleProblem,
   onRemoveProblem,
   onMedHoldNoteChange,
   showAlerts = true,
+  showPatientMeta = true,
   checkMode = '',
   dimmed = false,
   onToggleChecked,
@@ -2811,6 +2823,7 @@ function PatientCard({
   const unresolvedProblems = problems.filter(problem => !problem.resolved);
   const resolvedProblems = problems.filter(problem => problem.resolved);
   const medHoldNote = (patient.medHoldNote || '').trim();
+  const hospitalDay = hospitalDayForDate(patient.admissionDate);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState(patient.name);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -3531,7 +3544,35 @@ function PatientCard({
       marginLeft: 'auto',
       flexShrink: 0
     }
-  }, (activeAlerts.length > 0 || unresolvedProblems.length > 0) && React.createElement("div", {
+  }, showPatientMeta && hospitalDay && React.createElement("span", {
+    title: `入院日 ${formatDateShort(patient.admissionDate)}`,
+    style: {
+      flexShrink: 0,
+      padding: '2px 6px',
+      borderRadius: 99,
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border)',
+      color: 'var(--text-3)',
+      fontSize: 9,
+      fontWeight: 700,
+      lineHeight: 1.2,
+      whiteSpace: 'nowrap'
+    }
+  }, `入院${hospitalDay}日目`), showPatientMeta && patient.preDischargeDone && React.createElement("span", {
+    title: "退院前手続き済",
+    style: {
+      flexShrink: 0,
+      padding: '2px 6px',
+      borderRadius: 99,
+      background: 'rgba(13,148,136,.10)',
+      border: '1px solid rgba(13,148,136,.30)',
+      color: '#0F766E',
+      fontSize: 9,
+      fontWeight: 900,
+      lineHeight: 1.2,
+      whiteSpace: 'nowrap'
+    }
+  }, "退済"), (activeAlerts.length > 0 || unresolvedProblems.length > 0) && React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -3683,10 +3724,10 @@ function PatientCard({
     }
   }, p.label))), React.createElement("div", {
     style: {
-      display: 'flex',
+      display: 'grid',
+      gridTemplateColumns: '42px 116px minmax(0, 1fr)',
       alignItems: 'center',
-      flexWrap: 'wrap',
-      gap: 5
+      gap: 6
     }
   }, React.createElement("span", {
     style: {
@@ -3701,8 +3742,8 @@ function PatientCard({
     title: "\u75C5\u68DF",
     className: "inp",
     style: {
-      width: 'auto',
-      minWidth: 104,
+      width: '100%',
+      minWidth: 0,
       padding: '5px 8px',
       fontSize: 12,
       fontWeight: 800,
@@ -3711,7 +3752,51 @@ function PatientCard({
   }, WARDS.map(w => React.createElement("option", {
     key: w.id || 'none',
     value: w.id
-  }, w.label))), showAlerts && React.createElement("div", {
+  }, w.label))), showPatientMeta && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '42px 116px minmax(0, 1fr)',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 700,
+      minWidth: 42
+    }
+  }, "入院"), React.createElement("input", {
+    type: "date",
+    value: patient.admissionDate || '',
+    onChange: e => onAdmissionDateChange && onAdmissionDateChange(e.target.value),
+    title: "入院日",
+    className: "inp",
+    style: {
+      width: '100%',
+      minWidth: 0,
+      padding: '5px 8px',
+      fontSize: 11,
+      fontWeight: 700,
+      borderRadius: 9
+    }
+  }), React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => onTogglePreDischargeDone && onTogglePreDischargeDone(),
+    "aria-pressed": !!patient.preDischargeDone,
+    title: patient.preDischargeDone ? '退院前手続きを未完了に戻す' : '退院前手続きを完了にする',
+    style: {
+      justifySelf: 'end',
+      padding: '4px 9px',
+      border: patient.preDischargeDone ? '1px solid rgba(13,148,136,.35)' : '1px solid var(--border)',
+      background: patient.preDischargeDone ? 'rgba(13,148,136,.10)' : 'var(--surface)',
+      color: patient.preDischargeDone ? '#0F766E' : 'var(--text-3)',
+      fontSize: 10,
+      fontWeight: 800,
+      whiteSpace: 'nowrap'
+    }
+  }, patient.preDischargeDone ? '✓ 退院前手続き済' : '退院前手続き')), showAlerts && React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -10946,6 +11031,7 @@ function PatientTriage() {
   const [newPatientName, setNewPatientName] = useState('');
   const [newPatientPri, setNewPatientPri] = useState('normal');
   const [newPatientWard, setNewPatientWard] = useState('');
+  const [newPatientAdmissionDate, setNewPatientAdmissionDate] = useState(dateStrFromDate(new Date()));
   const [addPatientDialog, setAddPatientDialog] = useState(false);
   const [appMode, setAppMode] = useState(() => {
     const d = new Date();
@@ -11512,6 +11598,15 @@ function PatientTriage() {
     return [...activePatients].sort((a, b) => {
       const pa = order[getPri(a)],
         pb = order[getPri(b)];
+      if (patientSortMode === 'admission') {
+        const da = /^\d{4}-\d{2}-\d{2}$/.test(a.admissionDate || '') ? a.admissionDate : '';
+        const db = /^\d{4}-\d{2}-\d{2}$/.test(b.admissionDate || '') ? b.admissionDate : '';
+        if (da && db && da !== db) return da.localeCompare(db);
+        if (da && !db) return -1;
+        if (!da && db) return 1;
+        if (pa !== pb) return pa - pb;
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      }
       if (patientSortMode === 'ward' || patientSortMode === 'wardDesc') {
         // ↑=上から回診(5E→5S→4E→4S→3E) / ↓=下から回診(3E→4E→4S→5E→5S)
         const wardRank = patientSortMode === 'wardDesc' ? WARD_ORDER_DESC : WARD_ORDER;
@@ -11707,6 +11802,8 @@ function PatientTriage() {
       name,
       priority: newPatientPri,
       ward: newPatientWard,
+      admissionDate: isDailyMode ? '' : newPatientAdmissionDate,
+      preDischargeDone: false,
       memo: '',
       alerts: {},
       medHoldNote: '',
@@ -11723,6 +11820,7 @@ function PatientTriage() {
     setNewPatientName('');
     setNewPatientPri('normal');
     setNewPatientWard('');
+    setNewPatientAdmissionDate(dateStrFromDate(new Date()));
     setAddPatientDialog(false);
   };
   const removePatient = id => {
@@ -11759,6 +11857,17 @@ function PatientTriage() {
     ...p,
     ward
   } : p));
+  const setPatientAdmissionDate = (id, admissionDate) => setActivePatients(prev => prev.map(p => p.id === id ? {
+    ...p,
+    admissionDate: admissionDate || ''
+  } : p));
+  const togglePatientPreDischargeDone = id => {
+    rememberUndo('退院前手続き変更');
+    setActivePatients(prev => prev.map(p => p.id === id ? {
+      ...p,
+      preDischargeDone: !p.preDischargeDone
+    } : p));
+  };
   const toggleChecked = (kind, id) => {
     const meta = PATIENT_CHECK_MODES[kind];
     if (!meta) return;
@@ -12813,6 +12922,8 @@ function PatientTriage() {
       name: fields.name,
       priority: fields.priority || 'normal',
       ward: fields.ward || '',
+      admissionDate: dateStrFromDate(new Date()),
+      preDischargeDone: false,
       memo: pending.memo ? `(元: ${kindMeta(pending.kind).label}${pending.scheduledDate ? ' ' + pending.scheduledDate : ''}) ${pending.memo}` : '',
       tasks: [],
       createdAt: Date.now()
@@ -14092,10 +14203,10 @@ function PatientTriage() {
     size: 14
   }), "予定追加", openScheduledCount ? ` ${openScheduledCount}` : ''), !isDailyMode && React.createElement("button", {
     className: `btn-ghost${patientSortMode !== 'priority' ? ' btn-ghost-active' : ''}`,
-    onClick: () => setPatientSortMode(m => m === 'ward' ? 'wardDesc' : m === 'wardDesc' ? 'priority' : 'ward'),
+    onClick: () => setPatientSortMode(m => m === 'ward' ? 'wardDesc' : m === 'wardDesc' ? 'priority' : m === 'priority' ? 'admission' : 'ward'),
     "aria-label": "\u60A3\u8005\u306E\u4E26\u3079\u66FF\u3048",
-    title: patientSortMode === 'ward' ? "\u4E0A\u304B\u3089\u56DE\u8A3A\u9806 (5\u6771\u21925\u5357\u21924\u6771\u21924\u5357\u21923\u6771\u30FB\u90E8\u5C4B\u756A\u53F7\u306F\u5C0F\u2192\u5927) \u8868\u793A\u4E2D" : patientSortMode === 'wardDesc' ? "\u4E0B\u304B\u3089\u56DE\u8A3A\u9806 (3\u6771\u21924\u6771\u21924\u5357\u21925\u6771\u21925\u5357\u30FB\u90E8\u5C4B\u756A\u53F7\u306F\u5C0F\u2192\u5927) \u8868\u793A\u4E2D" : "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D (\u30BF\u30C3\u30D7\u3067\u75C5\u68DF\u9806\u3078)"
-  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806\u2191" : patientSortMode === 'wardDesc' ? "\u75C5\u68DF\u9806\u2193" : "\u512A\u5148\u5EA6\u9806"), React.createElement("button", {
+    title: patientSortMode === 'ward' ? "\u4E0A\u304B\u3089\u56DE\u8A3A\u9806 (5\u6771\u21925\u5357\u21924\u6771\u21924\u5357\u21923\u6771\u30FB\u90E8\u5C4B\u756A\u53F7\u306F\u5C0F\u2192\u5927) \u8868\u793A\u4E2D" : patientSortMode === 'wardDesc' ? "\u4E0B\u304B\u3089\u56DE\u8A3A\u9806 (3\u6771\u21924\u6771\u21924\u5357\u21925\u6771\u21925\u5357\u30FB\u90E8\u5C4B\u756A\u53F7\u306F\u5C0F\u2192\u5927) \u8868\u793A\u4E2D" : patientSortMode === 'priority' ? "\u512A\u5148\u5EA6\u9806\u3067\u8868\u793A\u4E2D" : "\u5165\u9662\u65E5\u6570\u306E\u9577\u3044\u9806\u3067\u8868\u793A\u4E2D (\u5165\u9662\u65E5\u672A\u8A2D\u5B9A\u306F\u6700\u5F8C)"
+  }, patientSortMode === 'ward' ? "\u75C5\u68DF\u9806\u2191" : patientSortMode === 'wardDesc' ? "\u75C5\u68DF\u9806\u2193" : patientSortMode === 'priority' ? "\u512A\u5148\u5EA6\u9806" : "\u5165\u9662\u65E5\u6570\u9806"), React.createElement("button", {
     className: "btn-ghost dock-icon",
     onClick: showFinishEstimate,
     "aria-label": "\u6B8B\u30BF\u30B9\u30AF\u304B\u3089\u6682\u5B9A\u4E88\u5B9A\u7D42\u4E86\u6642\u523B\u3092\u805E\u304F",
@@ -14356,12 +14467,15 @@ function PatientTriage() {
     },
     onSetPriority: pri => setPatientPriority(p.id, pri),
     onSetWard: ward => setPatientWard(p.id, ward),
+    onAdmissionDateChange: admissionDate => setPatientAdmissionDate(p.id, admissionDate),
+    onTogglePreDischargeDone: () => togglePatientPreDischargeDone(p.id),
     onToggleAlert: alertId => togglePatientAlert(p.id, alertId),
     onAddProblem: label => addPatientProblem(p.id, label),
     onToggleProblem: problemId => togglePatientProblem(p.id, problemId),
     onRemoveProblem: problemId => removePatientProblem(p.id, problemId),
     onMedHoldNoteChange: value => setPatientMedHoldNote(p.id, value),
     showAlerts: !isDailyMode,
+    showPatientMeta: !isDailyMode,
     checkMode: !isDailyMode ? checkMode : '',
     dimmed: !!checkMode && !isDailyMode && isCheckedToday(p, checkMode),
     onToggleChecked: () => toggleChecked(checkMode, p.id),
@@ -15197,7 +15311,7 @@ function PatientTriage() {
       display: 'flex',
       flexWrap: 'wrap',
       gap: 6,
-      marginBottom: 18
+      marginBottom: isDailyMode ? 18 : 12
     }
   }, WARDS.map(ward => React.createElement("button", {
     key: ward.id || 'none',
@@ -15211,7 +15325,38 @@ function PatientTriage() {
       fontSize: 12,
       padding: '5px 11px'
     }
-  }, ward.label))), React.createElement("div", {
+  }, ward.label))), !isDailyMode && React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginBottom: 18
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 800
+    }
+  }, "入院日"), React.createElement("input", {
+    type: "date",
+    value: newPatientAdmissionDate,
+    onChange: e => setNewPatientAdmissionDate(e.target.value),
+    className: "inp",
+    style: {
+      width: 'auto',
+      minWidth: 0,
+      padding: '6px 9px',
+      fontSize: 12
+    }
+  }), hospitalDayForDate(newPatientAdmissionDate) && React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 10,
+      fontWeight: 700
+    }
+  }, `入院${hospitalDayForDate(newPatientAdmissionDate)}日目`)), React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'flex-end',
