@@ -1,4 +1,4 @@
-const CACHE_NAME = 'patient-triage-pwa-v120';
+const CACHE_NAME = 'patient-triage-pwa-v121';
 const APP_SHELL = [
   './',
   './index.html',
@@ -33,7 +33,33 @@ const APP_SHELL = [
   './chibi_split_pngs/purple_adjutant_05_hurrying.png',
   './chibi_split_pngs/purple_adjutant_06_clipboard.png',
   './chibi_split_pngs/purple_adjutant_07_completed.png',
-  './chibi_split_pngs/purple_adjutant_08_sleeping.png'
+  './chibi_split_pngs/purple_adjutant_08_sleeping.png',
+  './chibi_split_pngs/est_variant_01_neutral.png',
+  './chibi_split_pngs/est_variant_02_thumbsup.png',
+  './chibi_split_pngs/est_variant_03_cheer.png',
+  './chibi_split_pngs/est_variant_04_thinking.png',
+  './chibi_split_pngs/est_variant_05_hurrying.png',
+  './chibi_split_pngs/est_variant_06_clipboard.png',
+  './chibi_split_pngs/est_variant_07_completed.png',
+  './chibi_split_pngs/est_variant_08_sleeping.png',
+  './chibi_split_pngs/gray_01_neutral.png',
+  './chibi_split_pngs/gray_02_thumbsup.png',
+  './chibi_split_pngs/gray_03_cheer.png',
+  './chibi_split_pngs/gray_04_thinking.png',
+  './chibi_split_pngs/gray_05_hurrying.png',
+  './chibi_split_pngs/gray_06_laptop.png',
+  './chibi_split_pngs/gray_07_paper.png',
+  './chibi_split_pngs/gray_08_sleeping.png',
+  './chibi_split_pngs/gray_09_smug.png',
+  './chibi_split_pngs/sangrail_01_neutral.png',
+  './chibi_split_pngs/sangrail_02_thumbsup.png',
+  './chibi_split_pngs/sangrail_03_cheer.png',
+  './chibi_split_pngs/sangrail_04_thinking.png',
+  './chibi_split_pngs/sangrail_05_hurrying.png',
+  './chibi_split_pngs/sangrail_06_laptop.png',
+  './chibi_split_pngs/sangrail_07_paper.png',
+  './chibi_split_pngs/sangrail_08_sleeping.png',
+  './chibi_split_pngs/sangrail_09_smug.png'
 ];
 
 self.addEventListener('install', event => {

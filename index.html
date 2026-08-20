@@ -119,7 +119,9 @@
     .chibi-coach[data-actor="spark"],
     .chibi-coach[data-actor="butler"],
     .chibi-coach[data-actor="yushka"],
-    .chibi-coach[data-actor="adjutant"] { --chibi-scale: 1; }
+    .chibi-coach[data-actor="adjutant"],
+    .chibi-coach[data-actor="gray"],
+    .chibi-coach[data-actor="sangrail"] { --chibi-scale: 1; }
     .chibi-coach-bubble {
       position: relative;
       margin-bottom: 12px;
@@ -1305,9 +1307,9 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260702-tally-minutes-per-item"></script>
+<script src="dialogue.js?v=20260821-gray-sangrail"></script>
 <script src="dialogue-packs.js?v=20260704-seasonal-packs"></script>
-<script src="prototype_unified_triage.app.js?v=20260820-patient-stay-meta"></script>
+<script src="prototype_unified_triage.app.js?v=20260821-gray-sangrail"></script>
 
 
 
@@ -1387,11 +1389,19 @@ body.rpg-mode .chibi-coach-bubble {
     adjutant: {
       alt: '紫髪の補佐官ナジーン',
       img: { neutral: 'purple_adjutant_01_neutral.png', thumb: 'purple_adjutant_02_thumbsup.png', cheer: 'purple_adjutant_03_cheer.png', thinking: 'purple_adjutant_04_thinking.png', hurry: 'purple_adjutant_05_hurrying.png', clipboard: 'purple_adjutant_06_clipboard.png', done: 'purple_adjutant_07_completed.png', bow: 'purple_adjutant_08_sleeping.png', sleep: 'purple_adjutant_08_sleeping.png' }
+    },
+    gray: {
+      alt: '紫の逆立ち髪の勇者グレイ',
+      img: { neutral: 'gray_01_neutral.png', thumb: 'gray_02_thumbsup.png', cheer: 'gray_03_cheer.png', thinking: 'gray_04_thinking.png', hurry: 'gray_05_hurrying.png', clipboard: 'gray_06_laptop.png', done: 'gray_07_paper.png', sleep: 'gray_08_sleeping.png', smug: 'gray_09_smug.png' }
+    },
+    sangrail: {
+      alt: '紫の逆立ち髪の王子サングレイル',
+      img: { neutral: 'sangrail_01_neutral.png', thumb: 'sangrail_02_thumbsup.png', cheer: 'sangrail_03_cheer.png', thinking: 'sangrail_04_thinking.png', hurry: 'sangrail_05_hurrying.png', clipboard: 'sangrail_06_laptop.png', done: 'sangrail_07_paper.png', sleep: 'sangrail_08_sleeping.png', smug: 'sangrail_09_smug.png' }
     }
   };
 
   const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
-  const DEFAULT_CAST_ENABLED = Object.freeze({ mentor: true, spark: true, butler: true, yushka: true, adjutant: true });
+  const DEFAULT_CAST_ENABLED = Object.freeze({ mentor: true, spark: true, butler: true, yushka: true, adjutant: true, gray: true, sangrail: true });
   function normalizeEnabledCast(value){
     const next = { ...DEFAULT_CAST_ENABLED, ...(value && typeof value === 'object' ? value : {}) };
     next.mentorArt = next.mentorArt === 'variant' ? 'variant' : 'classic';
@@ -1420,17 +1430,17 @@ body.rpg-mode .chibi-coach-bubble {
   };
 
   const flows = {
-    start: [['mentor','neutral'], ['butler','neutral'], ['spark','ready'], ['spark','cheer'], ['yushka','neutral'], ['adjutant','neutral']],
-    suggest: [['spark','thinking'], ['mentor','clipboard'], ['mentor','pointing'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking'], ['adjutant','clipboard'], ['adjutant','thinking']],
-    estimate: [['mentor','clipboard'], ['butler','clipboard'], ['spark','thinking'], ['yushka','clipboard'], ['yushka','thinking'], ['adjutant','clipboard'], ['adjutant','thinking']],
-    add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer'], ['adjutant','clipboard']],
-    done: [['spark','done'], ['spark','certificate'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug'], ['adjutant','done'], ['adjutant','thumb']],
-    tally: [['spark','cheer'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['spark','thumb'], ['yushka','thumb'], ['adjutant','clipboard']],
-    allclear: [['spark','certificate'], ['spark','cheer'], ['mentor','done'], ['butler','done'], ['yushka','smug'], ['yushka','done'], ['adjutant','done']],
-    endday: [['mentor','sleep'], ['butler','bow'], ['butler','done'], ['spark','certificate'], ['spark','cheer'], ['yushka','smug'], ['yushka','done'], ['adjutant','done'], ['adjutant','bow']],
-    stuck: [['mentor','thinking'], ['mentor','pointing'], ['butler','thinking'], ['spark','hurry'], ['spark','ready'], ['yushka','hurry'], ['yushka','thinking'], ['adjutant','thinking']],
-    daydream: [['mentor','thinking'], ['butler','thinking'], ['spark','thinking'], ['yushka','sleep'], ['yushka','thinking'], ['adjutant','thinking']],
-    idle: [['mentor','neutral'], ['butler','neutral'], ['butler','bow'], ['spark','ready'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep'], ['adjutant','neutral']]
+    start: [['mentor','neutral'], ['butler','neutral'], ['spark','ready'], ['spark','cheer'], ['yushka','neutral'], ['adjutant','neutral'], ['gray','neutral'], ['sangrail','neutral']],
+    suggest: [['spark','thinking'], ['mentor','clipboard'], ['mentor','pointing'], ['butler','clipboard'], ['yushka','clipboard'], ['yushka','thinking'], ['adjutant','clipboard'], ['adjutant','thinking'], ['gray','clipboard'], ['gray','thinking'], ['sangrail','clipboard'], ['sangrail','thinking']],
+    estimate: [['mentor','clipboard'], ['butler','clipboard'], ['spark','thinking'], ['yushka','clipboard'], ['yushka','thinking'], ['adjutant','clipboard'], ['adjutant','thinking'], ['gray','clipboard'], ['sangrail','clipboard']],
+    add: [['butler','clipboard'], ['mentor','thumb'], ['spark','cheer'], ['yushka','thumb'], ['yushka','cheer'], ['adjutant','clipboard'], ['gray','thumb'], ['gray','cheer'], ['sangrail','thumb']],
+    done: [['spark','done'], ['spark','certificate'], ['mentor','done'], ['butler','done'], ['yushka','done'], ['yushka','smug'], ['adjutant','done'], ['adjutant','thumb'], ['gray','done'], ['gray','smug'], ['sangrail','done'], ['sangrail','smug']],
+    tally: [['spark','cheer'], ['mentor','clipboard'], ['butler','clipboard'], ['yushka','clipboard'], ['spark','thumb'], ['yushka','thumb'], ['adjutant','clipboard'], ['gray','thumb'], ['sangrail','clipboard']],
+    allclear: [['spark','certificate'], ['spark','cheer'], ['mentor','done'], ['butler','done'], ['yushka','smug'], ['yushka','done'], ['adjutant','done'], ['gray','cheer'], ['gray','smug'], ['sangrail','done']],
+    endday: [['mentor','sleep'], ['butler','bow'], ['butler','done'], ['spark','certificate'], ['spark','cheer'], ['yushka','smug'], ['yushka','done'], ['adjutant','done'], ['adjutant','bow'], ['gray','sleep'], ['gray','done'], ['sangrail','sleep'], ['sangrail','done']],
+    stuck: [['mentor','thinking'], ['mentor','pointing'], ['butler','thinking'], ['spark','hurry'], ['spark','ready'], ['yushka','hurry'], ['yushka','thinking'], ['adjutant','thinking'], ['gray','hurry'], ['gray','thinking'], ['sangrail','thinking']],
+    daydream: [['mentor','thinking'], ['butler','thinking'], ['spark','thinking'], ['yushka','sleep'], ['yushka','thinking'], ['adjutant','thinking'], ['gray','sleep'], ['gray','thinking'], ['sangrail','sleep'], ['sangrail','thinking']],
+    idle: [['mentor','neutral'], ['butler','neutral'], ['butler','bow'], ['spark','ready'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep'], ['adjutant','neutral'], ['gray','neutral'], ['gray','sleep'], ['sangrail','neutral']]
   };
   const estimateFor = (who, mode, meta) => {
     const group = (D.estimate || {})[mode === 'daily' ? 'daily' : 'patient'] || {};
@@ -1520,13 +1530,13 @@ body.rpg-mode .chibi-coach-bubble {
     const tpl = when ? (rewardCfg.withWhen || '🎁 ご褒美：{text}（{when}）') : (rewardCfg.noWhen || '🎁 ご褒美：{text}');
     return fmt(tpl, { text: r.text || '', when });
   }
-  const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['adjutant','thumb'], ['spark','certificate']];
+  const rewardFlow = [['spark','cheer'], ['mentor','thumb'], ['butler','thumb'], ['yushka','smug'], ['adjutant','thumb'], ['gray','cheer'], ['sangrail','thumb'], ['spark','certificate']];
   let el, img, partnerImg, textEl, hideTimer, lastShown = 0, lastAutoStartAt = 0, currentMode = 'patient', lastActor = '', headerCastIndex = 0, runningToolActive = false, currentCoachEntries = [];
   const headerCastClasses = ['', 'header-cast-b', 'header-cast-c'];
   const headerCastSets = [
-    [['yushka','smug'], ['spark','cheer'], ['adjutant','neutral'], ['butler','neutral'], ['mentor','clipboard']],
-    [['mentor','done'], ['yushka','clipboard'], ['adjutant','clipboard'], ['spark','thumb']],
-    [['butler','thumb'], ['spark','clipboard'], ['adjutant','thinking'], ['yushka','cheer'], ['mentor','neutral']]
+    [['yushka','smug'], ['spark','cheer'], ['adjutant','neutral'], ['butler','neutral'], ['mentor','clipboard'], ['gray','smug'], ['sangrail','neutral']],
+    [['mentor','done'], ['yushka','clipboard'], ['adjutant','clipboard'], ['spark','thumb'], ['gray','clipboard'], ['sangrail','done']],
+    [['butler','thumb'], ['spark','clipboard'], ['adjutant','thinking'], ['yushka','cheer'], ['mentor','neutral'], ['gray','cheer'], ['sangrail','thinking']]
   ];
   let headerCastStyle = null, headerLastSelectionKey = '';
   const headerCastMedia = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;

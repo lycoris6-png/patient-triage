@@ -712,7 +712,9 @@ const COACH_CAST_OPTIONS = [
   { id: 'spark', label: 'ナディア' },
   { id: 'butler', label: 'ジーン' },
   { id: 'yushka', label: 'ユシュカ' },
-  { id: 'adjutant', label: 'ナジーン' }
+  { id: 'adjutant', label: 'ナジーン' },
+  { id: 'gray', label: 'グレイ' },
+  { id: 'sangrail', label: 'サングレイル' }
 ];
 const COACH_MENTOR_ART_OPTIONS = [
   { id: 'classic', label: '既存エスト', preview: 'blue_white_girl_01_neutral.png' },
