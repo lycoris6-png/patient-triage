@@ -2824,6 +2824,7 @@ function PatientCard({
   const problems = patient.problems || [];
   const unresolvedProblems = problems.filter(problem => !problem.resolved);
   const resolvedProblems = problems.filter(problem => problem.resolved);
+  const unresolvedProblemSummary = unresolvedProblems.map(problem => problem.label).join(' / ');
   const medHoldNote = (patient.medHoldNote || '').trim();
   const hospitalDay = hospitalDayForDate(patient.admissionDate);
   const [editingName, setEditingName] = useState(false);
@@ -3584,7 +3585,7 @@ function PatientCard({
       overflow: 'hidden'
     },
     title: [...activeAlerts.map(alert => alert.id === 'medHold' && medHoldNote ? `${alert.label}: ${medHoldNote}` : alert.label), ...unresolvedProblems.length > 0 ? [`未解決: ${unresolvedProblems.map(problem => problem.label).join(' / ')}`] : []].join(' / ')
-  }, unresolvedProblems.length > 0 && React.createElement("span", {
+  }, unresolvedProblems.length > 0 && React.createElement(React.Fragment, null, React.createElement("span", {
     style: {
       flexShrink: 0,
       fontSize: 10,
@@ -3592,7 +3593,18 @@ function PatientCard({
       lineHeight: 1,
       color: '#B45309'
     }
-  }, "📋", unresolvedProblems.length), activeAlerts.map(alert => React.createElement(React.Fragment, {
+  }, "📋"), React.createElement("span", {
+    style: {
+      minWidth: 0,
+      maxWidth: '8em',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      fontSize: 10,
+      fontWeight: 800,
+      color: '#B45309'
+    }
+  }, unresolvedProblemSummary)), activeAlerts.map(alert => React.createElement(React.Fragment, {
     key: alert.id
   }, React.createElement("span", {
     style: {
@@ -3754,7 +3766,7 @@ function PatientCard({
   }, WARDS.map(w => React.createElement("option", {
     key: w.id || 'none',
     value: w.id
-  }, w.label))), showPatientMeta && React.createElement("div", {
+  }, w.label)))), showPatientMeta && React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '42px 116px minmax(0, 1fr)',
@@ -3836,7 +3848,15 @@ function PatientCard({
     type: "button",
     className: "btn-sm",
     onClick: () => setProblemsOpen(true),
+    title: unresolvedProblems.length > 0 ? `未解決: ${unresolvedProblemSummary}` : 'プロブレムを追加・確認',
     style: {
+      justifySelf: 'start',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      minWidth: 0,
+      maxWidth: '100%',
+      overflow: 'hidden',
       border: '1px solid var(--border)',
       borderColor: unresolvedProblems.length > 0 ? 'rgba(245,158,11,.5)' : 'var(--border)',
       borderRadius: 99,
@@ -3846,7 +3866,18 @@ function PatientCard({
       fontWeight: 800,
       whiteSpace: 'nowrap'
     }
-  }, "📋 プロブレム (", unresolvedProblems.length, ")")), showAlerts && patient.alerts?.medHold && (medHoldEditing ? React.createElement("input", {
+  }, React.createElement("span", {
+    style: {
+      flexShrink: 0
+    }
+  }, "📋 プロブレム:"), React.createElement("span", {
+    style: {
+      minWidth: 0,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    }
+  }, unresolvedProblemSummary || "追加・確認")), showAlerts && patient.alerts?.medHold && (medHoldEditing ? React.createElement("input", {
     autoFocus: true,
     value: patient.medHoldNote || '',
     onChange: e => onMedHoldNoteChange && onMedHoldNoteChange(e.target.value),
