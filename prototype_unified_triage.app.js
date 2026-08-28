@@ -705,6 +705,7 @@ const GAS_TOTAL_SAFE_BYTES = 450000;
 const GAS_NEAR_LIMIT_BYTES = 405000;
 const MANUAL_TIMER_TITLE_STORAGE_KEY = 'patient-triage-manual-timer-title';
 const MANUAL_TALLY_TITLE_STORAGE_KEY = 'patient-triage-manual-tally-title';
+const TIMER_DOCK_POSITION_STORAGE_KEY = 'patient-triage-timer-dock-position';
 const SUSPENDED_RUNNING_STORAGE_KEY = 'patient-triage-suspended-running';
 const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
 const COACH_CAST_OPTIONS = [
@@ -718,7 +719,7 @@ const COACH_CAST_OPTIONS = [
 ];
 const COACH_MENTOR_ART_OPTIONS = [
   { id: 'classic', label: '既存エスト', preview: 'blue_white_girl_01_neutral.png' },
-  { id: 'variant', label: '色違いエスト', preview: 'est_variant_01_neutral.png' }
+  { id: 'variant', label: '色違いエスト', preview: 'est_variant_01_neutral.png?v=20260827-head-v3' }
 ];
 const DEFAULT_COACH_CAST = Object.freeze({
   ...COACH_CAST_OPTIONS.reduce((acc, item) => {
@@ -1103,6 +1104,7 @@ const lifetimeLineFor = total => {
   return String(tpl).replace(/\{total\}/g, String(total));
 };
 const PATIENT_ALERTS = [{ id: 'medHold', icon: '💊', label: '中断薬あり' }, { id: 'fasting', icon: '🍙', label: '欠食あり' }, { id: 'rehabMissing', icon: '🏃‍♀️', label: 'リハビリ未介入' }];
+const DEFAULT_PATIENT_ALERTS = { medHold: true, fasting: true, rehabMissing: true };
 const getPatientAlerts = patient => PATIENT_ALERTS.filter(alert => patient?.alerts?.[alert.id]);
 const getPri = p => p?.priority || 'normal';
 const priMeta = id => PRIORITIES.find(p => p.id === id) || PRIORITIES.find(p => p.id === 'normal') || PRIORITIES[1];
@@ -8812,12 +8814,123 @@ function TimerQuickLauncher({
   suspended,
   onResumeSuspended
 }) {
+  const [dockPosition, setDockPosition] = React.useState(() => {
+    const saved = loadLocal(TIMER_DOCK_POSITION_STORAGE_KEY);
+    if (!Number.isFinite(saved?.y)) return null;
+    if (saved?.side === 'left' || saved?.side === 'right') return { side: saved.side, y: saved.y };
+    if (Number.isFinite(saved?.x)) {
+      return { side: saved.x < window.innerWidth / 2 ? 'left' : 'right', y: saved.y };
+    }
+    return null;
+  });
+  const dockRef = React.useRef(null);
+  const dragRef = React.useRef(null);
+  const clampDockPosition = (x, y, width, height) => ({
+    x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
+    y: Math.max(8, Math.min(y, window.innerHeight - height - 8))
+  });
+  const snapDockPosition = (position, width, height) => {
+    const clamped = clampDockPosition(position.x, position.y, width, height);
+    return {
+      side: clamped.x + width / 2 < window.innerWidth / 2 ? 'left' : 'right',
+      y: clamped.y
+    };
+  };
+  const moveDock = next => {
+    setDockPosition(next);
+    saveLocal(TIMER_DOCK_POSITION_STORAGE_KEY, next);
+  };
+  const resetDockPosition = () => {
+    setDockPosition(null);
+    saveLocal(TIMER_DOCK_POSITION_STORAGE_KEY, null);
+  };
+  const onDragStart = e => {
+    const rect = dockRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      latest: { x: rect.left, y: rect.top }
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const onDragMove = e => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const next = clampDockPosition(
+      drag.left + e.clientX - drag.startX,
+      drag.top + e.clientY - drag.startY,
+      drag.width,
+      drag.height
+    );
+    drag.latest = next;
+    setDockPosition(next);
+    e.preventDefault();
+  };
+  const onDragEnd = e => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    dragRef.current = null;
+    moveDock(snapDockPosition(drag.latest, drag.width, drag.height));
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    e.preventDefault();
+  };
+  const onDockKeyDown = e => {
+    if (e.key === 'Home') {
+      resetDockPosition();
+      e.preventDefault();
+      return;
+    }
+    const rect = dockRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      moveDock({ side: e.key === 'ArrowLeft' ? 'left' : 'right', y: rect.top });
+      e.preventDefault();
+      return;
+    }
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    const y = clampDockPosition(rect.left, rect.top + (e.key === 'ArrowUp' ? -12 : 12), rect.width, rect.height).y;
+    moveDock({
+      side: dockPosition?.side || (rect.left < window.innerWidth / 2 ? 'left' : 'right'),
+      y
+    });
+    e.preventDefault();
+  };
+  React.useEffect(() => {
+    const keepInViewport = () => {
+      const rect = dockRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setDockPosition(previous => {
+        if (!previous) return previous;
+        const next = {
+          side: previous.side === 'left' ? 'left' : 'right',
+          y: clampDockPosition(rect.left, previous.y, rect.width, rect.height).y
+        };
+        if (next.side === previous.side && next.y === previous.y) return previous;
+        saveLocal(TIMER_DOCK_POSITION_STORAGE_KEY, next);
+        return next;
+      });
+    };
+    window.addEventListener('resize', keepInViewport);
+    keepInViewport();
+    return () => window.removeEventListener('resize', keepInViewport);
+  }, [suspended]);
   if (running) return null;
   return React.createElement("div", {
+    ref: dockRef,
     style: {
       position: 'fixed',
-      right: 'max(12px, env(safe-area-inset-right))',
-      bottom: 'max(112px, calc(env(safe-area-inset-bottom) + 112px))',
+      left: Number.isFinite(dockPosition?.x) ? dockPosition.x : dockPosition?.side === 'left' ? 'max(8px, env(safe-area-inset-left))' : 'auto',
+      top: Number.isFinite(dockPosition?.y) ? dockPosition.y : 'auto',
+      right: Number.isFinite(dockPosition?.x) || dockPosition?.side === 'left' ? 'auto' : dockPosition?.side === 'right' ? 'max(8px, env(safe-area-inset-right))' : 'max(12px, env(safe-area-inset-right))',
+      bottom: dockPosition ? 'auto' : 'max(112px, calc(env(safe-area-inset-bottom) + 112px))',
       zIndex: 9040,
       display: 'flex',
       flexDirection: 'column',
@@ -8830,7 +8943,32 @@ function TimerQuickLauncher({
       backdropFilter: 'blur(8px)'
     },
     "aria-label": "タイマーと件数クリッカー"
-  }, suspended && React.createElement("button", {
+  }, React.createElement("div", {
+    role: "button",
+    tabIndex: 0,
+    title: "ドラッグすると左右の画面端に吸着・ダブルクリックで右下に戻す",
+    "aria-label": "タイマーと件数クリッカーを移動",
+    onPointerDown: onDragStart,
+    onPointerMove: onDragMove,
+    onPointerUp: onDragEnd,
+    onPointerCancel: onDragEnd,
+    onDoubleClick: resetDockPosition,
+    onKeyDown: onDockKeyDown,
+    style: {
+      width: 38,
+      height: 20,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'var(--text-3)',
+      fontSize: 14,
+      lineHeight: 1,
+      cursor: 'grab',
+      touchAction: 'none',
+      userSelect: 'none',
+      opacity: .68
+    }
+  }, "⠿"), suspended && React.createElement("button", {
     type: "button",
     className: "btn-ghost dock-icon",
     onClick: onResumeSuspended,
@@ -11838,7 +11976,7 @@ function PatientTriage() {
       admissionDate: isDailyMode ? '' : newPatientAdmissionDate,
       preDischargeDone: false,
       memo: '',
-      alerts: {},
+      alerts: isDailyMode ? {} : { ...DEFAULT_PATIENT_ALERTS },
       medHoldNote: '',
       problems: [],
       tasks: [],
@@ -12958,6 +13096,9 @@ function PatientTriage() {
       admissionDate: dateStrFromDate(new Date()),
       preDischargeDone: false,
       memo: pending.memo ? `(元: ${kindMeta(pending.kind).label}${pending.scheduledDate ? ' ' + pending.scheduledDate : ''}) ${pending.memo}` : '',
+      alerts: { ...DEFAULT_PATIENT_ALERTS },
+      medHoldNote: '',
+      problems: [],
       tasks: [],
       createdAt: Date.now()
     };
