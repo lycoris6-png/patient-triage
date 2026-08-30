@@ -95,19 +95,41 @@
       animation: chibiBanterReply 5.6s ease-in-out both;
     }
     .chibi-coach-banter-turn {
+      position: relative;
       display: block;
-      padding: 2px 4px;
-      border-radius: 6px;
-      transition: color .2s ease, background .2s ease;
+      padding: 8px 10px;
+      border: 1.5px solid rgba(120, 96, 180, .18);
+      border-radius: 12px 12px 12px 5px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 7px 20px rgba(60, 42, 120, .14);
+      color: var(--text, #31264A);
+      backdrop-filter: blur(10px);
+    }
+    .chibi-coach-banter-turn::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      bottom: 10px;
+      width: 10px;
+      height: 10px;
+      background: inherit;
+      border-left: 1.5px solid rgba(120, 96, 180, .18);
+      border-bottom: 1.5px solid rgba(120, 96, 180, .18);
+      transform: rotate(45deg);
     }
     .chibi-coach-banter-turn + .chibi-coach-banter-turn {
-      margin-top: 4px;
+      margin-top: 7px;
     }
     .chibi-coach-speaker {
-      color: #6C3EF8;
-      font-weight: 900;
-      margin-right: .45em;
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
       white-space: nowrap;
+      border: 0;
     }
     .chibi-coach-banter-turn:nth-child(1) {
       animation: chibiBanterLineLead 5.6s ease-in-out both;
@@ -149,6 +171,17 @@
       border-bottom: 1.5px solid rgba(120, 96, 180, .18);
       transform: rotate(45deg);
     }
+    .chibi-coach.banter .chibi-coach-bubble {
+      margin-bottom: 8px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+    .chibi-coach.banter .chibi-coach-bubble::before {
+      display: none;
+    }
     .chibi-coach-text {
       white-space: pre-line;
     }
@@ -172,12 +205,12 @@
       52%, 100% { transform: translateY(-5px) scale(1.06); opacity: 1; filter: drop-shadow(0 10px 18px rgba(52,38,99,.28)); }
     }
     @keyframes chibiBanterLineLead {
-      0%, 42% { background: rgba(108,62,248,.09); color: var(--text, #31264A); }
-      52%, 100% { background: transparent; color: var(--text-3, #786F8E); }
+      0%, 42% { transform: translateX(0) scale(1); opacity: 1; }
+      52%, 100% { transform: translateX(2px) scale(.98); opacity: .68; }
     }
     @keyframes chibiBanterLineReply {
-      0%, 42% { background: transparent; color: var(--text-3, #786F8E); }
-      52%, 100% { background: rgba(108,62,248,.09); color: var(--text, #31264A); }
+      0%, 42% { transform: translateX(2px) scale(.98); opacity: .68; }
+      52%, 100% { transform: translateX(0) scale(1); opacity: 1; }
     }
     @media (prefers-reduced-motion: reduce) {
       .chibi-coach.banter .chibi-coach-img,
@@ -859,7 +892,7 @@ body.header-cast-c .app-header::before {
   background-image:
     url('chibi_split_pngs/bat_wing_girl_02_thumbsup.png'),
     url('chibi_split_pngs/red_antler_girl_06_clipboard.png'),
-    url('chibi_split_pngs/yushka_03_cheer.png'),
+    url('chibi_split_pngs/yushka_03_cheer.png?v=20260826-format-v5'),
     url('chibi_split_pngs/blue_white_girl_01_neutral.png');
   background-size: auto 124px, auto 124px, auto 124px, auto 124px;
   background-position:
@@ -1307,7 +1340,7 @@ body.rpg-mode .chibi-coach-bubble {
 </head>
 <body>
 <div id="root"></div>
-<script src="dialogue.js?v=20260821-gray-sangrail"></script>
+<script src="dialogue.js?v=20260829-banter-v1"></script>
 <script src="dialogue-packs.js?v=20260704-seasonal-packs"></script>
 <script src="prototype_unified_triage.app.js?v=20260821-gray-sangrail"></script>
 
@@ -1376,7 +1409,7 @@ body.rpg-mode .chibi-coach-bubble {
     },
     spark: {
       alt: '赤い髪の元気なナディア',
-      img: { neutral: 'red_antler_girl_01_neutral.png', ready: 'red_antler_girl_01_neutral.png', thumb: 'red_antler_girl_02_thumbsup.png', cheer: 'red_antler_girl_03_cheer.png', thinking: 'red_antler_girl_04_thinking.png', hurry: 'red_antler_girl_05_hurrying.png', clipboard: 'red_antler_girl_06_clipboard.png', done: 'red_antler_girl_07_completed.png', certificate: 'red_antler_girl_08_sleeping.png', sleep: 'red_antler_girl_08_sleeping.png' }
+      img: { neutral: 'red_antler_girl_01_neutral.png', ready: 'red_antler_girl_01_neutral.png', thumb: 'red_antler_girl_02_thumbsup.png', cheer: 'red_antler_girl_03_cheer.png', thinking: 'red_antler_girl_04_thinking.png', hurry: 'red_antler_girl_05_hurrying.png', clipboard: 'red_antler_girl_06_clipboard.png', done: 'red_antler_girl_07_completed.png?v=20260826-format-v5', certificate: 'red_antler_girl_08_sleeping.png', sleep: 'red_antler_girl_08_sleeping.png' }
     },
     butler: {
       alt: 'コウモリの羽と栗色の髪のジーン',
@@ -1384,7 +1417,7 @@ body.rpg-mode .chibi-coach-bubble {
     },
     yushka: {
       alt: '赤い髪と角のユシュカ',
-      img: { neutral: 'yushka_01_neutral.png', thumb: 'yushka_02_thumbsup.png', cheer: 'yushka_03_cheer.png', thinking: 'yushka_04_thinking.png', hurry: 'yushka_05_hurrying.png', clipboard: 'yushka_06_laptop.png', done: 'yushka_07_paper.png', sleep: 'yushka_08_sleeping.png', smug: 'yushka_09_smug.png' }
+      img: { neutral: 'yushka_01_neutral.png', thumb: 'yushka_02_thumbsup.png', cheer: 'yushka_03_cheer.png?v=20260826-format-v5', thinking: 'yushka_04_thinking.png', hurry: 'yushka_05_hurrying.png?v=20260826-format-v5', clipboard: 'yushka_06_laptop.png', done: 'yushka_07_paper.png?v=20260826-format-v5', sleep: 'yushka_08_sleeping.png?v=20260826-format-v5', smug: 'yushka_09_smug.png' }
     },
     adjutant: {
       alt: '紫髪の補佐官ナジーン',
@@ -1392,11 +1425,11 @@ body.rpg-mode .chibi-coach-bubble {
     },
     gray: {
       alt: '紫の逆立ち髪の勇者グレイ',
-      img: { neutral: 'gray_01_neutral.png', thumb: 'gray_02_thumbsup.png', cheer: 'gray_03_cheer.png', thinking: 'gray_04_thinking.png', hurry: 'gray_05_hurrying.png', clipboard: 'gray_06_laptop.png', done: 'gray_07_paper.png', sleep: 'gray_08_sleeping.png', smug: 'gray_09_smug.png' }
+      img: { neutral: 'gray_01_neutral.png?v=20260829-app-v2', thumb: 'gray_02_thumbsup.png?v=20260829-app-v2', cheer: 'gray_03_cheer.png?v=20260829-app-v2', thinking: 'gray_04_thinking.png?v=20260829-app-v2', hurry: 'gray_05_hurrying.png?v=20260829-app-v2', clipboard: 'gray_06_laptop.png?v=20260829-app-v2', done: 'gray_07_paper.png?v=20260829-app-v2', sleep: 'gray_08_sleeping.png?v=20260829-app-v2', smug: 'gray_09_smug.png?v=20260829-app-v2' }
     },
     sangrail: {
       alt: '紫の逆立ち髪の王子サングレイル',
-      img: { neutral: 'sangrail_01_neutral.png', thumb: 'sangrail_02_thumbsup.png', cheer: 'sangrail_03_cheer.png', thinking: 'sangrail_04_thinking.png', hurry: 'sangrail_05_hurrying.png', clipboard: 'sangrail_06_laptop.png', done: 'sangrail_07_paper.png', sleep: 'sangrail_08_sleeping.png', smug: 'sangrail_09_smug.png' }
+      img: { neutral: 'sangrail_01_neutral.png?v=20260829-final-v1', thumb: 'sangrail_02_thumbsup.png?v=20260829-final-v1', cheer: 'sangrail_03_cheer.png?v=20260829-final-v1', thinking: 'sangrail_04_thinking.png?v=20260829-final-v1', hurry: 'sangrail_05_hurrying.png?v=20260829-final-v1', clipboard: 'sangrail_06_laptop.png?v=20260829-final-v1', done: 'sangrail_07_paper.png?v=20260829-final-v1', sleep: 'sangrail_08_sleeping.png?v=20260829-final-v1', smug: 'sangrail_09_smug.png?v=20260829-final-v1' }
     }
   };
 
@@ -1461,6 +1494,45 @@ body.rpg-mode .chibi-coach-bubble {
     if (kind === 'done' || kind === 'allclear') return 0.08;
     return 0.05;
   };
+  // 似た通常立ちの二人は、先に話す側と場面に合わせて身振りを分ける。
+  const HERO_PAIR_BANTER_POSES = {
+    start: {
+      gray: [
+        { gray: 'thumb', sangrail: 'neutral' },
+        { gray: 'neutral', sangrail: 'thinking' },
+        { gray: 'thumb', sangrail: 'thinking' }
+      ],
+      sangrail: [
+        { gray: 'neutral', sangrail: 'cheer' },
+        { gray: 'thinking', sangrail: 'thumb' },
+        { gray: 'thumb', sangrail: 'neutral' }
+      ]
+    },
+    done: {
+      gray: [
+        { gray: 'cheer', sangrail: 'thumb' },
+        { gray: 'smug', sangrail: 'cheer' },
+        { gray: 'done', sangrail: 'neutral' }
+      ],
+      sangrail: [
+        { gray: 'thumb', sangrail: 'cheer' },
+        { gray: 'cheer', sangrail: 'thumb' },
+        { gray: 'neutral', sangrail: 'thumb' }
+      ]
+    }
+  };
+  let lastHeroPairBanterPose = '';
+  function heroPairBanterPoses(kind, actors){
+    if (actors.length !== 2 || !actors.includes('gray') || !actors.includes('sangrail')) return null;
+    const scene = ['done', 'tally', 'allclear'].includes(kind) ? 'done' : kind;
+    const options = HERO_PAIR_BANTER_POSES[scene]?.[actors[0]];
+    if (!options) return null;
+    const poseKey = poses => `${poses.gray}|${poses.sangrail}`;
+    const candidates = options.filter(poses => poseKey(poses) !== lastHeroPairBanterPose);
+    const poses = pick(candidates.length ? candidates : options);
+    lastHeroPairBanterPose = poseKey(poses);
+    return poses;
+  }
   function pickBanter(kind, mode){
     const chance = banterChanceFor(kind);
     if (!chance || Math.random() >= chance) return null;
@@ -1470,6 +1542,7 @@ body.rpg-mode .chibi-coach-bubble {
       item.lines.length &&
       Array.isArray(item.actors) &&
       item.actors.length >= 2 &&
+      (!Array.isArray(item.kinds) || item.kinds.includes(kind)) &&
       (item.actors || []).every(isActorEnabled)
     );
     if (!candidates.length) return null;
@@ -1480,10 +1553,11 @@ body.rpg-mode .chibi-coach-bubble {
     const firstSpeaker = (String(text).match(/^([^「」\n]+)「/) || [])[1] || '';
     const firstActor = item.actors.find(who => (charMeta(who).name || '') === firstSpeaker) || preferredActor;
     const orderedActors = [firstActor, ...item.actors.filter(who => who !== firstActor)].slice(0, 2);
-    const poses = item.poses && typeof item.poses === 'object' ? item.poses : {};
+    const pairPoses = heroPairBanterPoses(kind, orderedActors);
+    const poses = pairPoses || (item.poses && typeof item.poses === 'object' ? item.poses : {});
     return {
       actor: firstActor,
-      pose: firstActor === preferredActor ? (item.pose || 'neutral') : (poses[firstActor] || 'neutral'),
+      pose: pairPoses ? pairPoses[firstActor] : firstActor === preferredActor ? (item.pose || 'neutral') : (poses[firstActor] || 'neutral'),
       actors: orderedActors.map((who, index) => ({
         actor: who,
         pose: poses[who] || (who === preferredActor ? (item.pose || 'neutral') : (index === 0 ? 'neutral' : 'thumb'))
@@ -1640,6 +1714,18 @@ body.rpg-mode .chibi-coach-bubble {
       '<span>' + escapeHtml(turn.text) + '</span></span>'
     ).join('');
   }
+  const GRAY_POSE_SCALE = Object.freeze({
+    neutral: '1.05',
+    thumb: '1.05',
+    cheer: '1.05',
+    thinking: '1.12',
+    hurry: '1.08',
+    clipboard: '1.14',
+    done: '1.07',
+    sleep: '1.12',
+    smug: '1.05'
+  });
+  const coachImageScale = (actor, pose) => actor === 'gray' ? (GRAY_POSE_SCALE[pose] || '1.05') : '1';
   function renderCoachImages(entries){
     const valid = (entries || []).filter(entry => entry && cast[entry.actor]);
     const primary = valid[0];
@@ -1649,17 +1735,20 @@ body.rpg-mode .chibi-coach-bubble {
     const primaryActor = actorView(primary.actor);
     img.src = CHIBI_BASE + (primaryActor.img[primary.pose] || primaryActor.img.neutral);
     img.alt = primaryActor.alt;
+    img.style.setProperty('--chibi-scale', coachImageScale(primary.actor, primary.pose));
     el.dataset.actor = primary.actor;
     if (secondary) {
       const secondaryActor = actorView(secondary.actor);
       partnerImg.src = CHIBI_BASE + (secondaryActor.img[secondary.pose] || secondaryActor.img.neutral);
       partnerImg.alt = secondaryActor.alt;
+      partnerImg.style.setProperty('--chibi-scale', coachImageScale(secondary.actor, secondary.pose));
       partnerImg.hidden = false;
       el.classList.add('banter');
     } else {
       partnerImg.hidden = true;
       partnerImg.removeAttribute('src');
       partnerImg.alt = '';
+      partnerImg.style.setProperty('--chibi-scale', '1');
       el.classList.remove('banter');
     }
   }
