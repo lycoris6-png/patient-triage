@@ -5,6 +5,8 @@ const APP_SHELL = [
   './prototype_unified_triage.html',
   './prototype_unified_triage.app.js',
   './dialogue.js',
+  './coach-library.js',
+  './coach-workshop.js',
   './dialogue-packs.js',
   './dialogue-editor.html',
   './manifest-unified.webmanifest',

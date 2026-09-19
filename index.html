@@ -66,6 +66,7 @@
       height: 124px;
       object-fit: contain;
       transform-origin: center bottom;
+      transform: scale(var(--chibi-scale, 1));
       filter: drop-shadow(0 8px 16px rgba(52, 38, 99, .22));
       animation: chibiFloat 1.9s ease-in-out infinite;
     }
@@ -197,12 +198,12 @@
       45% { transform: translateY(-14px) scale(calc(var(--chibi-scale, 1) * 1.04)); }
     }
     @keyframes chibiBanterLead {
-      0%, 42% { transform: translateY(-5px) scale(1.06); opacity: 1; filter: drop-shadow(0 10px 18px rgba(52,38,99,.28)); }
-      52%, 100% { transform: translateY(1px) scale(.94); opacity: .76; filter: drop-shadow(0 6px 12px rgba(52,38,99,.16)); }
+      0%, 42% { transform: translateY(-5px) scale(calc(var(--chibi-scale, 1) * 1.06)); opacity: 1; filter: drop-shadow(0 10px 18px rgba(52,38,99,.28)); }
+      52%, 100% { transform: translateY(1px) scale(calc(var(--chibi-scale, 1) * .94)); opacity: .76; filter: drop-shadow(0 6px 12px rgba(52,38,99,.16)); }
     }
     @keyframes chibiBanterReply {
-      0%, 42% { transform: translateY(1px) scale(.94); opacity: .76; filter: drop-shadow(0 6px 12px rgba(52,38,99,.16)); }
-      52%, 100% { transform: translateY(-5px) scale(1.06); opacity: 1; filter: drop-shadow(0 10px 18px rgba(52,38,99,.28)); }
+      0%, 42% { transform: translateY(1px) scale(calc(var(--chibi-scale, 1) * .94)); opacity: .76; filter: drop-shadow(0 6px 12px rgba(52,38,99,.16)); }
+      52%, 100% { transform: translateY(-5px) scale(calc(var(--chibi-scale, 1) * 1.06)); opacity: 1; filter: drop-shadow(0 10px 18px rgba(52,38,99,.28)); }
     }
     @keyframes chibiBanterLineLead {
       0%, 42% { transform: translateX(0) scale(1); opacity: 1; }
@@ -1320,11 +1321,29 @@ body.rpg-mode .alert-bar .time-tag.past {
 
 body.rpg-mode .toast,
 body.rpg-mode .chibi-coach-bubble {
-  background: #07142f !important;
+  font-family: 'Noto Sans JP', 'Yu Gothic', 'Hiragino Sans', sans-serif !important;
+  font-size: 15px !important;
+  line-height: 1.7 !important;
+  letter-spacing: .02em !important;
+  font-weight: 700 !important;
+  background: #050B1F !important;
   border: 3px double #f8fafc !important;
   border-radius: 4px !important;
   color: #fff !important;
-  box-shadow: var(--shadow) !important;
+  box-shadow: 0 0 0 2px #020617, var(--shadow) !important;
+}
+
+body.rpg-mode .chibi-coach-bubble {
+  padding: 12px 14px !important;
+  max-width: 78vw !important;
+}
+
+body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
+  padding: 12px 14px !important;
+  background: #050B1F !important;
+  border: 3px double #f8fafc !important;
+  box-shadow: 0 0 0 2px #020617, var(--shadow) !important;
+  backdrop-filter: blur(10px);
 }
 
 @media (max-width: 560px) {
@@ -1341,7 +1360,9 @@ body.rpg-mode .chibi-coach-bubble {
 <body>
 <div id="root"></div>
 <script src="dialogue.js?v=20260829-banter-v1"></script>
-<script src="dialogue-packs.js?v=20260704-seasonal-packs"></script>
+<script src="dialogue-packs.js?v=20260901-autumn"></script>
+<script src="coach-library.js"></script>
+<script src="coach-workshop.js"></script>
 <script src="prototype_unified_triage.app.js?v=20260821-gray-sangrail"></script>
 
 
@@ -1351,12 +1372,17 @@ body.rpg-mode .chibi-coach-bubble {
   const CHIBI_BASE = 'chibi_split_pngs/';
   // セリフ本体は dialogue.js (window.APP_DIALOGUE) にあります。ここは表示エンジンだけです。
   const D = window.APP_DIALOGUE || {};
-  // 季節パック(dialogue-packs.js)を日付で選んでベースに混ぜる
-  (function mergeSeasonalPacks(){
+  // 日付が変わったら通常セリフから組み直し、前の季節の混入・重複を防ぐ。
+  const seasonalBaseModes = { patient: D.patient, daily: D.daily, work: D.work };
+  let seasonalDateKey = '';
+  function mergeSeasonalPacks(now = new Date()){
     const packs = Array.isArray(window.APP_DIALOGUE_PACKS) ? window.APP_DIALOGUE_PACKS : [];
-    if (!packs.length) return;
-    const now = new Date();
     const mmdd = String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    if (seasonalDateKey === mmdd) return;
+    seasonalDateKey = mmdd;
+    ['patient', 'daily', 'work'].forEach(mode => {
+      D[mode] = Object.fromEntries(Object.entries(seasonalBaseModes[mode] || {}).map(([who, scenes]) => [who, { ...scenes }]));
+    });
     const inWindow = pack => {
       if (!pack || typeof pack !== 'object') return false;
       if (!pack.from || !pack.to) return true;
@@ -1384,9 +1410,11 @@ body.rpg-mode .chibi-coach-bubble {
         });
       });
     });
-  })();
+  }
+  mergeSeasonalPacks();
   const FALLBACK_LINES = ['…'];
   const linesFor = (who, mode) => {
+    mergeSeasonalPacks();
     const table = mode === 'work' ? D.work : mode === 'daily' ? D.daily : D.patient;
     return (table || {})[who] || {};
   };
@@ -1433,8 +1461,9 @@ body.rpg-mode .chibi-coach-bubble {
     }
   };
 
+  window.CoachWorkshop?.cast(cast);
   const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
-  const DEFAULT_CAST_ENABLED = Object.freeze({ mentor: true, spark: true, butler: true, yushka: true, adjutant: true, gray: true, sangrail: true });
+  const DEFAULT_CAST_ENABLED = Object.freeze(Object.fromEntries(Object.keys(cast).map(id => [id, true])));
   function normalizeEnabledCast(value){
     const next = { ...DEFAULT_CAST_ENABLED, ...(value && typeof value === 'object' ? value : {}) };
     next.mentorArt = next.mentorArt === 'variant' ? 'variant' : 'classic';
@@ -1475,6 +1504,10 @@ body.rpg-mode .chibi-coach-bubble {
     daydream: [['mentor','thinking'], ['butler','thinking'], ['spark','thinking'], ['yushka','sleep'], ['yushka','thinking'], ['adjutant','thinking'], ['gray','sleep'], ['gray','thinking'], ['sangrail','sleep'], ['sangrail','thinking']],
     idle: [['mentor','neutral'], ['butler','neutral'], ['butler','bow'], ['spark','ready'], ['spark','thumb'], ['yushka','neutral'], ['yushka','sleep'], ['adjutant','neutral'], ['gray','neutral'], ['gray','sleep'], ['sangrail','neutral']]
   };
+  if (window.CoachWorkshop) {
+    const poses = { start: 'neutral', suggest: 'thinking', estimate: 'clipboard', add: 'thumb', done: 'done', tally: 'thumb', allclear: 'cheer', endday: 'sleep', stuck: 'thinking', daydream: 'smug', idle: 'neutral' };
+    Object.keys(flows).forEach(key => { flows[key] = window.CoachWorkshop.entries(flows[key], poses[key]); });
+  }
   const estimateFor = (who, mode, meta) => {
     const group = (D.estimate || {})[mode === 'daily' ? 'daily' : 'patient'] || {};
     const set = group[who];
@@ -1612,6 +1645,10 @@ body.rpg-mode .chibi-coach-bubble {
     [['mentor','done'], ['yushka','clipboard'], ['adjutant','clipboard'], ['spark','thumb'], ['gray','clipboard'], ['sangrail','done']],
     [['butler','thumb'], ['spark','clipboard'], ['adjutant','thinking'], ['yushka','cheer'], ['mentor','neutral'], ['gray','cheer'], ['sangrail','thinking']]
   ];
+  if (window.CoachWorkshop) {
+    rewardFlow.splice(0, rewardFlow.length, ...window.CoachWorkshop.entries(rewardFlow, 'cheer'));
+    headerCastSets.forEach((entries, index) => { headerCastSets[index] = window.CoachWorkshop.entries(entries, 'neutral'); });
+  }
   let headerCastStyle = null, headerLastSelectionKey = '';
   const headerCastMedia = window.matchMedia ? window.matchMedia('(max-width: 640px)') : null;
   function ensureHeaderCastStyle(){
@@ -1620,7 +1657,7 @@ body.rpg-mode .chibi-coach-bubble {
     document.head.appendChild(headerCastStyle);
     return headerCastStyle;
   }
-  function cssUrl(file){ return 'url("' + CHIBI_BASE + file + '")'; }
+  function cssUrl(file){ return 'url("' + (window.CoachWorkshop?.src(file) || CHIBI_BASE + file) + '")'; }
   function shuffleHeaderEntries(entries, limit){
     const valid = (entries || []).filter(([who]) => cast[who]);
     const enabled = valid.filter(([who]) => isActorEnabled(who));
@@ -1725,7 +1762,14 @@ body.rpg-mode .chibi-coach-bubble {
     sleep: '1.12',
     smug: '1.05'
   });
-  const coachImageScale = (actor, pose) => actor === 'gray' ? (GRAY_POSE_SCALE[pose] || '1.05') : '1';
+  // 共通キャンバス内で細身に見える二人を補正。しゃがみ等の姿勢差は残す。
+  const coachImageScale = (actor, pose) => {
+    const customScale = window.CoachWorkshop?.scale(actor, pose, null);
+    if (customScale != null) return String(customScale);
+    if (actor === 'gray') return (Number(GRAY_POSE_SCALE[pose] || '1.05') * 1.12).toFixed(3);
+    if (actor === 'sangrail') return '1.12';
+    return '1';
+  };
   function renderCoachImages(entries){
     const valid = (entries || []).filter(entry => entry && cast[entry.actor]);
     const primary = valid[0];
@@ -1733,13 +1777,13 @@ body.rpg-mode .chibi-coach-bubble {
     if (!primary) return;
     currentCoachEntries = valid.slice(0, 2).map(entry => ({ ...entry }));
     const primaryActor = actorView(primary.actor);
-    img.src = CHIBI_BASE + (primaryActor.img[primary.pose] || primaryActor.img.neutral);
+    img.src = window.CoachWorkshop?.src(primaryActor.img[primary.pose] || primaryActor.img.neutral) || CHIBI_BASE + (primaryActor.img[primary.pose] || primaryActor.img.neutral);
     img.alt = primaryActor.alt;
     img.style.setProperty('--chibi-scale', coachImageScale(primary.actor, primary.pose));
     el.dataset.actor = primary.actor;
     if (secondary) {
       const secondaryActor = actorView(secondary.actor);
-      partnerImg.src = CHIBI_BASE + (secondaryActor.img[secondary.pose] || secondaryActor.img.neutral);
+      partnerImg.src = window.CoachWorkshop?.src(secondaryActor.img[secondary.pose] || secondaryActor.img.neutral) || CHIBI_BASE + (secondaryActor.img[secondary.pose] || secondaryActor.img.neutral);
       partnerImg.alt = secondaryActor.alt;
       partnerImg.style.setProperty('--chibi-scale', coachImageScale(secondary.actor, secondary.pose));
       partnerImg.hidden = false;

@@ -1,3 +1,12 @@
+## 作業場所の正本（2026-09-05統合）
+
+- このPCの正本は C:\dev\patient-triage と C:\dev\patient-triage-android。
+- ノートPCでも、この2フォルダを同じ親フォルダの下、OneDrive外に配置する。
+- OneDrive内や .codex-tmp、Temp、www、assets/public は編集元にしない。
+- 詳細は DEVELOPMENT.md。移動・同期時は両方の未コミット差分を比較し、新しい日時だけで上書きを決めない。
+- Androidの画面は隣のWeb正本から npm run cap:sync で取り込む。
+- コミット・pushはユーザーの明示指示がない限り行わない。
+
 # AGENTS.md — ぺいとり! (patient-triage) 作業規約
 
 AIコーディングエージェント(Codex CLI / Claude Code など)向けのリポジトリ規約。

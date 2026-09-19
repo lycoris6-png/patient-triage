@@ -1,3 +1,5 @@
+> 開発場所・最新状態・ノートPCへの引き継ぎは [DEVELOPMENT.md](DEVELOPMENT.md) を参照。以下の外部AI説明は廃止前の記録です。
+
 # Patient Triage
 
 Patient/task triage app for ward and ER work.
@@ -25,6 +27,10 @@ Do not delete or rename these unless the matching HTML references are updated.
 ## Main Features
 
 - Patient priority/classification: `ER`, high, normal, low.
+- サブ担当: 毎日の回診対象外だが忘れたくない患者を、通常の患者カードと同じ情報・操作のまま折りたたみ欄で管理できます。
+- 受け持ちとサブ担当は相互に移動でき、サブの未完了・時刻タスクも提案や一覧に含まれます。
+- 検査チェックの周期予約 (`🔁`): L/D・US・CT・MRIなどを曜日プリセットで登録し、今日から7日先まで通常/予約タスクを自動補充します。
+- 検査チェック一覧 (`🧪`): 全患者の検査・結果・チェック系タスクを一括完了でき、09:00/11:00など提示時刻と平日のみ設定をデータパネルから変更できます。Android版では対象がある時だけ通知します。
 - Patient check modes (回診チェック / カルテチェック): the command dock (ぺいとり mode) shows two toggles, `🚶 回診 n/N` and `📝 カルテ n/N` (mutually exclusive, defined in `PATIENT_CHECK_MODES`). While a mode is active it opens a per-ward progress panel, sorts unchecked patients first, dims checked ones, and **replaces the 終了 button on each non-`予` patient card with the check stamp** (予 patients keep 終了). Stamps store `roundedDate`/`roundedAt` (round) or `chartedDate`/`chartedAt` (chart) on the patient; checks auto-reset at the 06:00 workday boundary. Checking the last patient fires a completion toast + chibi line.
 - ER patients sort above ward patients.
 - Patient `終了` removes a patient from the active list and triggers a toast/chibi reaction.
@@ -32,6 +38,8 @@ Do not delete or rename these unless the matching HTML references are updated.
 - Chibi milestone reactions fire once per workday at 5, 10, 15, 20, 25, and 30 completed tasks.
 - Chibi coach popups include Yushka and existing characters.
 - Initial app mode is time-based: weekdays 08:00–19:59 start in ぺいとり, otherwise でいとり (mode is not persisted; the title button still cycles modes).
+- `低燃費`: ぺいとり・でいとり共通で、一覧を隠して「次にやること」を1件ずつ進めるモード。
+- `簡易`: ぺいとり専用で、ヘッダーや演出を隠し、患者ごとの要点と操作を大きく見せるモード。
 - でいとり: completing a task whose title contains a 最後にやった日 item's label auto-updates that item's date (e.g. finishing 「洗濯を干す」 stamps 「洗濯」). The task form also has 📋まとめて追加 (one line = one task, using the currently selected type/priority/estimate).
 - わーとり: the JSON import panel has a 「分解依頼プロンプトをコピー」 button (`WORK_IMPORT_PROMPT`) that copies an AI prompt producing `WORK_TRIAGE_IMPORT_V1` JSON. Toasts are rendered separately for work mode (the shared toast element lives inside a `!isWorkMode` block).
 - Data is stored in browser `localStorage` under `patient-triage-v1`.
