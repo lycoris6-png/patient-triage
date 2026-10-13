@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "loki_laura",
+  "name": "ロキ＆ローラ",
+  "canvas": { "width": 320, "height": 448, "centerX": 160, "baselineY": 424 },
+  "runtimeScale": 1.05,
+  "poseScales": { "sleep": 1.08 },
+  "dialogueCounts": { "patient": 160, "daily": 30, "work": 10, "total": 200 },
+  "poses": {
+    "neutral": "loki_laura_01_neutral.png",
+    "thumb": "loki_laura_02_thumbsup.png",
+    "cheer": "loki_laura_03_cheer.png",
+    "thinking": "loki_laura_04_thinking.png",
+    "hurry": "loki_laura_05_hurrying.png",
+    "clipboard": "loki_laura_06_laptop.png",
+    "done": "loki_laura_07_paper.png",
+    "sleep": "loki_laura_08_sleeping.png",
+    "smug": "loki_laura_09_smug.png"
+  }
+}

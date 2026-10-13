@@ -4,3 +4,6 @@ patient-triage_v2.html
 patient-triage-v2.html
 backup/
 .claude/
+
+# デザイン資料の配布用zip（隣のフォルダと同内容。PCにだけ置く）
+docs/design/*.zip

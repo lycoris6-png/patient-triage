@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "shin_lilika",
+  "name": "シン＆リリカ",
+  "revision": "2026-10-10-v1",
+  "canvas": { "width": 320, "height": 448, "centerX": 160, "baselineY": 424 },
+  "runtimeScale": 1,
+  "poseScales": {
+    "neutral": 1.15,
+    "thumb": 1.04,
+    "cheer": 1.12,
+    "thinking": 1.03,
+    "hurry": 1.15,
+    "clipboard": 1,
+    "done": 0.99,
+    "sleep": 1.24,
+    "smug": 0.96
+  },
+  "dialogueCounts": { "patient": 160, "daily": 30, "work": 10, "total": 200 },
+  "poses": {
+    "neutral": "shin_lilika_01_neutral.png",
+    "thumb": "shin_lilika_02_thumbsup.png",
+    "cheer": "shin_lilika_03_cheer.png",
+    "thinking": "shin_lilika_04_thinking.png",
+    "hurry": "shin_lilika_05_hurrying.png",
+    "clipboard": "shin_lilika_06_laptop.png",
+    "done": "shin_lilika_07_paper.png",
+    "sleep": "shin_lilika_08_sleeping.png",
+    "smug": "shin_lilika_09_smug.png"
+  }
+}

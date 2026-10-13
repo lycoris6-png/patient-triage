@@ -242,6 +242,17 @@ priority（`er > high > normal > low > planned`）→ status（`doing > stuck > 
 
 ## 6. マスコット（`MascotAssets`）
 
+> **2026-10-10 追記: コーチ工房キャラの自動反映**
+> `coach-library.js`（`window.CoachWorkshop.data`）に追加されたキャラは、Kotlin を触らずにウィジェットへ出る。
+> - `native-bridge.js` の `buildWidgetCatalog()` が、追加キャラの ID・名前・4ポーズ画像（neutral / thumb / done / sleep）・セリフを組み立て、widget state の `catalog` として**内容が変わったときだけ**送る。セリフは場面 idle / suggest / allclear / endday から、モードごとに短い順で6本。
+> - Kotlin は `WidgetCatalogStore` が `catalog_json` に保存する。data URI の画像は端末内 `files/widget_mascots/` に書き出す。
+> - `WidgetCharacterCatalog` が、既存7キャラ・追加キャラ・削除IDを合成する。合成順は Web の `CoachWorkshop.options` / `cast` と同じ。設定画面の選択肢、立ち絵の候補、セリフはここから作る。
+> - 既存7キャラの画像と固定セリフ（strings.xml）は従来どおり。
+> - 時報通知も工房キャラに対応した（`native-bridge.js` の `characterOptions()`）。「時報と同じ」で工房キャラも追従する。
+> - 工房キャラの通知セリフは、キャラ定義の `notifications` 欄（hourly / scheduled / lunch / snack / idle、各1〜120字の配列）に置く。検証は `coach-workshop.js`。欄が無い種類は、時報なら idle 場面の掛け合い、予定通知なら声色なしの共通文で代用し、お遊びセリフは出さない。
+>
+> 以下は既存7キャラの対応表。
+
 キャラID → 画像セット（`assets/public/chibi_split_pngs/` 内、`www/index.html` 1420行付近の `cast` と同じ対応）:
 
 | id | name | セット |

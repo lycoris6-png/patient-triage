@@ -3,6 +3,8 @@
   const modes = ['patient', 'daily', 'work'];
   const scenes = ['start', 'suggest', 'add', 'done', 'tally', 'allclear', 'endday', 'stuck', 'idle', 'daydream'];
   const poses = ['neutral', 'thumb', 'cheer', 'thinking', 'hurry', 'clipboard', 'done', 'sleep', 'smug'];
+  // Android版の端末通知で使う台詞。hourly=時報、scheduled=予定通知の1行目、lunch/snack/idle=時間帯のお遊び台詞。
+  const notificationKinds = ['hourly', 'scheduled', 'lunch', 'snack', 'idle'];
   const safeId = id => typeof id === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(id) && !['constructor', 'prototype', '__proto__', 'mentorArt'].includes(id);
   function validateBanter(item) {
     if (!item || !Array.isArray(item.actors) || item.actors.length !== 2 || !item.actors.every(safeId) || item.actors[0] === item.actors[1] || !Array.isArray(item.lines) || !item.lines.length || item.lines.some(line => typeof line !== 'string' || !line.trim() || line.length > 240)) throw Error('二人会話は異なる2人と、1〜240文字の会話を1つ以上登録してください。');
@@ -45,6 +47,13 @@
     for (const [pose, value] of Object.entries(pack.poseScales || {})) {
       if (!poses.includes(pose) || !Number.isFinite(value) || value < 0.5 || value > 1.8) throw Error('ポーズ倍率が不正です。');
     }
+    if (pack.notifications != null) {
+      if (typeof pack.notifications !== 'object' || Array.isArray(pack.notifications)) throw Error('通知台詞は種類ごとの配列で指定してください。');
+      for (const [kind, lines] of Object.entries(pack.notifications)) {
+        if (!notificationKinds.includes(kind)) throw Error('通知台詞の種類が不正です: ' + kind);
+        if (!Array.isArray(lines) || lines.some(line => typeof line !== 'string' || !line.trim() || line.length > 120)) throw Error('通知台詞 / ' + kind + ' は1〜120文字の台詞の配列にしてください。');
+      }
+    }
     for (const value of Object.values(pack.images || {})) {
       if (typeof value !== 'string' || !(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(value) || /^[a-zA-Z0-9_-]+\.png(?:\?v=[a-zA-Z0-9_-]+)?$/.test(value))) throw Error('画像はPNGまたは既存画像ファイル名を指定してください。');
     }
@@ -76,7 +85,7 @@
     return value;
   }
   const src = file => file?.startsWith('data:image/png;base64,') ? file : 'chibi_split_pngs/' + file;
-  const api = root.CoachWorkshop = { modes, scenes, poses, validate, validateBanter, banterRows, buildBanter, library, src };
+  const api = root.CoachWorkshop = { modes, scenes, poses, notificationKinds, validate, validateBanter, banterRows, buildBanter, library, src };
   let data;
   try { data = library(root.APP_COACH_LIBRARY || { version: 1, characters: [], deleted: [] }); }
   catch (error) { console.error('コーチライブラリを読み込めませんでした', error); data = { version: 1, characters: [], deleted: [] }; }

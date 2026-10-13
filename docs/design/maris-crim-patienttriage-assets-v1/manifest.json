@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "maris_crim",
+  "name": "マリス＆クリム",
+  "revision": "2026-10-10-v1",
+  "canvas": { "width": 320, "height": 448, "centerX": 160, "baselineY": 424 },
+  "runtimeScale": 1,
+  "poseScales": {
+    "neutral": 1.01,
+    "thumb": 1,
+    "cheer": 0.96,
+    "thinking": 0.99,
+    "hurry": 1.05,
+    "clipboard": 1.03,
+    "done": 0.96,
+    "sleep": 1.21,
+    "smug": 0.97
+  },
+  "dialogueCounts": { "patient": 160, "daily": 30, "work": 10, "notifications": 18, "total": 218 },
+  "poses": {
+    "neutral": "maris_crim_01_neutral.png",
+    "thumb": "maris_crim_02_thumbsup.png",
+    "cheer": "maris_crim_03_cheer.png",
+    "thinking": "maris_crim_04_thinking.png",
+    "hurry": "maris_crim_05_hurrying.png",
+    "clipboard": "maris_crim_06_laptop.png",
+    "done": "maris_crim_07_paper.png",
+    "sleep": "maris_crim_08_sleeping.png",
+    "smug": "maris_crim_09_smug.png"
+  }
+}
