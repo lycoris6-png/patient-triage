@@ -1361,7 +1361,7 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
 <div id="root"></div>
 <script src="dialogue.js?v=20260829-banter-v1"></script>
 <script src="dialogue-packs.js?v=20260901-autumn"></script>
-<script src="coach-library.js"></script>
+<script src="coach-library.js?v=20261010-maris-crim-v1"></script>
 <script src="coach-workshop.js"></script>
 <script src="prototype_unified_triage.app.js?v=20260821-gray-sangrail"></script>
 
@@ -1853,15 +1853,19 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
       }, { once: true });
     }
     const lines = linesFor(who, currentMode);
+    let pairedCoachLine = false;
     if (banter) {
       renderBanterText(banter.text);
     } else {
       const checkLine = effectiveKind === 'allclear' && meta?.checkKind ? patientCheckLineFor(who, meta.checkKind) : '';
-      textEl.textContent = customText || rewardOverride || checkLine || (effectiveKind === 'estimate' ? (estimateFor(who, currentMode, meta) || pick(lines.idle || FALLBACK_LINES)) : pick(lines[effectiveKind] || lines.idle || FALLBACK_LINES));
+      const selectedLine = customText || rewardOverride || checkLine || (effectiveKind === 'estimate' ? (estimateFor(who, currentMode, meta) || pick(lines.idle || FALLBACK_LINES)) : pick(lines[effectiveKind] || lines.idle || FALLBACK_LINES));
+      pairedCoachLine = String(selectedLine).includes('\n');
+      if (pairedCoachLine) renderBanterText(selectedLine);
+      else textEl.textContent = selectedLine;
     }
     clearTimeout(hideTimer);
     el.classList.add('show');
-    hideTimer = setTimeout(() => el.classList.remove('show'), banter ? 5600 : kind === 'allclear' ? 5200 : (kind === 'start' || kind === 'reward') ? 4200 : 3300);
+    hideTimer = setTimeout(() => el.classList.remove('show'), banter || pairedCoachLine ? 5600 : kind === 'allclear' ? 5200 : (kind === 'start' || kind === 'reward') ? 4200 : 3300);
   }
 
   function classifyButton(button){
@@ -1903,11 +1907,24 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
     if (el && currentCoachEntries.length) renderCoachImages(currentCoachEntries);
   });
 
+  // 「何もしていない時」のセリフは、本当に手が止まっている時だけ出す。
+  // 起動直後や操作の合間に「休憩しましょう」と言わないよう、最後の操作から5分あける。
+  const IDLE_AFTER_MS = 5 * 60 * 1000;
+  let lastInteractionAt = Date.now();
+  const markInteraction = () => { lastInteractionAt = Date.now(); };
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(type => {
+    window.addEventListener(type, markInteraction, { passive: true, capture: true });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) markInteraction();
+  });
+
   window.addEventListener('load', () => {
     rotateHeaderCast(true);
     setTimeout(() => show('start', true), 1300);
     setInterval(() => {
       if (document.hidden || runningToolActive) return;
+      if (Date.now() - lastInteractionAt < IDLE_AFTER_MS) return;
       show('idle', false);
       rotateHeaderCast(false);
     }, 60000);
