@@ -721,7 +721,6 @@ const GAS_TOTAL_SAFE_BYTES = 450000;
 const GAS_NEAR_LIMIT_BYTES = 405000;
 const MANUAL_TIMER_TITLE_STORAGE_KEY = 'patient-triage-manual-timer-title';
 const MANUAL_TALLY_TITLE_STORAGE_KEY = 'patient-triage-manual-tally-title';
-const TIMER_DOCK_POSITION_STORAGE_KEY = 'patient-triage-timer-dock-position';
 const SUSPENDED_RUNNING_STORAGE_KEY = 'patient-triage-suspended-running';
 const COACH_CAST_STORAGE_KEY = 'patient-triage-coach-cast-enabled';
 const COACH_CAST_OPTIONS = (window.CoachWorkshop?.options || (items => items))([
@@ -898,6 +897,12 @@ const HEADER_BACKDROP_STORAGE_KEY = 'patient-triage-header-backdrop';
 const FOCUS_MODE_STORAGE_KEY = 'patient-triage-focus-mode';
 const PATIENT_ENERGY_MODE_STORAGE_KEY = 'patient-triage-patient-energy-mode';
 const SUB_PATIENTS_OPEN_STORAGE_KEY = 'patient-triage-sub-patients-open';
+const SIGNAL_ROW_STORAGE_KEY = 'patient-triage-signal-row';
+// 次の一手: 「あとで」で出にくくする時間と、同じ患者を続けて出しやすくする時間
+const TASK_SNOOZE_MS = 60 * 60 * 1000;
+const SAME_PATIENT_BOOST_MS = 30 * 60 * 1000;
+const isTaskSnoozed = (task, nowMs = Date.now()) => !!task?.snoozedAt && nowMs - task.snoozedAt < TASK_SNOOZE_MS;
+const SPOTLIGHT_MODE_STORAGE_KEY = 'patient-triage-spotlight-mode';
 const HEADER_BACKDROP_MODES = ['auto', 'morning', 'day', 'evening', 'night'];
 const HEADER_BACKDROP_LABELS = {
   auto: '\u81EA\u52D5',
@@ -2352,14 +2357,13 @@ function SuggestionCard({
   }), suggestion.fromStuck ? '一歩編集' : suggestion.fromGeneral ? '保留' : '詰まった'), React.createElement("button", {
     className: "btn-sm",
     onClick: onReroll,
+    title: "\u4ECA\u65E5\u4E2D\u306B\u3084\u308B\u304C\u4ECA\u306F\u9032\u3081\u3089\u308C\u306A\u3044\u6642\u306B\u30021\u6642\u9593\u307B\u3069\u51FA\u306B\u304F\u304F\u3057\u3066\u5225\u306E\u30BF\u30B9\u30AF\u3078",
     style: {
       marginLeft: 'auto',
       opacity: .65,
       fontSize: 12
     }
-  }, React.createElement(RotateCcw, {
-    size: 12
-  }), "\u5225\u306E\u3092")), (onStartTimer || onStartTally) && React.createElement("div", {
+  }, "\u23ED \u3042\u3068\u3067")), (onStartTimer || onStartTally) && React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -2408,7 +2412,8 @@ function TaskRow({
   onSetTime,
   onUpdate,
   onAdvanceStuckStep,
-  muted
+  muted,
+  highlighted = false
 }) {
   const {
     useState
@@ -2440,7 +2445,8 @@ function TaskRow({
       display: 'flex',
       gap: 10,
       alignItems: 'flex-start',
-      background: hovered && !isDone ? 'rgba(108,62,248,.03)' : 'transparent',
+      background: highlighted ? 'rgba(108,62,248,.10)' : hovered && !isDone ? 'rgba(108,62,248,.03)' : 'transparent',
+      boxShadow: highlighted ? 'inset 4px 0 0 var(--accent)' : 'none',
       transition: 'background .12s',
       borderRadius: 8,
       margin: '0 -6px'
@@ -2477,7 +2483,30 @@ function TaskRow({
       gap: 6,
       flexWrap: 'wrap'
     }
-  }, React.createElement("span", {
+  }, highlighted && React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'var(--accent)',
+      color: '#fff',
+      fontSize: 10,
+      fontWeight: 900
+    }
+  }, "▶ いまここ"), !isDone && isTaskSnoozed(task, now) && React.createElement("button", {
+    type: "button",
+    className: "tag",
+    onClick: () => onUpdate && onUpdate({
+      snoozedAt: null
+    }),
+    title: "次の一手に出にくくしています（タップで解除）",
+    style: {
+      background: 'var(--surface-3)',
+      color: 'var(--text-2)',
+      border: '1px dashed var(--border-2)',
+      cursor: 'pointer',
+      fontSize: 10,
+      fontWeight: 800
+    }
+  }, `💤 ${formatHHMM(task.snoozedAt + TASK_SNOOZE_MS)}まであとで`), React.createElement("span", {
     className: "tag",
     style: {
       background: type.dot + '18',
@@ -2703,6 +2732,249 @@ function TaskRow({
     }
   }, "\u524A\u9664"))));
 }
+// 信号列の色: 同じ状態はアプリ全体で同じ色。空きのスロットも薄い灰色の枠だけ残して位置を固定する
+const SIGNAL_TONES = {
+  off: {
+    color: 'var(--text-3)',
+    background: 'transparent',
+    border: '1px dashed var(--border)',
+    opacity: .45,
+    filter: 'grayscale(1)'
+  },
+  todo: {
+    color: 'var(--text-2)',
+    background: 'var(--surface)',
+    border: '1px solid var(--border-2)'
+  },
+  done: {
+    color: '#15803D',
+    background: 'rgba(22,163,74,.14)',
+    border: '1px solid rgba(22,163,74,.5)'
+  },
+  warn: {
+    color: '#92400E',
+    background: 'rgba(245,158,11,.16)',
+    border: '1px solid rgba(245,158,11,.5)'
+  },
+  danger: {
+    color: '#B91C1C',
+    background: 'rgba(220,38,38,.12)',
+    border: '1px solid rgba(220,38,38,.45)'
+  },
+  time: {
+    color: '#1D4ED8',
+    background: 'rgba(37,99,235,.10)',
+    border: '1px solid rgba(37,99,235,.35)'
+  },
+  timeHot: {
+    color: '#fff',
+    background: '#2563EB',
+    border: '1px solid #2563EB'
+  }
+};
+// いまここバー: 一覧は残したまま、今やる1件だけを画面上部に固定表示する
+function SpotlightBar({
+  suggestion,
+  now,
+  onDone,
+  onNext,
+  onSkip,
+  onJump,
+  onExit,
+  undoLabel,
+  onUndo,
+  onStartTimer,
+  onStartTally,
+  running,
+  onStepDone,
+  stepText = ''
+}) {
+  const task = suggestion?.task;
+  const measuring = !!running;
+  const ts = task?.scheduledTime ? timeStatus(task.scheduledTime, now) : null;
+  const smallBtn = {
+    padding: '6px 10px',
+    fontSize: 12,
+    fontWeight: 800,
+    whiteSpace: 'nowrap'
+  };
+  return React.createElement("div", {
+    role: "region",
+    "aria-label": "いまここ",
+    style: {
+      position: 'sticky',
+      top: 8,
+      zIndex: 60,
+      marginBottom: 12,
+      padding: '8px 10px',
+      display: 'grid',
+      gap: 6,
+      borderRadius: 14,
+      border: '2px solid var(--accent)',
+      background: 'var(--surface)',
+      boxShadow: '0 8px 24px rgba(76,54,139,.18)'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      minWidth: 0
+    }
+  }, React.createElement("span", {
+    className: "tag",
+    style: {
+      flexShrink: 0,
+      background: 'var(--accent)',
+      color: '#fff',
+      fontSize: 10,
+      fontWeight: 900,
+      padding: '1px 7px'
+    }
+  }, "🔦 いまここ"), task && React.createElement("button", {
+    type: "button",
+    onClick: onJump,
+    title: "この患者のタイルへ移動",
+    style: {
+      minWidth: 0,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      background: 'none',
+      border: 'none',
+      padding: 0,
+      cursor: 'pointer',
+      color: 'var(--text)',
+      fontFamily: 'monospace',
+      fontSize: 14,
+      fontWeight: 800
+    }
+  }, task.patientName || ''), task?.scheduledTime && React.createElement("span", {
+    style: {
+      flexShrink: 0,
+      padding: '1px 6px',
+      borderRadius: 6,
+      fontSize: 11,
+      fontWeight: 800,
+      ...(ts === 'past' ? SIGNAL_TONES.danger : ts === 'now' || ts === 'soon' ? SIGNAL_TONES.timeHot : SIGNAL_TONES.time)
+    }
+  }, task.scheduledTime), React.createElement("span", {
+    style: {
+      marginLeft: 'auto',
+      display: 'flex',
+      gap: 4,
+      flexShrink: 0
+    }
+  }, undoLabel && React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: onUndo,
+    title: `${undoLabel}を元に戻す`,
+    style: {
+      ...smallBtn,
+      padding: '4px 7px',
+      border: '1px solid var(--border)'
+    }
+  }, "↶ 戻す"), React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: onExit,
+    "aria-label": "いまここを終える",
+    title: "いまここを終える",
+    style: {
+      ...smallBtn,
+      padding: '4px 8px',
+      border: '1px solid var(--border)'
+    }
+  }, "×"))), task ? React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      minWidth: 0,
+      fontSize: 15,
+      fontWeight: 800,
+      lineHeight: 1.35,
+      color: 'var(--text)',
+      overflowWrap: 'anywhere'
+    }
+  }, task.title), suggestion.fromStuck && React.createElement("div", {
+    style: {
+      minWidth: 0,
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--stuck-fg)',
+      overflowWrap: 'anywhere'
+    }
+  }, stepText ? `→ 一歩: ${stepText}` : '詰まり中: 次の一歩を決めて進める'), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 5
+    }
+  }, React.createElement("button", {
+    // 照らしているタスクのまま計測を始める（計測中は FloatingTimerBar 側で操作）
+    type: "button",
+    className: "btn-ghost",
+    onClick: () => onStartTimer && onStartTimer(task),
+    disabled: measuring,
+    title: measuring ? '計測中です' : `見積もり${task.estimate ? ` ${task.estimate}分` : ''}でタイマーを開始`,
+    style: {
+      ...smallBtn,
+      padding: '6px 8px',
+      opacity: measuring ? .45 : 1
+    }
+  }, "⏱ タイマー"), React.createElement("button", {
+    type: "button",
+    className: "btn-ghost",
+    onClick: () => onStartTally && onStartTally(task),
+    disabled: measuring,
+    title: measuring ? '計測中です' : '件数を決めてカウンターを開始',
+    style: {
+      ...smallBtn,
+      padding: '6px 8px',
+      opacity: measuring ? .45 : 1
+    }
+  }, "🔢 カウント"), React.createElement("span", {
+    style: {
+      marginLeft: 'auto',
+      display: 'flex',
+      gap: 5
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-ghost",
+    onClick: onSkip,
+    title: "今日中にやるが今は進められない時に。1時間ほど出にくくして別のタスクへ",
+    style: smallBtn
+  }, "⏭ あとで"), suggestion.fromStuck && React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: onStepDone,
+    title: "今の一歩だけ完了にして、次の一歩を決める",
+    style: smallBtn
+  }, "✓ 一歩完了"), React.createElement("button", {
+    type: "button",
+    className: suggestion.fromStuck ? "btn-ghost" : "btn-dark",
+    onClick: onDone,
+    style: smallBtn
+  }, "✓ 完了")))) : React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      fontSize: 13,
+      fontWeight: 700,
+      color: 'var(--text-2)'
+    }
+  }, suggestion?.empty ? '今できるタスクはありません。おつかれさまです' : '次の一手を選んでいます…', React.createElement("button", {
+    type: "button",
+    className: "btn-ghost",
+    onClick: onNext,
+    style: {
+      ...smallBtn,
+      marginLeft: 'auto'
+    }
+  }, "↻ もう一度")));
+}
 function PatientCard({
   patient,
   expanded,
@@ -2720,9 +2992,13 @@ function PatientCard({
   onMedHoldNoteChange,
   showAlerts = true,
   showPatientMeta = true,
+  signalRow = false,
+  spotlight = false,
+  spotlightTaskId = '',
   checkMode = '',
   dimmed = false,
   onToggleChecked,
+  onToggleCheck,
   onRename,
   onMemoChange,
   templates,
@@ -3512,12 +3788,214 @@ function PatientCard({
     onClick: () => setProblemsOpen(false)
   }, "閉じる"))));
   const problemDialog = problemDialogNode ? ReactDOM.createPortal(problemDialogNode, document.body) : null;
+  // 信号列: 回診・カルテ | 次の時刻・未完了 | プロブレム・注意 を毎回同じ位置に並べる
+  const nextTimedTask = todayOpen.filter(t => t.scheduledTime).sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime))[0];
+  const nextTimeStatus = nextTimedTask ? timeStatus(nextTimedTask.scheduledTime, now) : null;
+  const medHoldActive = activeAlerts.some(alert => alert.id === 'medHold');
+  const signalSlot = (key, content, tone, title, width = 24) => React.createElement("span", {
+    key: key,
+    title: title,
+    style: {
+      width: width,
+      height: 20,
+      flexShrink: 0,
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 6,
+      fontSize: 11,
+      fontWeight: 800,
+      lineHeight: 1,
+      whiteSpace: 'nowrap',
+      ...(SIGNAL_TONES[tone] || SIGNAL_TONES.off)
+    }
+  }, content);
+  const signalDivider = key => React.createElement("span", {
+    key: key,
+    "aria-hidden": true,
+    style: {
+      width: 1,
+      height: 14,
+      margin: '0 2px',
+      flexShrink: 0,
+      background: 'var(--border-2)'
+    }
+  });
+  const showSignalRow = signalRow && showPatientMeta;
+  const signalRowNode = showSignalRow && React.createElement("div", {
+    style: {
+      flexBasis: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 3,
+      paddingLeft: 24,
+      minWidth: 0
+    }
+  }, ['round', 'chart'].map(kind => {
+    const meta = PATIENT_CHECK_MODES[kind];
+    if (!isRoundTarget(patient)) return signalSlot(kind, '', 'off', `${meta.label}: 対象外`, 30);
+    const checkedKind = isCheckedToday(patient, kind);
+    const checkedKindAt = patient[meta.atField];
+    // 一覧のまま回診・カルテを付け外しできる（見出しの開閉は起こさない）
+    return React.createElement("button", {
+      key: kind,
+      type: "button",
+      onClick: e => {
+        e.stopPropagation();
+        onToggleCheck && onToggleCheck(kind);
+      },
+      "aria-pressed": checkedKind,
+      "aria-label": `${meta.label}${checkedKind ? '済みを取り消す' : '済みにする'}`,
+      title: checkedKind ? `${meta.stampDoneHint}${checkedKindAt ? ' ' + formatHHMM(checkedKindAt) : ''}（タップで取り消し）` : meta.stampHint,
+      style: {
+        width: 30,
+        height: 24,
+        flexShrink: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+        borderRadius: 7,
+        fontSize: 12,
+        fontWeight: 900,
+        lineHeight: 1,
+        cursor: 'pointer',
+        fontFamily: 'var(--font-sans)',
+        ...SIGNAL_TONES[checkedKind ? 'done' : 'todo']
+      }
+    }, checkedKind ? '✓' : meta.icon);
+  }), signalDivider('d1'), signalSlot('time', nextTimedTask ? nextTimedTask.scheduledTime : '⏰', !nextTimedTask ? 'off' : nextTimeStatus === 'past' ? 'danger' : nextTimeStatus === 'now' || nextTimeStatus === 'soon' ? 'timeHot' : 'time', nextTimedTask ? `次の時刻: ${nextTimedTask.scheduledTime} ${nextTimedTask.title}` : '時刻指定のタスクなし', 42), signalSlot('open', allDone ? '✓' : noTasks ? '–' : `未${todayOpen.length}`, allDone ? 'done' : noTasks ? 'off' : 'warn', allDone ? `今日の分は完了${deferred.length ? `（後回し ${deferred.length}件）` : ''}` : noTasks ? 'タスク未登録' : `未完了 ${todayOpen.length}件${deferred.length ? ` / 後回し ${deferred.length}件` : ''}${done.length ? ` / 済 ${done.length}件` : ''}`, 34), signalDivider('d2'), signalSlot('problem', unresolvedProblems.length ? `📋${unresolvedProblems.length}` : '📋', unresolvedProblems.length ? 'warn' : 'off', unresolvedProblems.length ? `未解決: ${unresolvedProblemSummary}` : '未解決のプロブレムなし', 30), showAlerts && PATIENT_ALERTS.map(alert => signalSlot(alert.id, alert.icon, patient.alerts?.[alert.id] ? 'danger' : 'off', alert.label)));
+  // 中断薬とプロブレムの中身は、ある時だけ信号列の下に1行で出す
+  const signalNoteNode = showSignalRow && (medHoldActive && medHoldNote || unresolvedProblems.length > 0) && React.createElement("div", {
+    style: {
+      flexBasis: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      paddingLeft: 24,
+      minWidth: 0,
+      fontSize: 11,
+      fontWeight: 800,
+      lineHeight: 1.3
+    }
+  }, medHoldActive && medHoldNote && React.createElement("span", {
+    style: {
+      flex: '0 1 auto',
+      minWidth: 0,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      color: '#B91C1C'
+    }
+  }, `💊 ${medHoldNote}`), unresolvedProblems.length > 0 && React.createElement("span", {
+    style: {
+      flex: '1 1 0',
+      minWidth: 0,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      color: '#B45309'
+    }
+  }, `📋 ${unresolvedProblemSummary}`));
+  const metaChipStyle = {
+    flexShrink: 0,
+    padding: '2px 6px',
+    borderRadius: 99,
+    fontSize: 9,
+    fontWeight: 800,
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap'
+  };
+  const subChip = showPatientMeta && patient.role === 'sub' && React.createElement("span", {
+    style: {
+      ...metaChipStyle,
+      background: 'rgba(100,116,139,.12)',
+      border: '1px solid rgba(100,116,139,.28)',
+      color: '#64748B'
+    }
+  }, "サブ");
+  const admissionChip = showPatientMeta && hospitalDay && React.createElement("span", {
+    title: `入院日 ${formatDateShort(patient.admissionDate)}`,
+    style: {
+      ...metaChipStyle,
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border)',
+      color: 'var(--text-3)',
+      fontWeight: 700
+    }
+  }, `入院${hospitalDay}日目`);
+  const preDischargeChip = showPatientMeta && patient.preDischargeDone && React.createElement("span", {
+    title: "退院前手続き済",
+    style: {
+      ...metaChipStyle,
+      background: 'rgba(13,148,136,.10)',
+      border: '1px solid rgba(13,148,136,.30)',
+      color: '#0F766E',
+      fontWeight: 900
+    }
+  }, "退済");
+  // 従来の見出し: 2段目に左詰めで並べ、長くなったら折り返す（右端からはみ出さない）
+  const legacyMetaRow = !showSignalRow && (subChip || admissionChip || preDischargeChip || activeAlerts.length > 0 || unresolvedProblems.length > 0) && React.createElement("div", {
+    style: {
+      flexBasis: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: '4px 6px',
+      paddingLeft: 24,
+      minWidth: 0
+    }
+  }, subChip, admissionChip, preDischargeChip, unresolvedProblems.length > 0 && React.createElement("span", {
+    title: `未解決: ${unresolvedProblemSummary}`,
+    style: {
+      minWidth: 0,
+      maxWidth: '100%',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      fontSize: 10,
+      fontWeight: 800,
+      color: '#B45309'
+    }
+  }, `📋 ${unresolvedProblemSummary}`), activeAlerts.length > 0 && React.createElement("span", {
+    title: activeAlerts.map(alert => alert.id === 'medHold' && medHoldNote ? `${alert.label}: ${medHoldNote}` : alert.label).join(' / '),
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 2,
+      minWidth: 0,
+      maxWidth: '100%'
+    }
+  }, activeAlerts.map(alert => React.createElement(React.Fragment, {
+    key: alert.id
+  }, React.createElement("span", {
+    style: {
+      flexShrink: 0,
+      fontSize: 12,
+      lineHeight: 1,
+      filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.12))'
+    }
+  }, alert.icon), alert.id === 'medHold' && medHoldNote && React.createElement("span", {
+    style: {
+      minWidth: 0,
+      fontSize: 10,
+      fontWeight: 800,
+      color: '#B91C1C',
+      maxWidth: '12em',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    }
+  }, medHoldNote)))));
   return React.createElement("div", {
+    id: `patient-card-${patient.id}`,
     className: `card ${pri.cls}`,
     style: {
       overflow: 'hidden',
       filter: dimmed ? 'grayscale(.3) opacity(.55)' : 'none',
-      transition: 'filter .2s ease'
+      transition: 'filter .2s ease, box-shadow .2s ease',
+      scrollMarginTop: 120,
+      boxShadow: spotlight ? '0 0 0 3px var(--accent), 0 10px 28px rgba(108,62,248,.22)' : undefined
     }
   }, React.createElement("div", {
     onClick: onToggle,
@@ -3571,7 +4049,7 @@ function PatientCard({
       alignItems: 'center',
       gap: 5,
       flex: '1 1 auto',
-      minWidth: '11rem'
+      minWidth: '5rem'
     }
   }, React.createElement("span", {
     style: {
@@ -3612,102 +4090,12 @@ function PatientCard({
       marginLeft: 'auto',
       flexShrink: 0
     }
-  }, showPatientMeta && patient.role === 'sub' && React.createElement("span", {
-    style: {
-      flexShrink: 0,
-      padding: '2px 6px',
-      borderRadius: 99,
-      background: 'rgba(100,116,139,.12)',
-      border: '1px solid rgba(100,116,139,.28)',
-      color: '#64748B',
-      fontSize: 9,
-      fontWeight: 800,
-      lineHeight: 1.2,
-      whiteSpace: 'nowrap'
-    }
-  }, "サブ"), showPatientMeta && hospitalDay && React.createElement("span", {
-    title: `入院日 ${formatDateShort(patient.admissionDate)}`,
-    style: {
-      flexShrink: 0,
-      padding: '2px 6px',
-      borderRadius: 99,
-      background: 'var(--surface-2)',
-      border: '1px solid var(--border)',
-      color: 'var(--text-3)',
-      fontSize: 9,
-      fontWeight: 700,
-      lineHeight: 1.2,
-      whiteSpace: 'nowrap'
-    }
-  }, `入院${hospitalDay}日目`), showPatientMeta && patient.preDischargeDone && React.createElement("span", {
-    title: "退院前手続き済",
-    style: {
-      flexShrink: 0,
-      padding: '2px 6px',
-      borderRadius: 99,
-      background: 'rgba(13,148,136,.10)',
-      border: '1px solid rgba(13,148,136,.30)',
-      color: '#0F766E',
-      fontSize: 9,
-      fontWeight: 900,
-      lineHeight: 1.2,
-      whiteSpace: 'nowrap'
-    }
-  }, "退済"), (activeAlerts.length > 0 || unresolvedProblems.length > 0) && React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 2,
-      flex: '0 0 auto',
-      maxWidth: 'min(14em, 44vw)',
-      overflow: 'hidden'
-    },
-    title: [...activeAlerts.map(alert => alert.id === 'medHold' && medHoldNote ? `${alert.label}: ${medHoldNote}` : alert.label), ...unresolvedProblems.length > 0 ? [`未解決: ${unresolvedProblems.map(problem => problem.label).join(' / ')}`] : []].join(' / ')
-  }, unresolvedProblems.length > 0 && React.createElement(React.Fragment, null, React.createElement("span", {
-    style: {
-      flexShrink: 0,
-      fontSize: 10,
-      fontWeight: 900,
-      lineHeight: 1,
-      color: '#B45309'
-    }
-  }, "📋"), React.createElement("span", {
-    style: {
-      minWidth: 0,
-      maxWidth: '8em',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      fontSize: 10,
-      fontWeight: 800,
-      color: '#B45309'
-    }
-  }, unresolvedProblemSummary)), activeAlerts.map(alert => React.createElement(React.Fragment, {
-    key: alert.id
-  }, React.createElement("span", {
-    style: {
-      flexShrink: 0,
-      fontSize: 12,
-      lineHeight: 1,
-      filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.12))'
-    }
-  }, alert.icon), alert.id === 'medHold' && medHoldNote && React.createElement("span", {
-    style: {
-      fontSize: 10,
-      fontWeight: 800,
-      color: '#B91C1C',
-      maxWidth: '9em',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
-    }
-  }, medHoldNote)))), React.createElement("span", {
+  }, showSignalRow && subChip, showSignalRow && admissionChip, showSignalRow && preDischargeChip, !showSignalRow && React.createElement("span", {
     // 3状態を見分ける: 完了(緑) / 未完了あり(琥珀) / タスク未登録(点線)
     title: allDone ? '今日の分は完了' : noTasks ? todayLoggedCount ? `今日の完了 ${todayLoggedCount}件は済みログに片づけ済み` : 'タスク未登録' : `未完了 ${todayOpen.length}件`,
     style: {
       fontSize: 11,
       fontWeight: noTasks ? 600 : 700,
-      marginLeft: 4,
       padding: '2px 8px',
       borderRadius: 99,
       whiteSpace: 'nowrap',
@@ -3720,7 +4108,7 @@ function PatientCard({
       e.stopPropagation();
       onToggleChecked && onToggleChecked();
     },
-    title: checked ? `${checkMeta.stampDoneHint}${checkedAt ? ' ' + formatHHMM(checkedAt) : ''}\uFF08\u30BF\u30C3\u30D7\u3067\u53D6\u308A\u6D88\u3057\uFF09` : checkMeta.stampHint,
+    title: checked ? `${checkMeta.stampDoneHint}${checkedAt ? ' ' + formatHHMM(checkedAt) : ''}（タップで取り消し）` : checkMeta.stampHint,
     "aria-pressed": checked,
     style: {
       display: 'flex',
@@ -3738,53 +4126,21 @@ function PatientCard({
       whiteSpace: 'nowrap',
       transition: 'all .12s'
     }
-  }, checked ? `\u2713 ${checkMeta.label}` : `${checkMeta.icon} ${checkMeta.label}`, checked && checkedAt && React.createElement("span", {
+  }, checked ? `✓ ${checkMeta.label}` : `${checkMeta.icon} ${checkMeta.label}`, checked && checkedAt && React.createElement("span", {
     className: "round-stamp-time"
-  }, ' ' + formatHHMM(checkedAt))), !showCheckStamp && React.createElement("button", {
-    onClick: e => {
-      e.stopPropagation();
-      onRemove();
-    },
-    title: "\u7D42\u4E86",
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 4,
-      background: 'rgba(6,182,212,.10)',
-      border: '1.5px solid rgba(6,182,212,.28)',
-      color: '#0E7490',
-      borderRadius: 9,
-      cursor: 'pointer',
-      padding: '4px 7px',
-      fontSize: 11,
-      fontWeight: 800,
-      lineHeight: 1,
-      transition: 'all .12s',
-      whiteSpace: 'nowrap'
-    },
-    onMouseEnter: e => {
-      e.currentTarget.style.background = 'rgba(6,182,212,.18)';
-      e.currentTarget.style.transform = 'translateY(-1px)';
-    },
-    onMouseLeave: e => {
-      e.currentTarget.style.background = 'rgba(6,182,212,.10)';
-      e.currentTarget.style.transform = 'translateY(0)';
-    }
-  }, React.createElement(BedDouble, {
-    size: 13,
-    color: "#0E7490"
-  }), "\u7D42\u4E86"))), expanded && React.createElement("div", {
+  }, ' ' + formatHHMM(checkedAt)))), legacyMetaRow, signalRowNode, signalNoteNode), expanded && React.createElement("div", {
     style: {
       padding: '0 16px 16px',
       borderTop: '1.5px solid var(--border)'
     }
   }, React.createElement("div", {
+    // 患者情報欄: 2行に詰める。ラベルは title に逃がし、プロブレム/中断薬は「ある時だけ」全幅の帯で目立たせる
     style: {
       display: 'grid',
-      gap: 8,
-      marginTop: 12,
-      marginBottom: 10,
-      padding: '8px 10px',
+      gap: 5,
+      marginTop: 10,
+      marginBottom: 8,
+      padding: '6px 8px',
       borderRadius: 12,
       background: 'var(--surface-2)',
       border: '1.5px solid var(--border)'
@@ -3795,19 +4151,14 @@ function PatientCard({
       display: 'flex',
       alignItems: 'center',
       flexWrap: 'wrap',
-      gap: 5
+      gap: 4
     }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--text-3)',
-      fontWeight: 700,
-      minWidth: 42
-    }
-  }, "\u512A\u5148\u5EA6"), PRIORITIES.map(p => React.createElement("button", {
+  }, PRIORITIES.map(p => React.createElement("button", {
     key: p.id,
+    type: "button",
     onClick: () => onSetPriority(p.id),
-    title: `\u512A\u5148\u5EA6: ${p.label}`,
+    title: `優先度: ${p.label}`,
+    "aria-pressed": getPri(patient) === p.id,
     className: "tag",
     style: {
       background: getPri(patient) === p.id ? p.color : 'var(--surface)',
@@ -3816,67 +4167,54 @@ function PatientCard({
       cursor: 'pointer',
       fontSize: 11,
       fontWeight: 800,
-      padding: '2px 10px'
+      minWidth: 28,
+      justifyContent: 'center',
+      padding: '1px 6px'
     }
-  }, p.label))), React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: showPatientMeta ? '42px minmax(96px, 116px) 42px minmax(0, 1fr)' : '42px minmax(96px, 116px)',
-      alignItems: 'center',
-      gap: 6
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--text-3)',
-      fontWeight: 700,
-      minWidth: 42
-    }
-  }, "\u75C5\u68DF"), React.createElement("select", {
-    value: ward,
-    onChange: e => onSetWard(e.target.value),
-    title: "\u75C5\u68DF",
-    className: "inp",
-    style: {
-      width: '100%',
-      minWidth: 0,
-      padding: '5px 8px',
-      fontSize: 12,
-      fontWeight: 800,
-      borderRadius: 9
-    }
-  }, WARDS.map(w => React.createElement("option", {
-    key: w.id || 'none',
-    value: w.id
-  }, w.label))), showPatientMeta && React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--text-3)',
-      fontWeight: 700,
-      minWidth: 42
-    }
-  }, "入院"), React.createElement("input", {
+  }, p.label)), showPatientMeta && React.createElement("input", {
     type: "date",
     value: patient.admissionDate || '',
     onChange: e => onAdmissionDateChange && onAdmissionDateChange(e.target.value),
     title: "入院日",
+    "aria-label": "入院日",
     className: "inp",
     style: {
-      width: '100%',
+      flex: '1 1 104px',
+      width: 'auto',
       minWidth: 0,
-      padding: '5px 8px',
+      maxWidth: 150,
+      marginLeft: 'auto',
+      padding: '3px 6px',
       fontSize: 11,
       fontWeight: 700,
-      borderRadius: 9
+      borderRadius: 8
     }
-  })), showAlerts && React.createElement("div", {
+  })), React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
-      gap: 4,
-      flexWrap: 'wrap'
+      flexWrap: 'wrap',
+      gap: 4
     }
-  }, PATIENT_ALERTS.map(alert => {
+  }, React.createElement("select", {
+    value: ward,
+    onChange: e => onSetWard(e.target.value),
+    title: "病棟",
+    "aria-label": "病棟",
+    className: "inp",
+    style: {
+      width: 'auto',
+      minWidth: 0,
+      padding: '3px 4px',
+      fontSize: 12,
+      fontWeight: 800,
+      borderRadius: 8,
+      color: ward ? 'var(--text)' : 'var(--text-3)'
+    }
+  }, WARDS.map(w => React.createElement("option", {
+    key: w.id || 'none',
+    value: w.id
+  }, w.id ? w.label : '病棟'))), showAlerts && PATIENT_ALERTS.map(alert => {
     const active = !!patient.alerts?.[alert.id];
     return React.createElement("button", {
       key: alert.id,
@@ -3888,55 +4226,114 @@ function PatientCard({
       title: alert.label,
       "aria-pressed": active,
       style: {
-        width: 28,
-        height: 26,
+        width: 26,
+        height: 24,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 8,
+        borderRadius: 7,
         border: active ? '1.5px solid rgba(220,38,38,.45)' : '1.5px solid var(--border)',
         background: active ? 'rgba(254,226,226,.95)' : 'var(--surface)',
         cursor: 'pointer',
-        fontSize: 14,
+        fontSize: 13,
         lineHeight: 1,
+        padding: 0,
         opacity: active ? 1 : .42,
         boxShadow: active ? '0 2px 8px rgba(220,38,38,.12)' : 'none'
       }
     }, alert.icon);
-  })), React.createElement("button", {
+  }), unresolvedProblems.length === 0 && React.createElement("button", {
     type: "button",
     className: "btn-sm",
     onClick: () => setProblemsOpen(true),
-    title: unresolvedProblems.length > 0 ? `未解決: ${unresolvedProblemSummary}` : 'プロブレムを追加・確認',
+    title: resolvedProblems.length > 0 ? `プロブレム（解決済み ${resolvedProblems.length}件）を追加・確認` : 'プロブレムを追加・確認',
+    "aria-label": "プロブレムを追加・確認",
     style: {
-      justifySelf: 'start',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4,
-      minWidth: 0,
-      maxWidth: '100%',
-      overflow: 'hidden',
-      border: '1px solid var(--border)',
-      borderColor: unresolvedProblems.length > 0 ? 'rgba(245,158,11,.5)' : 'var(--border)',
-      borderRadius: 99,
-      padding: '4px 10px',
+      height: 24,
+      padding: '0 4px',
+      gap: 1,
+      border: '1px dashed var(--border-2)',
+      borderRadius: 7,
+      color: 'var(--text-3)',
       fontSize: 11,
-      color: unresolvedProblems.length > 0 ? '#B45309' : 'var(--text-3)',
       fontWeight: 800,
       whiteSpace: 'nowrap'
+    }
+  }, "📋+"), showPatientMeta && React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => onTogglePreDischargeDone && onTogglePreDischargeDone(),
+    "aria-pressed": !!patient.preDischargeDone,
+    title: patient.preDischargeDone ? '退院前手続き済（タップで未完了に戻す）' : '退院前手続きを完了にする',
+    style: {
+      marginLeft: 'auto',
+      height: 24,
+      padding: '0 5px',
+      border: patient.preDischargeDone ? '1px solid rgba(13,148,136,.35)' : '1px solid var(--border)',
+      background: patient.preDischargeDone ? 'rgba(13,148,136,.10)' : 'var(--surface)',
+      color: patient.preDischargeDone ? '#0F766E' : 'var(--text-3)',
+      fontSize: 10,
+      fontWeight: 800,
+      whiteSpace: 'nowrap'
+    }
+  }, patient.preDischargeDone ? '✓退院前' : '退院前'), showPatientMeta && React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => onMoveRole && onMoveRole(),
+    title: patient.role === 'sub' ? '受け持ちへ戻す' : 'サブへ退避',
+    style: {
+      height: 24,
+      padding: '0 5px',
+      border: '1px solid var(--border)',
+      background: 'var(--surface)',
+      color: '#64748B',
+      fontSize: 10,
+      fontWeight: 800,
+      whiteSpace: 'nowrap'
+    }
+  }, patient.role === 'sub' ? '→受け持ち' : '→サブ')), unresolvedProblems.length > 0 && React.createElement("button", {
+    type: "button",
+    onClick: () => setProblemsOpen(true),
+    title: 'プロブレムを追加・確認',
+    style: {
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 6,
+      width: '100%',
+      minWidth: 0,
+      textAlign: 'left',
+      padding: '6px 9px',
+      border: '1px solid rgba(245,158,11,.45)',
+      borderLeft: '4px solid #F59E0B',
+      borderRadius: 9,
+      background: 'rgba(245,158,11,.13)',
+      color: '#92400E',
+      fontSize: 13,
+      fontWeight: 800,
+      lineHeight: 1.4,
+      cursor: 'pointer',
+      fontFamily: 'var(--font-sans)'
     }
   }, React.createElement("span", {
     style: {
       flexShrink: 0
     }
-  }, "📋 プロブレム:"), React.createElement("span", {
+  }, "📋"), React.createElement("span", {
     style: {
       minWidth: 0,
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
+      flex: 1,
+      overflowWrap: 'anywhere'
     }
-  }, unresolvedProblemSummary || "追加・確認")), showAlerts && patient.alerts?.medHold && (medHoldEditing ? React.createElement("input", {
+  }, unresolvedProblemSummary), unresolvedProblems.length > 1 && React.createElement("span", {
+    style: {
+      flexShrink: 0,
+      fontSize: 10,
+      fontWeight: 800,
+      padding: '1px 6px',
+      borderRadius: 99,
+      background: 'rgba(245,158,11,.22)'
+    }
+  }, unresolvedProblems.length)), showAlerts && patient.alerts?.medHold && (medHoldEditing ? React.createElement("input", {
     autoFocus: true,
     value: patient.medHoldNote || '',
     onChange: e => onMedHoldNoteChange && onMedHoldNoteChange(e.target.value),
@@ -3953,44 +4350,46 @@ function PatientCard({
     className: "inp",
     style: {
       width: '100%',
-      fontSize: 12
+      padding: '6px 9px',
+      fontSize: 13
     }
   }) : React.createElement("button", {
     type: "button",
-    className: "btn-sm",
     onClick: e => {
       e.stopPropagation();
       setMedHoldEditing(true);
     },
     title: medHoldNote ? `中断薬: ${medHoldNote}（タップで編集）` : '中断薬の名前を入力',
     style: {
-      justifySelf: 'start',
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4,
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 6,
+      width: '100%',
       minWidth: 0,
-      maxWidth: '100%',
-      padding: '4px 9px',
-      border: '1px solid rgba(220,38,38,.28)',
-      borderRadius: 99,
-      background: 'rgba(254,226,226,.55)',
+      textAlign: 'left',
+      padding: '6px 9px',
+      border: '1px solid rgba(220,38,38,.35)',
+      borderLeft: '4px solid #DC2626',
+      borderRadius: 9,
+      background: 'rgba(220,38,38,.10)',
       color: '#B91C1C',
-      fontSize: 10,
-      fontWeight: 800
+      fontSize: 13,
+      fontWeight: 800,
+      lineHeight: 1.4,
+      cursor: 'pointer',
+      fontFamily: 'var(--font-sans)'
     }
   }, React.createElement("span", {
     style: {
-      flexShrink: 0,
-      color: 'var(--text-3)'
+      flexShrink: 0
     }
-  }, "中断薬:"), React.createElement("span", {
+  }, "💊 中断:"), React.createElement("span", {
     style: {
       minWidth: 0,
-      maxWidth: 'min(18em, 50vw)',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      color: medHoldNote ? '#B91C1C' : 'var(--text-3)'
+      flex: 1,
+      overflowWrap: 'anywhere',
+      color: medHoldNote ? '#B91C1C' : 'var(--text-3)',
+      fontWeight: medHoldNote ? 800 : 600
     }
   }, medHoldNote || "薬剤名を入力"), React.createElement("span", {
     "aria-hidden": true,
@@ -3998,36 +4397,7 @@ function PatientCard({
       flexShrink: 0,
       opacity: .55
     }
-  }, "✎"))), showPatientMeta && React.createElement("button", {
-    type: "button",
-    className: "btn-sm",
-    onClick: () => onTogglePreDischargeDone && onTogglePreDischargeDone(),
-    "aria-pressed": !!patient.preDischargeDone,
-    title: patient.preDischargeDone ? '退院前手続きを未完了に戻す' : '退院前手続きを完了にする',
-    style: {
-      marginLeft: 'auto',
-      padding: '4px 9px',
-      border: patient.preDischargeDone ? '1px solid rgba(13,148,136,.35)' : '1px solid var(--border)',
-      background: patient.preDischargeDone ? 'rgba(13,148,136,.10)' : 'var(--surface)',
-      color: patient.preDischargeDone ? '#0F766E' : 'var(--text-3)',
-      fontSize: 10,
-      fontWeight: 800,
-      whiteSpace: 'nowrap'
-    }
-  }, patient.preDischargeDone ? '✓ 済' : '退院前手続き'), showPatientMeta && React.createElement("button", {
-    type: "button",
-    className: "btn-sm",
-    onClick: () => onMoveRole && onMoveRole(),
-    style: {
-      padding: '4px 9px',
-      border: '1px solid var(--border)',
-      background: 'var(--surface)',
-      color: '#64748B',
-      fontSize: 10,
-      fontWeight: 800,
-      whiteSpace: 'nowrap'
-    }
-  }, patient.role === 'sub' ? '→ 受け持ちへ' : '→ サブへ')), React.createElement("textarea", {
+  }, "✎")))), React.createElement("textarea", {
     value: patient.memo || '',
     onChange: e => onMemoChange(e.target.value),
     onClick: e => e.stopPropagation(),
@@ -4058,6 +4428,7 @@ function PatientCard({
   }, sortedOpen.map(t => React.createElement(TaskRow, {
     key: t.id,
     task: t,
+    highlighted: !!spotlightTaskId && t.id === spotlightTaskId,
     typeMeta: typeMeta,
     estMeta: estMeta,
     now: now,
@@ -4094,6 +4465,29 @@ function PatientCard({
       marginTop: 4
     }
   }, React.createElement("button", {
+    // 終了は誤タップしやすい見出しから外し、展開した一番下の左端に置く（確認ダイアログあり）
+    type: "button",
+    className: "btn-sm",
+    onClick: e => {
+      e.stopPropagation();
+      onRemove();
+    },
+    title: "終了",
+    style: {
+      marginRight: 'auto',
+      fontSize: 11,
+      fontWeight: 800,
+      color: '#0E7490',
+      gap: 4,
+      background: 'rgba(6,182,212,.08)',
+      border: '1px solid rgba(6,182,212,.28)',
+      borderRadius: 99,
+      padding: '3px 10px'
+    }
+  }, React.createElement(BedDouble, {
+    size: 12,
+    color: "#0E7490"
+  }), "終了"), React.createElement("button", {
     className: "btn-sm",
     onClick: e => {
       e.stopPropagation();
@@ -8963,224 +9357,6 @@ function FloatingTimerBar({
     title: "しまう"
   }, "しまう"))));
 }
-function TimerQuickLauncher({
-  running,
-  onStartTimer,
-  onStartTally,
-  suspended,
-  onResumeSuspended
-}) {
-  const [dockPosition, setDockPosition] = React.useState(() => {
-    const saved = loadLocal(TIMER_DOCK_POSITION_STORAGE_KEY);
-    if (!Number.isFinite(saved?.y)) return null;
-    if (saved?.side === 'left' || saved?.side === 'right') return { side: saved.side, y: saved.y };
-    if (Number.isFinite(saved?.x)) {
-      return { side: saved.x < window.innerWidth / 2 ? 'left' : 'right', y: saved.y };
-    }
-    return null;
-  });
-  const dockRef = React.useRef(null);
-  const dragRef = React.useRef(null);
-  const clampDockPosition = (x, y, width, height) => ({
-    x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
-    y: Math.max(8, Math.min(y, window.innerHeight - height - 8))
-  });
-  const snapDockPosition = (position, width, height) => {
-    const clamped = clampDockPosition(position.x, position.y, width, height);
-    return {
-      side: clamped.x + width / 2 < window.innerWidth / 2 ? 'left' : 'right',
-      y: clamped.y
-    };
-  };
-  const moveDock = next => {
-    setDockPosition(next);
-    saveLocal(TIMER_DOCK_POSITION_STORAGE_KEY, next);
-  };
-  const resetDockPosition = () => {
-    setDockPosition(null);
-    saveLocal(TIMER_DOCK_POSITION_STORAGE_KEY, null);
-  };
-  const onDragStart = e => {
-    const rect = dockRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    dragRef.current = {
-      pointerId: e.pointerId,
-      startX: e.clientX,
-      startY: e.clientY,
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      height: rect.height,
-      latest: { x: rect.left, y: rect.top }
-    };
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  const onDragMove = e => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    const next = clampDockPosition(
-      drag.left + e.clientX - drag.startX,
-      drag.top + e.clientY - drag.startY,
-      drag.width,
-      drag.height
-    );
-    drag.latest = next;
-    setDockPosition(next);
-    e.preventDefault();
-  };
-  const onDragEnd = e => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    dragRef.current = null;
-    moveDock(snapDockPosition(drag.latest, drag.width, drag.height));
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    e.preventDefault();
-  };
-  const onDockKeyDown = e => {
-    if (e.key === 'Home') {
-      resetDockPosition();
-      e.preventDefault();
-      return;
-    }
-    const rect = dockRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      moveDock({ side: e.key === 'ArrowLeft' ? 'left' : 'right', y: rect.top });
-      e.preventDefault();
-      return;
-    }
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-    const y = clampDockPosition(rect.left, rect.top + (e.key === 'ArrowUp' ? -12 : 12), rect.width, rect.height).y;
-    moveDock({
-      side: dockPosition?.side || (rect.left < window.innerWidth / 2 ? 'left' : 'right'),
-      y
-    });
-    e.preventDefault();
-  };
-  React.useEffect(() => {
-    const keepInViewport = () => {
-      const rect = dockRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setDockPosition(previous => {
-        if (!previous) return previous;
-        const next = {
-          side: previous.side === 'left' ? 'left' : 'right',
-          y: clampDockPosition(rect.left, previous.y, rect.width, rect.height).y
-        };
-        if (next.side === previous.side && next.y === previous.y) return previous;
-        saveLocal(TIMER_DOCK_POSITION_STORAGE_KEY, next);
-        return next;
-      });
-    };
-    window.addEventListener('resize', keepInViewport);
-    keepInViewport();
-    return () => window.removeEventListener('resize', keepInViewport);
-  }, [suspended]);
-  if (running) return null;
-  return React.createElement("div", {
-    className: "timer-tally-dock",
-    ref: dockRef,
-    style: {
-      position: 'fixed',
-      left: Number.isFinite(dockPosition?.x) ? dockPosition.x : dockPosition?.side === 'left' ? 'max(8px, env(safe-area-inset-left))' : 'auto',
-      top: Number.isFinite(dockPosition?.y) ? dockPosition.y : 'auto',
-      right: Number.isFinite(dockPosition?.x) || dockPosition?.side === 'left' ? 'auto' : dockPosition?.side === 'right' ? 'max(8px, env(safe-area-inset-right))' : 'max(12px, env(safe-area-inset-right))',
-      bottom: dockPosition ? 'auto' : 'max(112px, calc(env(safe-area-inset-bottom) + 112px))',
-      zIndex: 9040,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-      padding: 6,
-      borderRadius: 999,
-      background: 'color-mix(in srgb, var(--surface) 88%, transparent)',
-      border: '1px solid var(--border)',
-      boxShadow: '0 8px 24px rgba(24,15,62,.18)',
-      backdropFilter: 'blur(8px)'
-    },
-    "aria-label": "タイマーと件数クリッカー"
-  }, React.createElement("div", {
-    role: "button",
-    tabIndex: 0,
-    title: "ドラッグすると左右の画面端に吸着・ダブルクリックで右下に戻す",
-    "aria-label": "タイマーと件数クリッカーを移動",
-    onPointerDown: onDragStart,
-    onPointerMove: onDragMove,
-    onPointerUp: onDragEnd,
-    onPointerCancel: onDragEnd,
-    onDoubleClick: resetDockPosition,
-    onKeyDown: onDockKeyDown,
-    style: {
-      width: 38,
-      height: 20,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--text-3)',
-      fontSize: 14,
-      lineHeight: 1,
-      cursor: 'grab',
-      touchAction: 'none',
-      userSelect: 'none',
-      opacity: .68
-    }
-  }, "⠿"), suspended && React.createElement("button", {
-    type: "button",
-    className: "btn-ghost dock-icon",
-    onClick: onResumeSuspended,
-    title: `${suspended.mode === 'tally' ? '件数クリッカー' : 'タイマー'}を再開: ${suspended.title || '中断中'}`,
-    "aria-label": "中断中の計測を再開",
-    style: {
-      width: 38,
-      height: 38,
-      padding: 0,
-      borderRadius: 999,
-      fontSize: 17,
-      lineHeight: 1,
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--accent)',
-      borderColor: 'var(--accent)',
-      background: 'var(--surface)'
-    }
-  }, "↩"), React.createElement("button", {
-    type: "button",
-    className: "btn-ghost dock-icon",
-    onClick: onStartTimer,
-    title: "自由タイマーを起動",
-    "aria-label": "自由タイマーを起動",
-    style: {
-      width: 38,
-      height: 38,
-      padding: 0,
-      borderRadius: 999,
-      fontSize: 17,
-      lineHeight: 1,
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }
-  }, "⏱"), React.createElement("button", {
-    type: "button",
-    className: "btn-ghost dock-icon",
-    onClick: onStartTally,
-    title: "件数クリッカーを起動",
-    "aria-label": "件数クリッカーを起動",
-    style: {
-      width: 38,
-      height: 38,
-      padding: 0,
-      borderRadius: 999,
-      fontSize: 17,
-      lineHeight: 1,
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }
-  }, "🔢"));
-}
 function SubPatientSection({ patients, open, onToggleOpen, onAdd, renderPatientCard, now }) {
   const incompleteCount = patients.reduce((sum, patient) => sum + (patient.tasks || []).filter(task => task.status !== 'done' && !isFutureReserved(task)).length, 0);
   const timedCount = patients.reduce((sum, patient) => sum + (patient.tasks || []).filter(task => isActionableTask(task) && task.scheduledTime && timeStatus(task.scheduledTime, now)).length, 0);
@@ -11478,7 +11654,7 @@ function PatientEnergyPanel({ patients, attentionPatients = patients, generalTas
     marginBottom: 12, paddingBottom: compact ? 0 : 68, display: 'grid', gap: 12,
     minWidth: 0, color: 'var(--text)', fontSize: 15, lineHeight: 1.5
   } },
-    h('style', null, 'body.patient-energy-mode .app-header, body.patient-energy-mode .chibi-coach, body.patient-energy-mode .command-dock, body.patient-energy-mode .timer-tally-dock { display: none !important; }'),
+    h('style', null, 'body.patient-energy-mode .app-header, body.patient-energy-mode .chibi-coach, body.patient-energy-mode .command-dock { display: none !important; }'),
     compact && h('div', { style: rowStyle }, h('strong', null, '今日・要確認（全患者）'),
       h('button', { type: 'button', className: 'btn-ghost', style: { ...buttonStyle, marginLeft: 'auto' },
         onClick: () => onSelect(patient?.id || '') }, '簡易モードを開く')),
@@ -11567,6 +11743,9 @@ function PatientTriage() {
   const [newPatientAdmissionDate, setNewPatientAdmissionDate] = useState(dateStrFromDate(new Date()));
   const [addPatientDialog, setAddPatientDialog] = useState(false);
   const [subPatientsOpen, setSubPatientsOpen] = useState(() => loadLocal(SUB_PATIENTS_OPEN_STORAGE_KEY) === true);
+  const [signalRowOn, setSignalRowOn] = useState(() => loadLocal(SIGNAL_ROW_STORAGE_KEY) !== false);
+  const [spotlightMode, setSpotlightMode] = useState(false);
+  const lastWorkedPatientRef = React.useRef(null);
   const [appMode, setAppMode] = useState(() => {
     const d = new Date();
     const isWeekday = d.getDay() >= 1 && d.getDay() <= 5;
@@ -11966,6 +12145,9 @@ function PatientTriage() {
   useEffect(() => {
     saveLocal(SUB_PATIENTS_OPEN_STORAGE_KEY, subPatientsOpen);
   }, [subPatientsOpen]);
+  useEffect(() => {
+    saveLocal(SIGNAL_ROW_STORAGE_KEY, signalRowOn);
+  }, [signalRowOn]);
   useEffect(() => {
     document.body.classList.toggle('daily-mode', isDailyMode);
     document.body.classList.toggle('work-mode', isWorkMode);
@@ -12806,6 +12988,10 @@ function PatientTriage() {
   };
   const completeTask = (patientId, taskId) => {
     rememberUndo('タスク完了');
+    lastWorkedPatientRef.current = {
+      id: patientId,
+      at: Date.now()
+    };
     if (isDailyMode) {
       const patient = activePatients.find(p => p.id === patientId);
       const task = patient && (patient.tasks || []).find(t => t.id === taskId);
@@ -13710,42 +13896,69 @@ function PatientTriage() {
     setPromoteTarget(null);
     showToast(`${newPatient.name} を受け持ちに登録しました`);
   };
+  // 次の一手の選び方（次の一手・いまここ・低燃費で共通）
+  // 1. 時刻超過・今のタスクは必ず先に出す（「あとで」中のものは除く）
+  // 2. なければ、直前に完了した患者(30分以内)に残りがあればそこから選ぶ
+  // 3. 残りは重み付きのくじ引き。ER・高、時刻が近いもの、着手中を出やすくする
+  // 4. 「あとで」を押したタスクはしばらく出にくくする。すきまタスクも控えめな重みで混ぜる
   const suggestNext = (lowEnergy = focusMode) => {
-    let pool = flatTasks.filter(t => (t.status === 'todo' || t.status === 'doing') && !t.patientPlanned && !isFutureReserved(t));
-    if (erOnly) {
-      pool = pool.filter(t => t.patientPriority === 'er');
-    }
-    if (wardOnly) {
-      pool = pool.filter(t => t.patientPriority !== 'er');
-    }
+    const nowMs = Date.now();
+    const recentPatient = lastWorkedPatientRef.current && nowMs - lastWorkedPatientRef.current.at < SAME_PATIENT_BOOST_MS ? lastWorkedPatientRef.current.id : '';
+    let patientPool = flatTasks.filter(t => (t.status === 'todo' || t.status === 'doing') && !t.patientPlanned && !isFutureReserved(t));
+    if (erOnly) patientPool = patientPool.filter(t => t.patientPriority === 'er');
+    if (wardOnly) patientPool = patientPool.filter(t => t.patientPriority !== 'er');
+    let generalPool = erOnly ? [] : activeGeneralTasks.filter(t => t.status === 'todo' || t.status === 'doing');
+    // 締めタスク(closer)は他のタスクが残っているうちは提案しない
+    const generalNonCloser = generalPool.filter(t => !t.closer);
+    if (generalNonCloser.length || patientPool.length) generalPool = generalNonCloser;
+    let items = [...patientPool.map(task => ({
+      task,
+      general: false
+    })), ...generalPool.map(task => ({
+      task,
+      general: true
+    }))];
     if (lowEnergy) {
-      const urgent = pool.filter(t => t.status === 'doing' || t.patientPriority === 'er' || ['past', 'now'].includes(timeStatus(t.scheduledTime, now)));
-      if (urgent.length) pool = urgent;
+      const urgent = items.filter(({
+        task,
+        general
+      }) => task.status === 'doing' || !general && task.patientPriority === 'er' || general && task.dueDate && task.dueDate <= todayStr() || ['past', 'now'].includes(timeStatus(task.scheduledTime, now)));
+      if (urgent.length) items = urgent;
     }
-    if (!suggestion?.fromGeneral && suggestion?.task?.id && pool.length > 1) {
-      const alternatePool = pool.filter(t => t.id !== suggestion.task.id);
-      if (alternatePool.length) pool = alternatePool;
+    if (suggestion?.task?.id && items.length > 1) {
+      const alternates = items.filter(({
+        task,
+        general
+      }) => !(task.id === suggestion.task.id && general === !!suggestion.fromGeneral));
+      if (alternates.length) items = alternates;
     }
-    if (!pool.length) {
-      let generalPool = erOnly ? [] : activeGeneralTasks.filter(t => t.status === 'todo' || t.status === 'doing');
-      // 締めタスク(closer)は他のタスクが残っているうちは提案しない
-      const generalNonCloser = generalPool.filter(t => !t.closer);
-      if (generalNonCloser.length) generalPool = generalNonCloser;
-      if (lowEnergy) {
-        const urgent = generalPool.filter(t => t.status === 'doing' || t.dueDate && t.dueDate <= todayStr() || ['past', 'now'].includes(timeStatus(t.scheduledTime, now)));
-        if (urgent.length) generalPool = urgent;
-      }
-      if (suggestion?.fromGeneral && suggestion?.task?.id && generalPool.length > 1) {
-        const alternateGeneralPool = generalPool.filter(t => t.id !== suggestion.task.id);
-        if (alternateGeneralPool.length) generalPool = alternateGeneralPool;
-      }
-      if (!generalPool.length) {
-        setSuggestion({
-          empty: true
-        });
-        return;
-      }
-      const generalWeights = generalPool.map(t => {
+    const critical = items.filter(({
+      task
+    }) => !isTaskSnoozed(task, nowMs) && ['past', 'now'].includes(timeStatus(task.scheduledTime, now)));
+    if (critical.length) items = critical;else if (recentPatient) {
+      // 同じ患者のタスクは続けてやれることが多いので、直前に完了した患者に残りがあればそこから選ぶ
+      const samePatient = items.filter(({
+        task,
+        general
+      }) => !general && task.patientId === recentPatient && !isTaskSnoozed(task, nowMs));
+      if (samePatient.length) items = samePatient;
+    }
+    if (!items.length) {
+      setSuggestion({
+        empty: true
+      });
+      return;
+    }
+    const scheduleWeight = task => {
+      const ts = timeStatus(task.scheduledTime, now);
+      return ts === 'past' ? 3.5 : ts === 'now' ? 3.0 : ts === 'soon' ? 2.2 : ts === 'upcoming' ? 1.4 : 1.0;
+    };
+    const weights = items.map(({
+      task: t,
+      general
+    }) => {
+      const snoozeW = isTaskSnoozed(t, nowMs) ? 0.15 : 1;
+      if (general) {
         const estW = {
           '2': 1.7,
           '5': 1.25,
@@ -13754,32 +13967,12 @@ function PatientTriage() {
           '30': 0.7
         }[t.estimate] || 1;
         const stateW = t.status === 'doing' ? 1.9 : 1.0;
-        const priorityW = isDailyMode ? (DAILY_TASK_PRIORITIES.find(p => p.id === t.dailyPriority)?.weight || 1) : 1;
+        const priorityW = isDailyMode ? DAILY_TASK_PRIORITIES.find(p => p.id === t.dailyPriority)?.weight || 1 : 1;
         const dueW = t.dueDate && t.dueDate <= todayStr() ? 1.8 : 1;
-        return estW * stateW * priorityW * dueW;
-      });
-      const generalTotal = generalWeights.reduce((a, b) => a + b, 0);
-      let generalRoll = Math.random() * generalTotal;
-      let pick = generalPool[generalPool.length - 1];
-      for (let i = 0; i < generalPool.length; i++) {
-        generalRoll -= generalWeights[i];
-        if (generalRoll <= 0) {
-          pick = generalPool[i];
-          break;
-        }
+        // 患者タスクがある間は控えめに混ぜる(でいとりでは日常タスクが本体なので同格)
+        const mixW = isDailyMode || !patientPool.length ? 1 : 0.35;
+        return estW * stateW * priorityW * dueW * scheduleWeight(t) * mixW * snoozeW;
       }
-      setSuggestion({
-        task: {
-          ...pick,
-          general: true,
-          patientName: 'すきまタスク',
-          patientPriority: 'low'
-        },
-        fromGeneral: true
-      });
-      return;
-    }
-    const weights = pool.map(t => {
       const estW = {
         '2': 1.6,
         '5': 1.2,
@@ -13788,22 +13981,42 @@ function PatientTriage() {
       }[t.estimate] || 1;
       const stateW = t.status === 'doing' ? 1.8 : 1.0;
       const priW = t.patientPriority === 'er' ? 3.0 : t.patientPriority === 'high' ? 2.2 : t.patientPriority === 'low' ? 0.55 : t.patientPriority === 'planned' ? 0.15 : 1.0;
-      const ts = timeStatus(t.scheduledTime, now);
-      const schedW = ts === 'past' ? 3.5 : ts === 'now' ? 3.0 : ts === 'soon' ? 2.2 : ts === 'upcoming' ? 1.4 : 1.0;
-      return estW * stateW * priW * schedW;
+      return estW * stateW * priW * scheduleWeight(t) * snoozeW;
     });
     const total = weights.reduce((a, b) => a + b, 0);
     let r = Math.random() * total,
-      pick = pool[pool.length - 1];
-    for (let i = 0; i < pool.length; i++) {
+      pick = items[items.length - 1];
+    for (let i = 0; i < items.length; i++) {
       r -= weights[i];
       if (r <= 0) {
-        pick = pool[i];
+        pick = items[i];
         break;
       }
     }
+    if (pick.general) {
+      setSuggestion({
+        task: {
+          ...pick.task,
+          general: true,
+          patientName: 'すきまタスク',
+          patientPriority: 'low'
+        },
+        fromGeneral: true
+      });
+      return;
+    }
     setSuggestion({
-      task: pick
+      task: pick.task
+    });
+  };
+  // 「あとで」: 今日中にやるが今は進められないタスクを、しばらく候補に出にくくする
+  const snoozeSuggestedTask = () => {
+    const task = suggestion?.task;
+    if (!task || suggestion.fromStuck) return;
+    if (suggestion.fromGeneral) updateGeneralTask(task.id, {
+      snoozedAt: Date.now()
+    });else updateTask(task.patientId, task.id, {
+      snoozedAt: Date.now()
     });
   };
   const suggestFromStuck = () => {
@@ -13812,6 +14025,13 @@ function PatientTriage() {
       task: stuckTasks[Math.floor(Math.random() * stuckTasks.length)],
       fromStuck: true
     });
+    // 表示を一種類にそろえるため、詰まりタスクも「いまここ」で照らす
+    if (!isWorkMode) {
+      setFocusMode(false);
+      setLowEnergyNeedsNext(false);
+      setPatientEnergyMode(false);
+      setSpotlightMode(true);
+    }
   };
   const toggleLowEnergyMode = () => {
     if (focusMode) {
@@ -13820,14 +14040,29 @@ function PatientTriage() {
       return;
     }
     setPatientEnergyMode(false);
+    setSpotlightMode(false);
     setFocusMode(true);
     suggestNext(true);
+  };
+  // いまここモード: 一覧は消さずに、次の一手の患者だけを照らして他を薄くする
+  const toggleSpotlightMode = () => {
+    if (spotlightMode) {
+      setSpotlightMode(false);
+      setSuggestion(null);
+      return;
+    }
+    setFocusMode(false);
+    setLowEnergyNeedsNext(false);
+    setPatientEnergyMode(false);
+    setSpotlightMode(true);
+    suggestNext(false);
   };
   const togglePatientEnergyMode = () => {
     if (patientEnergyMode) {
       setPatientEnergyMode(false);
       return;
     }
+    setSpotlightMode(false);
     setFocusMode(false);
     setLowEnergyNeedsNext(false);
     setSuggestion(null);
@@ -13885,13 +14120,12 @@ function PatientTriage() {
     setLowEnergyNeedsNext(false);
     suggestNext();
   }, [focusMode, lowEnergyNeedsNext, flatTasks, activeGeneralTasks]);
-  // 低燃費モードは再起動後も維持する(Android WebViewは頻繁に再読込されるため)。保存時と同じモードのときだけ復元。
+  // 低燃費の入口は外したので、低燃費のまま保存されていたら「いまここ」として復帰する。保存時と同じモードのときだけ。
   useEffect(() => {
     if (!loaded) return;
     const saved = loadLocal(FOCUS_MODE_STORAGE_KEY);
     if (!saved?.on || saved.mode !== appMode || isWorkMode) return;
-    setFocusMode(true);
-    setLowEnergyNeedsNext(true);
+    setSpotlightMode(true);
   }, [loaded]);
   useEffect(() => {
     if (!loaded) return;
@@ -13900,6 +14134,44 @@ function PatientTriage() {
       mode: appMode
     } : null);
   }, [loaded, focusMode, appMode]);
+  const spotlightActive = spotlightMode && !isWorkMode;
+  const spotlightPatientId = spotlightActive && suggestion?.task && !suggestion.fromGeneral ? suggestion.task.patientId : '';
+  const spotlightTaskId = spotlightActive && suggestion?.task ? suggestion.task.id : '';
+  // 照らしているタスクが完了・保留・削除されたら、次の一手を自動で選び直す
+  useEffect(() => {
+    if (!spotlightActive || suggestion?.empty) return;
+    const task = suggestion?.task;
+    const live = !task ? null : suggestion.fromGeneral ? activeGeneralTasks.find(t => t.id === task.id) : flatTasks.find(t => t.id === task.id && t.patientId === task.patientId);
+    if (live && ['todo', 'doing', 'stuck'].includes(live.status)) return;
+    suggestNext(false);
+  }, [spotlightActive, suggestion, flatTasks, activeGeneralTasks]);
+  useEffect(() => {
+    if (!spotlightPatientId) return;
+    setActiveExpandedPatients(prev => prev[spotlightPatientId] ? prev : {
+      ...prev,
+      [spotlightPatientId]: true
+    });
+    const timer = setTimeout(() => {
+      const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      document.getElementById(`patient-card-${spotlightPatientId}`)?.scrollIntoView({
+        behavior: reduce ? 'auto' : 'smooth',
+        block: 'start'
+      });
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [spotlightPatientId, spotlightTaskId]);
+  useEffect(() => {
+    if (!loaded || isWorkMode) return;
+    const saved = loadLocal(SPOTLIGHT_MODE_STORAGE_KEY);
+    if (saved?.on && saved.mode === appMode) setSpotlightMode(true);
+  }, [loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    saveLocal(SPOTLIGHT_MODE_STORAGE_KEY, spotlightMode ? {
+      on: true,
+      mode: appMode
+    } : null);
+  }, [loaded, spotlightMode, appMode]);
   useEffect(() => {
     if (!loaded || isDailyMode || isWorkMode) return;
     const saved = loadLocal(PATIENT_ENERGY_MODE_STORAGE_KEY);
@@ -14583,8 +14855,12 @@ function PatientTriage() {
     showAlerts: !isDailyMode,
     showPatientMeta: !isDailyMode,
     checkMode: !isDailyMode ? checkMode : '',
-    dimmed: !!checkMode && !isDailyMode && isCheckedToday(p, checkMode),
+    dimmed: !!checkMode && !isDailyMode && isCheckedToday(p, checkMode) || !!spotlightPatientId && p.id !== spotlightPatientId,
+    signalRow: signalRowOn && !isDailyMode,
+    spotlight: !!spotlightPatientId && p.id === spotlightPatientId,
+    spotlightTaskId: p.id === spotlightPatientId ? spotlightTaskId : '',
     onToggleChecked: () => toggleChecked(checkMode, p.id),
+    onToggleCheck: !isDailyMode ? kind => toggleChecked(kind, p.id) : null,
     onRename: name => renamePatient(p.id, name),
     onMemoChange: memo => updatePatientMemo(p.id, memo),
     templates: templates,
@@ -14651,7 +14927,7 @@ function PatientTriage() {
       maxWidth: 720,
       margin: '0 auto'
     }
-  }, undoEntry && !patientEnergyMode && React.createElement("button", {
+  }, undoEntry && !patientEnergyMode && !spotlightActive && React.createElement("button", {
     className: "btn-ghost",
     onClick: undoLast,
     title: `${undoEntry.label || '直前の操作'}を元に戻す`,
@@ -14777,22 +15053,7 @@ function PatientTriage() {
       color: 'rgba(255,255,255,.50)',
       fontWeight: 600
     }
-  }, s.label))), !isWorkMode && !isDailyMode && React.createElement('button', {
-    type: 'button',
-    className: 'stat-pill',
-    onClick: togglePatientEnergyMode,
-    'aria-label': patientEnergyMode ? '簡易モードを終了' : '簡易モードを開く',
-    'aria-pressed': patientEnergyMode,
-    style: {
-      minHeight: 44,
-      padding: '8px 10px',
-      color: '#fff',
-      fontSize: 12,
-      fontWeight: 700,
-      cursor: 'pointer',
-      whiteSpace: 'nowrap'
-    }
-  }, patientEnergyMode ? '通常に戻る' : '🔋 簡易'), gasConfig.url && React.createElement("span", {
+  }, s.label))), gasConfig.url && React.createElement("span", {
     className: "gas-badge",
     style: {
       background: gasC.bg,
@@ -14910,7 +15171,24 @@ function PatientTriage() {
       letterSpacing: 0,
       whiteSpace: 'nowrap'
     }
-  }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), !isWorkMode && React.createElement("button", {
+  }, timedAlertMode === 'all' ? "\u6642\u9650:\u5168\u90E8" : "\u6642\u9650:\u76F4\u8FD1"), !isDailyMode && !isWorkMode && React.createElement("button", {
+    onClick: () => setSignalRowOn(v => !v),
+    "aria-pressed": signalRowOn,
+    title: signalRowOn ? '\u60A3\u8005\u30BF\u30A4\u30EB\u306E\u4FE1\u53F7\u5217\u3092\u8868\u793A\u4E2D\uFF08\u56DE\u8A3A\u30FB\u30AB\u30EB\u30C6\u30FB\u6642\u523B\u30FB\u672A\u5B8C\u4E86\u30FB\u30D7\u30ED\u30D6\u30EC\u30E0\u30FB\u6CE8\u610F\u3092\u56FA\u5B9A\u4F4D\u7F6E\u306B\u4E26\u3079\u308B\uFF09' : '\u60A3\u8005\u30BF\u30A4\u30EB\u3092\u5F93\u6765\u306E\u898B\u51FA\u3057\u3067\u8868\u793A\u4E2D',
+    style: {
+      border: signalRowOn ? '2px solid #BFDBFE' : '1.5px solid rgba(255,255,255,.35)',
+      borderRadius: 6,
+      background: signalRowOn ? 'rgba(59,130,246,.26)' : 'rgba(255,255,255,.12)',
+      color: '#fff',
+      padding: '3px 8px',
+      cursor: 'pointer',
+      fontSize: 11,
+      fontWeight: 800,
+      fontFamily: 'var(--font-sans)',
+      letterSpacing: 0,
+      whiteSpace: 'nowrap'
+    }
+  }, signalRowOn ? '\u4FE1\u53F7:ON' : '\u4FE1\u53F7:OFF'), !isWorkMode && React.createElement("button", {
     onClick: requestEndDay,
     title: isDailyMode ? "\u5C31\u5BDD\u524D\u306B\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u7247\u3065\u3051\u308B" : "\u696D\u52D9\u7D42\u4E86\u3068\u3057\u3066\u5B8C\u4E86\u6E08\u307F\u30BF\u30B9\u30AF\u3092\u7247\u3065\u3051\u308B",
     style: {
@@ -15032,11 +15310,12 @@ function PatientTriage() {
   }, React.createElement("div", {
     className: "action-cluster action-cluster-primary"
   }, React.createElement("button", {
+    // \u5165\u53E3\u306F\u300C\u3044\u307E\u3053\u3053\u300D\u4E00\u3064\u306B\u307E\u3068\u3081\u305F\uFF08\u6B21\u306E\u4E00\u624B\u30FB\u4F4E\u71C3\u8CBB\u306E\u5165\u53E3\u306F\u5916\u3057\u305F\u3002DEVELOPMENT.md \u53C2\u7167\uFF09
     className: "btn-dark",
-    onClick: () => suggestNext()
-  }, React.createElement(Zap, {
-    size: 14
-  }), "\u6B21\u306E\u4E00\u624B"), React.createElement("button", {
+    onClick: toggleSpotlightMode,
+    "aria-pressed": spotlightActive,
+    title: spotlightActive ? '\u3044\u307E\u3053\u3053\u8868\u793A\u3092\u7D42\u3048\u308B' : '\u4E00\u89A7\u306F\u305D\u306E\u307E\u307E\u3001\u6B21\u306E\u4E00\u624B\u306E\u60A3\u8005\u3060\u3051\u3092\u7167\u3089\u3059'
+  }, "\uD83D\uDD26 ", spotlightActive ? "\u7167\u3089\u3057\u4E2D" : "\u3044\u307E\u3053\u3053"), React.createElement("button", {
     className: `btn-ghost dock-icon${wardOnly ? ' btn-ghost-active' : ''}`,
     onClick: () => setWardOnly(v => {
       const next = !v;
@@ -15082,14 +15361,7 @@ function PatientTriage() {
     }, `${meta.icon} `, React.createElement("span", {
       className: "round-dock-label"
     }, `${meta.label} `), `${checkedCounts[kind]}/${checkTargets.length}`);
-  })), React.createElement("div", {
-    className: "action-cluster"
-  }, React.createElement("button", {
-    className: `btn-ghost${focusMode ? ' btn-ghost-active' : ''}`,
-    onClick: toggleLowEnergyMode,
-    "aria-pressed": focusMode,
-    title: focusMode ? "\u4E00\u89A7\u306B\u623B\u308B" : "\u4E00\u4EF6\u305A\u3064\u9032\u3081\u308B"
-  }, "\uD83D\uDD0B ", focusMode ? "\u4F4E\u71C3\u8CBB\u4E2D" : "\u4F4E\u71C3\u8CBB")), !focusMode && React.createElement("div", {
+  })), !focusMode && React.createElement("div", {
     className: "action-cluster action-cluster-tools"
   }, !isDailyMode && React.createElement("button", {
     className: "btn-dark",
@@ -15124,7 +15396,27 @@ function PatientTriage() {
     onClick: () => setExamCheckDialogOpen(true),
     "aria-label": "今日の検査チェックを一覧表示",
     title: `今日の検査チェック ${examCheckTasks.length}件・${examCheckPatientCount}人`
-  }, "🧪")), !isWorkMode && stuckTasks.length > 0 && React.createElement("button", {
+  }, "🧪"), !runningTask && suspendedRunningTask && React.createElement("button", {
+    // タイマー・件数クリッカーは浮かせず、ドックに置く（画面上の邪魔にならない）
+    className: "btn-ghost dock-icon",
+    onClick: resumeSuspendedRunning,
+    "aria-label": "中断中の計測を再開",
+    title: `${suspendedRunningTask.mode === 'tally' ? '件数クリッカー' : 'タイマー'}を再開: ${suspendedRunningTask.title || '中断中'}`,
+    style: {
+      color: 'var(--accent)',
+      borderColor: 'var(--accent)'
+    }
+  }, "↩"), !runningTask && React.createElement("button", {
+    className: "btn-ghost dock-icon",
+    onClick: startManualTimer,
+    "aria-label": "自由タイマーを起動",
+    title: "自由タイマーを起動"
+  }, "⏱"), !runningTask && React.createElement("button", {
+    className: "btn-ghost dock-icon",
+    onClick: startManualTally,
+    "aria-label": "件数クリッカーを起動",
+    title: "件数クリッカーを起動"
+  }, "🔢")), !isWorkMode && stuckTasks.length > 0 && React.createElement("button", {
     className: "btn-rose dock-alert",
     onClick: suggestFromStuck
   }, React.createElement(AlertCircle, {
@@ -15173,7 +15465,31 @@ function PatientTriage() {
       fontSize: 12,
       padding: '6px 12px'
     }
-  }, "\u4E00\u89A7\u3078")), !isWorkMode && suggestion && React.createElement(SuggestionCard, {
+  }, "\u4E00\u89A7\u3078")), spotlightActive && React.createElement(SpotlightBar, {
+    suggestion: suggestion,
+    now: now,
+    onDone: completeSuggestedTask,
+    onNext: () => suggestNext(false),
+    onSkip: () => {
+      snoozeSuggestedTask();
+      suggestNext(false);
+    },
+    onJump: () => {
+      const id = spotlightPatientId ? `patient-card-${spotlightPatientId}` : '';
+      if (id) document.getElementById(id)?.scrollIntoView({
+        block: 'start'
+      });
+    },
+    onExit: toggleSpotlightMode,
+    undoLabel: undoEntry ? undoEntry.label || '\u76F4\u524D\u306E\u64CD\u4F5C' : '',
+    onUndo: undoLast,
+    onStartTimer: startTimer,
+    onStartTally: startTally,
+    running: runningTask,
+    onStepDone: completeSuggestedStep,
+    // 一歩完了で次の一歩が更新されるので、提案時点の写しではなく今のタスクから読む
+    stepText: suggestion?.fromStuck && suggestion.task ? flatTasks.find(t => t.id === suggestion.task.id && t.patientId === suggestion.task.patientId)?.tinyStep || '' : ''
+  }), !isWorkMode && !spotlightActive && suggestion && React.createElement(SuggestionCard, {
     suggestion: suggestion,
     typeMeta: typeMeta,
     estMeta: estMeta,
@@ -15199,6 +15515,7 @@ function PatientTriage() {
     }) : markStuck(suggestion.task.patientId, suggestion.task.id)),
     onCompleteTask: completeSuggestedTask,
     onReroll: () => {
+      snoozeSuggestedTask();
       if (!focusMode) {
         suggestNext();
         return;
@@ -15748,7 +16065,22 @@ function PatientTriage() {
       marginTop: 10,
       marginBottom: 40
     }
-  }, !isDailyMode && React.createElement(PresetHub, {
+  }, !isDailyMode && React.createElement("button", {
+    // 簡易モードは普段使わないので、ヘッダーから外してここに置く（DEVELOPMENT.md 参照）
+    type: "button",
+    className: "btn-sm",
+    onClick: togglePatientEnergyMode,
+    title: "患者を1人ずつ別画面で表示する",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 6,
+      fontSize: 12,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, "🔋 簡易モードを開く"), !isDailyMode && React.createElement(PresetHub, {
     open: presetHubOpen,
     onToggle: () => setPresetHubOpen(v => !v),
     label: "プリセット編集 (セット / よく使う / 固定)"
@@ -16334,13 +16666,7 @@ function PatientTriage() {
     }
   }, endDayCelebrate.mode === 'daily' ? "\u4ECA\u65E5\u306E\u751F\u6D3B\u30BF\u30B9\u30AF\u306F\u3053\u3053\u307E\u3067\u3002\u4F11\u3080\u65B9\u5411\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u3087\u3046\u3002" : "\u4ECA\u65E5\u306E\u696D\u52D9\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
-  }, toast), !focusMode && !patientEnergyMode && React.createElement(TimerQuickLauncher, {
-    running: runningTask,
-    onStartTimer: startManualTimer,
-    onStartTally: startManualTally,
-    suspended: suspendedRunningTask,
-    onResumeSuspended: resumeSuspendedRunning
-  }), React.createElement(FloatingTimerBar, {
+  }, toast), React.createElement(FloatingTimerBar, {
     running: runningTask,
     onIncrement: incrementRunning,
     onAddMinute: addMinuteRunning,
