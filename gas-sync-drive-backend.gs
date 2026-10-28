@@ -9,8 +9,9 @@
 //
 // ▼ 導入手順（詳しくは docs/gas-sync-drive-migration.md）
 //   1. Apps Script プロジェクトにこのファイルを追加する
-//   2. 旧同期本体の doGet / doPost を削除する（同名関数が2つあると、どちらが動くか分からなくなる）
-//      gas-chunked-storage.gs は残してよい（旧データの引き継ぎに使う）
+//   2. 旧同期本体（コード.gs）の doGet / doPost の名前を legacyDoGet / legacyDoPost に変える
+//      （同名関数が2つあると、どちらが動くか分からなくなる。消さずに名前だけ変えれば戻すのも簡単）
+//      旧コードの loadStoredRaw_ や gas-chunked-storage.gs は残す（旧データの引き継ぎに使う）
 //   3. プロジェクトの設定 > スクリプト プロパティに SYNC_SECRET（アプリのシークレットと同じ文字列）を追加する
 //      旧本体の const SECRET を残している場合は省略できる
 //   4. エディタで syncSetupDrive を一度実行し、ドライブへのアクセスを許可する
@@ -271,15 +272,38 @@ function syncEnsureMigrated_() {
 }
 
 function syncReadLegacyData_() {
+  // 旧本体の読み込み関数があれば使う（分割保存モジュール / 旧コード.gs の loadStoredRaw_）
   if (typeof loadStoredData_ === 'function') {
     const data = loadStoredData_();
     if (data) return data;
   }
+  if (typeof loadStoredRaw_ === 'function') {
+    const text = loadStoredRaw_();
+    if (text) return JSON.parse(text);
+  }
+  // 関数が無くても、丸ごと1プロパティ形式と分割形式（KEY + "__c0"…）の両方を読む
   const key = (typeof PROP_KEY !== 'undefined' && PROP_KEY) || SYNC_LEGACY_PROP_KEY_;
-  const raw = PropertiesService.getUserProperties().getProperty(key) || PropertiesService.getScriptProperties().getProperty(key);
-  if (!raw) return null;
-  const parsed = JSON.parse(raw);
-  return parsed && !parsed.__chunked ? parsed : null;
+  const text = syncReadLegacyText_(PropertiesService.getUserProperties(), key) || syncReadLegacyText_(PropertiesService.getScriptProperties(), key);
+  return text ? JSON.parse(text) : null;
+}
+
+function syncReadLegacyText_(store, key) {
+  const head = store.getProperty(key);
+  if (!head) return null;
+  let marker = null;
+  try {
+    marker = JSON.parse(head);
+  } catch (err) {
+    return head;
+  }
+  if (!marker || typeof marker !== 'object' || typeof marker.__chunked !== 'number') return head;
+  let text = '';
+  for (let i = 0; i < marker.__chunked; i++) {
+    const part = store.getProperty(key + '__c' + i);
+    if (part === null) throw new Error('旧データの断片が欠けています: ' + i + '/' + marker.__chunked);
+    text += part;
+  }
+  return text;
 }
 
 // ---------------------------------------------------------------- 共通
