@@ -1,0 +1,214 @@
+{
+  "characterId": "yufi",
+  "displayName": "ユーフィ",
+  "version": 1,
+  "artworkOnly": true,
+  "generator": "Built-in image_gen",
+  "sourceSheet": {
+    "width": 1254,
+    "height": 1254,
+    "extraction": "Nine isolated connected silhouettes; source gutters are uneven"
+  },
+  "sizing": {
+    "canvas": [
+      320,
+      448
+    ],
+    "baselineY": 424,
+    "uniformScale": 0.9129129129129129,
+    "neutralHeight": 379,
+    "seatedPoseUsesSameScale": true
+  },
+  "omittedEquipment": [
+    "剣",
+    "盾",
+    "鞘"
+  ],
+  "mascotPoses": [
+    3,
+    8,
+    9
+  ],
+  "poses": [
+    {
+      "number": 1,
+      "filename": "yufi_01_neutral.png",
+      "role": "基準立ち",
+      "hasNizucchi": false,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 44,
+        "top": 45,
+        "width": 231,
+        "height": 379,
+        "right": 274,
+        "bottom": 423,
+        "transparentFraction": 0.5744140625
+      },
+      "minMargin": 24,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 2,
+      "filename": "yufi_02_thumbsup.png",
+      "role": "控えめな案内",
+      "hasNizucchi": false,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 32,
+        "top": 44,
+        "width": 256,
+        "height": 380,
+        "right": 287,
+        "bottom": 423,
+        "transparentFraction": 0.5595284598214286
+      },
+      "minMargin": 24,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 3,
+      "filename": "yufi_03_cheer.png",
+      "role": "小さな喜び",
+      "hasNizucchi": true,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 10,
+        "top": 47,
+        "width": 299,
+        "height": 377,
+        "right": 308,
+        "bottom": 423,
+        "transparentFraction": 0.5109933035714286
+      },
+      "minMargin": 10,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 4,
+      "filename": "yufi_04_thinking.png",
+      "role": "考え中",
+      "hasNizucchi": false,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 47,
+        "top": 63,
+        "width": 226,
+        "height": 361,
+        "right": 272,
+        "bottom": 423,
+        "transparentFraction": 0.5943010602678571
+      },
+      "minMargin": 24,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 5,
+      "filename": "yufi_05_hurrying.png",
+      "role": "一歩を踏み出す",
+      "hasNizucchi": false,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 35,
+        "top": 51,
+        "width": 249,
+        "height": 373,
+        "right": 283,
+        "bottom": 423,
+        "transparentFraction": 0.5793526785714286
+      },
+      "minMargin": 24,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 6,
+      "filename": "yufi_06_laptop.png",
+      "role": "一覧を確認",
+      "hasNizucchi": false,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 44,
+        "top": 57,
+        "width": 232,
+        "height": 367,
+        "right": 275,
+        "bottom": 423,
+        "transparentFraction": 0.5697056361607142
+      },
+      "minMargin": 24,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 7,
+      "filename": "yufi_07_paper.png",
+      "role": "完了の報告",
+      "hasNizucchi": false,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 47,
+        "top": 66,
+        "width": 225,
+        "height": 358,
+        "right": 271,
+        "bottom": 423,
+        "transparentFraction": 0.5779227120535714
+      },
+      "minMargin": 24,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 8,
+      "filename": "yufi_08_sleeping.png",
+      "role": "静かな休憩",
+      "hasNizucchi": true,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 8,
+        "top": 113,
+        "width": 304,
+        "height": 311,
+        "right": 311,
+        "bottom": 423,
+        "transparentFraction": 0.5743233816964286
+      },
+      "minMargin": 8,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    },
+    {
+      "number": 9,
+      "filename": "yufi_09_smug.png",
+      "role": "秘密がちらり",
+      "hasNizucchi": true,
+      "width": 320,
+      "height": 448,
+      "alphaBbox": {
+        "left": 26,
+        "top": 73,
+        "width": 268,
+        "height": 351,
+        "right": 293,
+        "bottom": 423,
+        "transparentFraction": 0.5532645089285714
+      },
+      "minMargin": 24,
+      "groundY": 424,
+      "scale": 0.9129129129129129
+    }
+  ]
+}
