@@ -743,11 +743,27 @@ const DEFAULT_COACH_CAST = Object.freeze({
   }, {}),
   mentorArt: 'classic'
 });
+// 右下のキャラ表示の大きさ（倍率）。設定画面のスライダーで変える。
+function normalizeCoachSize(value) {
+  const size = Number(value);
+  return Number.isFinite(size) ? Math.round(Math.min(1.5, Math.max(0.7, size)) * 20) / 20 : 1;
+}
+// キャラ別の大きさ（全体の倍率に掛ける）。100%のキャラは保存しない。
+const COACH_SIZE_ID = /^[a-z][a-z0-9_-]{0,39}$/;
+function normalizeCoachSizes(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return Object.fromEntries(Object.entries(source)
+    .filter(([id]) => COACH_SIZE_ID.test(id))
+    .map(([id, size]) => [id, normalizeCoachSize(size)])
+    .filter(([, size]) => size !== 1));
+}
 function normalizeCoachCast(value) {
   const next = { ...DEFAULT_COACH_CAST, ...(value && typeof value === 'object' ? value : {}) };
   next.mentorArt = next.mentorArt === 'variant' ? 'variant' : 'classic';
+  next.coachSize = normalizeCoachSize(next.coachSize);
+  next.coachSizes = normalizeCoachSizes(next.coachSizes);
   const hasEnabled = COACH_CAST_OPTIONS.some(item => next[item.id] !== false);
-  return hasEnabled ? next : { ...DEFAULT_COACH_CAST };
+  return hasEnabled ? next : { ...DEFAULT_COACH_CAST, coachSize: next.coachSize, coachSizes: next.coachSizes };
 }
 const jsonByteLength = value => {
   const text = typeof value === 'string' ? value : JSON.stringify(value || {});
@@ -8571,12 +8587,134 @@ function PresetHub({
     }
   }, children) : null);
 }
+function CoachSizeSlider({
+  value,
+  onChange,
+  label = 'キャラの大きさ'
+}) {
+  // ドラッグ中は手元の値だけ動かし、指を止めてから保存する（保存のたびに同期・通知の再計算が走るため）
+  const [draft, setDraft] = React.useState(normalizeCoachSize(value));
+  React.useEffect(() => setDraft(normalizeCoachSize(value)), [value]);
+  React.useEffect(() => {
+    if (draft === normalizeCoachSize(value)) return;
+    const id = setTimeout(() => onChange(draft), 250);
+    return () => clearTimeout(id);
+  }, [draft]);
+  return React.createElement("label", {
+    style: {
+      width: '100%',
+      maxWidth: 320,
+      display: 'grid',
+      gridTemplateColumns: 'auto minmax(0, 1fr) 3.2em',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 8,
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 800
+    }
+  }, label, React.createElement("input", {
+    type: "range",
+    min: 0.7,
+    max: 1.5,
+    step: 0.05,
+    value: draft,
+    onChange: e => setDraft(normalizeCoachSize(e.target.value)),
+    style: {
+      width: '100%',
+      accentColor: 'var(--accent)'
+    }
+  }), React.createElement("span", {
+    style: {
+      textAlign: 'right',
+      color: 'var(--text-2)'
+    }
+  }, `${Math.round(draft * 100)}%`));
+}
+// キャラ別の大きさ。選んだキャラだけ倍率を変え、全体の大きさに掛け合わせて表示する。
+function CoachCharacterSizeControl({
+  coachCast,
+  onChange
+}) {
+  const enabled = COACH_CAST_OPTIONS.filter(c => coachCast[c.id] !== false);
+  const options = enabled.length ? enabled : COACH_CAST_OPTIONS;
+  const [selected, setSelected] = React.useState(options[0]?.id || '');
+  const current = options.some(c => c.id === selected) ? selected : options[0]?.id || '';
+  const sizes = coachCast.coachSizes || {};
+  const value = normalizeCoachSize(sizes[current] ?? 1);
+  const currentLabel = (options.find(c => c.id === current) || {}).label || '';
+  if (!current) return null;
+  return React.createElement("div", {
+    style: {
+      width: '100%',
+      maxWidth: 320,
+      display: 'grid',
+      gap: 4,
+      marginTop: 10,
+      paddingTop: 8,
+      borderTop: '1px dashed var(--border)'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, React.createElement("label", {
+    htmlFor: "coach-character-size-target",
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 11,
+      fontWeight: 800
+    }
+  }, "キャラ別"), React.createElement("select", {
+    id: "coach-character-size-target",
+    value: current,
+    onChange: e => setSelected(e.target.value),
+    style: {
+      flex: '1 1 0',
+      minWidth: 0,
+      fontSize: 12,
+      padding: '4px 6px'
+    }
+  }, options.map(c => React.createElement("option", {
+    key: c.id,
+    value: c.id
+  }, sizes[c.id] ? `${c.label}（${Math.round(normalizeCoachSize(sizes[c.id]) * 100)}%）` : c.label))), React.createElement("button", {
+    type: "button",
+    className: "btn-ghost",
+    disabled: value === 1,
+    onClick: () => onChange(current, 1),
+    style: {
+      flex: '0 0 auto',
+      width: 'auto',
+      minHeight: 0,
+      opacity: value === 1 ? .45 : 1,
+      fontSize: 11,
+      padding: '3px 8px',
+      whiteSpace: 'nowrap'
+    }
+  }, "100%に戻す")), React.createElement(CoachSizeSlider, {
+    key: current,
+    label: currentLabel,
+    value,
+    onChange: size => onChange(current, size)
+  }), React.createElement("span", {
+    style: {
+      color: 'var(--text-3)',
+      fontSize: 10.5,
+      lineHeight: 1.4
+    }
+  }, "全体の大きさに掛け合わせます。二人で並ぶときは、大きいほうに枠を合わせます。"));
+}
 function DataToolsPanel({
   gasConfig,
   gasStatus,
   coachCast,
   onToggleCast,
   onMentorArtChange,
+  onCoachSizeChange,
+  onCoachCharacterSizeChange,
   onOpenGasDialog,
   onPull,
   onPush,
@@ -8803,7 +8941,14 @@ function DataToolsPanel({
         lineHeight: 1.35
       }
     }, option.label));
-  }))), React.createElement("button", {
+  }))), React.createElement(CoachSizeSlider, {
+    label: '全体の大きさ',
+    value: coachCast.coachSize,
+    onChange: onCoachSizeChange
+  }), onCoachCharacterSizeChange && React.createElement(CoachCharacterSizeControl, {
+    coachCast,
+    onChange: onCoachCharacterSizeChange
+  }), React.createElement("button", {
     className: "btn-ghost",
     onClick: () => window.open('./dialogue-editor.html', '_blank'),
     style: {
@@ -9212,6 +9357,7 @@ function FloatingTimerBar({
   }
   const chibiImg = TIMER_CHIBI[isTally ? 'tally' : 'timer'][chibiPose] || TIMER_CHIBI[isTally ? 'tally' : 'timer'].neutral;
   return React.createElement("div", {
+    className: "floating-timer-bar",
     style: {
       position: 'fixed',
       left: '50%',
@@ -15854,6 +16000,17 @@ function PatientTriage() {
     onMentorArtChange: mentorArt => setCoachCast(prev => normalizeCoachCast({
       ...prev,
       mentorArt
+    })),
+    onCoachSizeChange: coachSize => setCoachCast(prev => normalizeCoachCast({
+      ...prev,
+      coachSize
+    })),
+    onCoachCharacterSizeChange: (id, size) => setCoachCast(prev => normalizeCoachCast({
+      ...prev,
+      coachSizes: {
+        ...(prev.coachSizes || {}),
+        [id]: size
+      }
     })),
     onOpenGasDialog: () => setGasDialog(true),
     onPull: gasPull,

@@ -39,7 +39,8 @@
       bottom: max(14px, env(safe-area-inset-bottom));
       z-index: 9000;
       display: grid;
-      grid-template-columns: 124px minmax(170px, 270px);
+      --coach-size: 1;
+      grid-template-columns: calc(124px * var(--coach-size)) minmax(170px, 270px);
       align-items: end;
       gap: 10px;
       pointer-events: none;
@@ -55,15 +56,15 @@
     }
     .chibi-coach-cast {
       position: relative;
-      width: 124px;
-      height: 124px;
+      width: calc(124px * var(--coach-size));
+      height: calc(124px * var(--coach-size));
     }
     .chibi-coach-img {
       position: absolute;
       bottom: 0;
       left: 0;
-      width: 124px;
-      height: 124px;
+      width: calc(124px * var(--coach-size));
+      height: calc(124px * var(--coach-size));
       object-fit: contain;
       transform-origin: center bottom;
       transform: scale(var(--chibi-scale, 1));
@@ -74,14 +75,15 @@
       display: none;
     }
     .chibi-coach.banter {
-      grid-template-columns: 174px minmax(190px, 300px);
+      grid-template-columns: calc(204px * var(--coach-size)) minmax(190px, 300px);
     }
     .chibi-coach.banter .chibi-coach-cast {
-      width: 174px;
+      width: calc(204px * var(--coach-size));
+      height: calc(140px * var(--coach-size));
     }
     .chibi-coach.banter .chibi-coach-img {
-      width: 118px;
-      height: 118px;
+      width: calc(140px * var(--coach-size));
+      height: calc(140px * var(--coach-size));
     }
     .chibi-coach.banter .chibi-coach-img-main {
       left: 0;
@@ -90,7 +92,7 @@
     }
     .chibi-coach.banter .chibi-coach-img-partner {
       display: block;
-      left: 56px;
+      left: calc(64px * var(--coach-size));
       z-index: 1;
       opacity: .96;
       animation: chibiBanterReply 5.6s ease-in-out both;
@@ -145,6 +147,15 @@
     .chibi-coach[data-actor="adjutant"],
     .chibi-coach[data-actor="gray"],
     .chibi-coach[data-actor="sangrail"] { --chibi-scale: 1; }
+    /* 1枚絵の二人組は縦長なので、正方形の枠だと小さく見える。縦長の大きめの枠にする。 */
+    .chibi-coach:not(.banter):is([data-actor="loki_laura"], [data-actor="maris_crim"], [data-actor="shin_lilika"]) {
+      grid-template-columns: calc(136px * var(--coach-size)) minmax(170px, 270px);
+    }
+    .chibi-coach:not(.banter):is([data-actor="loki_laura"], [data-actor="maris_crim"], [data-actor="shin_lilika"]) .chibi-coach-cast,
+    .chibi-coach:not(.banter):is([data-actor="loki_laura"], [data-actor="maris_crim"], [data-actor="shin_lilika"]) .chibi-coach-img {
+      width: calc(136px * var(--coach-size));
+      height: calc(176px * var(--coach-size));
+    }
     .chibi-coach-bubble {
       position: relative;
       margin-bottom: 12px;
@@ -221,38 +232,49 @@
       .chibi-coach {
         right: 10px;
         bottom: 10px;
-        grid-template-columns: 96px minmax(0, 1fr);
+        grid-template-columns: calc(96px * var(--coach-size)) minmax(0, 1fr);
         max-width: calc(100vw - 20px);
       }
       .chibi-coach-cast {
-        width: 96px;
-        height: 96px;
+        width: calc(96px * var(--coach-size));
+        height: calc(96px * var(--coach-size));
       }
       .chibi-coach-img {
-        width: 96px;
-        height: 96px;
+        width: calc(96px * var(--coach-size));
+        height: calc(96px * var(--coach-size));
       }
       .chibi-coach.banter {
-        grid-template-columns: 124px minmax(0, 1fr);
+        grid-template-columns: calc(148px * var(--coach-size)) minmax(0, 1fr);
       }
       .chibi-coach.banter .chibi-coach-cast {
-        width: 124px;
-        height: 96px;
+        width: calc(148px * var(--coach-size));
+        height: calc(104px * var(--coach-size));
       }
       .chibi-coach.banter .chibi-coach-img {
-        width: 86px;
-        height: 86px;
+        width: calc(104px * var(--coach-size));
+        height: calc(104px * var(--coach-size));
       }
       .chibi-coach.banter .chibi-coach-img-partner {
-        left: 38px;
+        left: calc(44px * var(--coach-size));
       }
       .chibi-coach-bubble {
-        max-width: calc(100vw - 138px);
+        max-width: calc(100vw - 42px - 96px * var(--coach-size));
         padding: 9px 10px;
         font-size: 11px;
       }
       .chibi-coach.banter .chibi-coach-bubble {
-        max-width: calc(100vw - 156px);
+        max-width: calc(100vw - 32px - 148px * var(--coach-size));
+      }
+      .chibi-coach:not(.banter):is([data-actor="loki_laura"], [data-actor="maris_crim"], [data-actor="shin_lilika"]) {
+        grid-template-columns: calc(104px * var(--coach-size)) minmax(0, 1fr);
+      }
+      .chibi-coach:not(.banter):is([data-actor="loki_laura"], [data-actor="maris_crim"], [data-actor="shin_lilika"]) .chibi-coach-cast,
+      .chibi-coach:not(.banter):is([data-actor="loki_laura"], [data-actor="maris_crim"], [data-actor="shin_lilika"]) .chibi-coach-img {
+        width: calc(104px * var(--coach-size));
+        height: calc(136px * var(--coach-size));
+      }
+      .chibi-coach:not(.banter):is([data-actor="loki_laura"], [data-actor="maris_crim"], [data-actor="shin_lilika"]) .chibi-coach-bubble {
+        max-width: calc(100vw - 42px - 104px * var(--coach-size));
       }
     }
     .pwa-install-button {
@@ -1467,8 +1489,15 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
   function normalizeEnabledCast(value){
     const next = { ...DEFAULT_CAST_ENABLED, ...(value && typeof value === 'object' ? value : {}) };
     next.mentorArt = next.mentorArt === 'variant' ? 'variant' : 'classic';
+    const size = Number(next.coachSize);
+    next.coachSize = Number.isFinite(size) ? Math.min(1.5, Math.max(0.7, size)) : 1;
+    // キャラ別の大きさ（全体の大きさに掛ける）。app.js の normalizeCoachSizes と同じ範囲に揃える。
+    const sizes = next.coachSizes && typeof next.coachSizes === 'object' && !Array.isArray(next.coachSizes) ? next.coachSizes : {};
+    next.coachSizes = Object.fromEntries(Object.entries(sizes)
+      .filter(([id, value]) => /^[a-z][a-z0-9_-]{0,39}$/.test(id) && Number.isFinite(Number(value)))
+      .map(([id, value]) => [id, Math.min(1.5, Math.max(0.7, Number(value)))]));
     const hasEnabled = Object.keys(DEFAULT_CAST_ENABLED).some(id => next[id] !== false);
-    return hasEnabled ? next : { ...DEFAULT_CAST_ENABLED, mentorArt: next.mentorArt };
+    return hasEnabled ? next : { ...DEFAULT_CAST_ENABLED, mentorArt: next.mentorArt, coachSize: next.coachSize, coachSizes: next.coachSizes };
   }
   function readEnabledCast(){
     try { return normalizeEnabledCast(JSON.parse(localStorage.getItem(COACH_CAST_STORAGE_KEY) || 'null')); }
@@ -1727,9 +1756,33 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
     img = el.querySelector('.chibi-coach-img-main');
     partnerImg = el.querySelector('.chibi-coach-img-partner');
     textEl = el.querySelector('.chibi-coach-text');
+    applyCoachSize();
     el.addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('chibi-coach', { detail: { kind: 'reward' } }));
     });
+  }
+
+  function coachSizeFor(actor){
+    const value = Number(enabledCast.coachSizes?.[actor]);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }
+  // 枠の大きさ = 全体の大きさ × 表示中キャラの倍率。二人のときは大きいほうに枠を合わせる。
+  function applyCoachSize(entries = currentCoachEntries){
+    const factors = (entries || []).slice(0, 2).map(entry => coachSizeFor(entry.actor));
+    const boxFactor = factors.length ? Math.max(...factors) : 1;
+    if (el) el.style.setProperty('--coach-size', ((enabledCast.coachSize || 1) * boxFactor).toFixed(3));
+    return boxFactor;
+  }
+  // 枠に対する各画像の拡大率。二人のうち小さいほうのキャラは枠の中で比率どおりに縮める。
+  function coachEntryScale(entry, boxFactor){
+    return (Number(coachImageScale(entry.actor, entry.pose)) * coachSizeFor(entry.actor) / boxFactor).toFixed(3);
+  }
+  // タイマー／カウンター表示中は、吹き出しがバーに隠れないようバーの上へ逃がす。
+  function placeCoach(){
+    if (!el) return;
+    const bar = runningToolActive ? document.querySelector('.floating-timer-bar') : null;
+    const top = bar ? bar.getBoundingClientRect().top : 0;
+    el.style.bottom = top > 0 ? Math.round(window.innerHeight - top + 8) + 'px' : '';
   }
 
   function escapeHtml(value){
@@ -1776,16 +1829,17 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
     const secondary = valid[1];
     if (!primary) return;
     currentCoachEntries = valid.slice(0, 2).map(entry => ({ ...entry }));
+    const boxFactor = applyCoachSize(currentCoachEntries);
     const primaryActor = actorView(primary.actor);
     img.src = window.CoachWorkshop?.src(primaryActor.img[primary.pose] || primaryActor.img.neutral) || CHIBI_BASE + (primaryActor.img[primary.pose] || primaryActor.img.neutral);
     img.alt = primaryActor.alt;
-    img.style.setProperty('--chibi-scale', coachImageScale(primary.actor, primary.pose));
+    img.style.setProperty('--chibi-scale', coachEntryScale(primary, boxFactor));
     el.dataset.actor = primary.actor;
     if (secondary) {
       const secondaryActor = actorView(secondary.actor);
       partnerImg.src = window.CoachWorkshop?.src(secondaryActor.img[secondary.pose] || secondaryActor.img.neutral) || CHIBI_BASE + (secondaryActor.img[secondary.pose] || secondaryActor.img.neutral);
       partnerImg.alt = secondaryActor.alt;
-      partnerImg.style.setProperty('--chibi-scale', coachImageScale(secondary.actor, secondary.pose));
+      partnerImg.style.setProperty('--chibi-scale', coachEntryScale(secondary, boxFactor));
       partnerImg.hidden = false;
       el.classList.add('banter');
     } else {
@@ -1864,6 +1918,7 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
       else textEl.textContent = selectedLine;
     }
     clearTimeout(hideTimer);
+    placeCoach();
     el.classList.add('show');
     hideTimer = setTimeout(() => el.classList.remove('show'), banter || pairedCoachLine ? 5600 : kind === 'allclear' ? 5200 : (kind === 'start' || kind === 'reward') ? 4200 : 3300);
   }
@@ -1894,15 +1949,29 @@ body.rpg-mode .chibi-coach.banter .chibi-coach-bubble {
   });
   window.addEventListener('triage-running-change', event => {
     runningToolActive = !!event.detail?.active;
+    placeCoach();
   });
+  window.addEventListener('resize', placeCoach);
   window.addEventListener('triage-coach-cast-change', event => {
+    const previousSize = enabledCast.coachSize;
+    const previousSizes = enabledCast.coachSizes || {};
     enabledCast = normalizeEnabledCast(event.detail?.cast);
+    applyCoachSize();
     updateHeaderCastImages();
+    // キャラ別の大きさを変えたら、そのキャラを出して見比べられるようにする
+    const resizedActor = Object.keys({ ...previousSizes, ...enabledCast.coachSizes })
+      .find(id => coachSizeFor(id) !== (Number(previousSizes[id]) || 1));
+    if (resizedActor && cast[resizedActor] && isActorEnabled(resizedActor)) {
+      show('start', true, `この大きさで表示します（${Math.round(coachSizeFor(resizedActor) * 100)}%）`, null, resizedActor, 'neutral');
+      return;
+    }
+    if (el && previousSize !== enabledCast.coachSize && !el.classList.contains('show')) show('start', true);
     if (el && currentCoachEntries.length) renderCoachImages(currentCoachEntries);
   });
   window.addEventListener('storage', event => {
     if (event.key !== COACH_CAST_STORAGE_KEY) return;
     enabledCast = readEnabledCast();
+    applyCoachSize();
     updateHeaderCastImages();
     if (el && currentCoachEntries.length) renderCoachImages(currentCoachEntries);
   });
