@@ -1464,6 +1464,25 @@ const formatLogTime = ms => {
   if (Number.isNaN(d.getTime())) return '';
   return `${d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })} ${formatClock(d)}`;
 };
+// プロブレムの登録・解決日時。今年以外は年も出す。日時が無い古いデータは空文字。
+const formatProblemDate = (ms, withTime = true) => {
+  if (!ms) return '';
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return '';
+  const year = d.getFullYear() !== new Date().getFullYear() ? `${d.getFullYear()}/` : '';
+  return `${year}${d.getMonth() + 1}/${d.getDate()}${withTime ? ` ${formatClock(d)}` : ''}`;
+};
+// <input type="datetime-local"> との相互変換（端末の現地時刻）
+const toDateTimeLocalValue = ms => {
+  const d = new Date(ms || Date.now());
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const fromDateTimeLocalValue = value => {
+  const ms = new Date(String(value || '')).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
 const workLog = text => ({
   id: uid(),
   at: Date.now(),
@@ -3005,6 +3024,7 @@ function PatientCard({
   onAddProblem,
   onToggleProblem,
   onRemoveProblem,
+  onUpdateProblem,
   onMedHoldNoteChange,
   showAlerts = true,
   showPatientMeta = true,
@@ -3061,7 +3081,10 @@ function PatientCard({
   const problems = patient.problems || [];
   const unresolvedProblems = problems.filter(problem => !problem.resolved);
   const resolvedProblems = problems.filter(problem => problem.resolved);
-  const unresolvedProblemSummary = unresolvedProblems.map(problem => problem.label).join(' / ');
+  const unresolvedProblemSummary = unresolvedProblems.map(problem => {
+    const since = formatProblemDate(problem.createdAt, false);
+    return since ? `${problem.label}（${since}〜）` : problem.label;
+  }).join(' / ');
   const medHoldNote = (patient.medHoldNote || '').trim();
   const hospitalDay = hospitalDayForDate(patient.admissionDate);
   const [editingName, setEditingName] = useState(false);
@@ -3078,6 +3101,8 @@ function PatientCard({
   const [reservationEditId, setReservationEditId] = useState(null);
   const [problemsOpen, setProblemsOpen] = useState(false);
   const [problemDraft, setProblemDraft] = useState('');
+  // 編集中のプロブレム { id, label, createdAt(datetime-local文字列) }
+  const [problemEdit, setProblemEdit] = useState(null);
   const [medHoldEditing, setMedHoldEditing] = useState(false);
   const [doneLogOpen, setDoneLogOpen] = useState(false);
   const addFormRef = React.useRef(null);
@@ -3164,7 +3189,94 @@ function PatientCard({
     onAddProblem(label);
     setProblemDraft('');
   };
-  const renderProblemRow = problem => React.createElement("div", {
+  const saveProblemEdit = () => {
+    if (!problemEdit || !onUpdateProblem) return;
+    const label = problemEdit.label.trim();
+    if (!label) return;
+    const createdAt = fromDateTimeLocalValue(problemEdit.createdAt);
+    onUpdateProblem(problemEdit.id, {
+      label,
+      ...(createdAt ? { createdAt } : {})
+    });
+    setProblemEdit(null);
+  };
+  const renderProblemEditRow = problem => React.createElement("div", {
+    key: problem.id,
+    style: {
+      display: 'grid',
+      gap: 6,
+      minWidth: 0,
+      padding: '8px',
+      border: '1.5px solid var(--accent)',
+      borderRadius: 10,
+      background: 'var(--surface)'
+    }
+  }, React.createElement("input", {
+    id: `problem-edit-label-${problem.id}`,
+    value: problemEdit.label,
+    onChange: e => setProblemEdit(prev => ({
+      ...prev,
+      label: e.target.value
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') saveProblemEdit();
+      if (e.key === 'Escape') setProblemEdit(null);
+    },
+    autoFocus: true,
+    "aria-label": "プロブレム名",
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }), React.createElement("label", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+      fontSize: 11,
+      fontWeight: 800,
+      color: 'var(--text-3)'
+    }
+  }, "登録日時", React.createElement("input", {
+    id: `problem-edit-date-${problem.id}`,
+    type: "datetime-local",
+    value: problemEdit.createdAt,
+    onChange: e => setProblemEdit(prev => ({
+      ...prev,
+      createdAt: e.target.value
+    })),
+    className: "inp",
+    style: {
+      flex: '1 1 180px',
+      width: 'auto',
+      minWidth: 0,
+      fontSize: 12
+    }
+  })), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 6
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setProblemEdit(null)
+  }, "やめる"), React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: saveProblemEdit,
+    disabled: !problemEdit.label.trim(),
+    style: {
+      padding: '6px 14px',
+      fontSize: 12,
+      opacity: problemEdit.label.trim() ? 1 : .45
+    }
+  }, "保存")));
+  const renderProblemRow = problem => problemEdit && problemEdit.id === problem.id ? renderProblemEditRow(problem) : React.createElement("div", {
     key: problem.id,
     style: {
       display: 'flex',
@@ -3190,12 +3302,36 @@ function PatientCard({
     style: {
       flex: 1,
       minWidth: 0,
+      display: 'grid',
+      gap: 2
+    }
+  }, React.createElement("span", {
+    style: {
       fontSize: 13,
       fontWeight: 700,
       overflowWrap: 'anywhere',
       textDecoration: problem.resolved ? 'line-through' : 'none'
     }
-  }, problem.label), React.createElement("button", {
+  }, problem.label), React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      fontWeight: 700,
+      color: 'var(--text-3)',
+      fontVariantNumeric: 'tabular-nums'
+    }
+  }, problem.createdAt ? `登録 ${formatProblemDate(problem.createdAt)}` : '登録日時なし', problem.resolved && problem.resolvedAt ? `・解決 ${formatProblemDate(problem.resolvedAt)}` : '')), onUpdateProblem && React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setProblemEdit({
+      id: problem.id,
+      label: problem.label || '',
+      createdAt: toDateTimeLocalValue(problem.createdAt || Date.now())
+    }),
+    style: {
+      flexShrink: 0
+    },
+    "aria-label": `${problem.label}を編集`
+  }, "編集"), React.createElement("button", {
     type: "button",
     className: "btn-sm",
     onClick: () => onRemoveProblem && onRemoveProblem(problem.id),
@@ -3722,7 +3858,10 @@ function PatientCard({
   const reservationDialog = reservationDialogNode ? ReactDOM.createPortal(reservationDialogNode, document.body) : null;
   const problemDialogNode = problemsOpen && React.createElement("div", {
     className: "dialog-bg",
-    onClick: () => setProblemsOpen(false)
+    onClick: () => {
+      setProblemsOpen(false);
+      setProblemEdit(null);
+    }
   }, React.createElement("div", {
     className: "dialog",
     onClick: e => e.stopPropagation(),
@@ -3775,7 +3914,10 @@ function PatientCard({
     onChange: e => setProblemDraft(e.target.value),
     onKeyDown: e => {
       if (e.key === 'Enter') addProblemFromDialog();
-      if (e.key === 'Escape') setProblemsOpen(false);
+      if (e.key === 'Escape') {
+        setProblemsOpen(false);
+        setProblemEdit(null);
+      }
     },
     placeholder: "未解決の問題 (例: 肺炎、退院調整)",
     className: "inp",
@@ -3801,7 +3943,10 @@ function PatientCard({
     }
   }, React.createElement("button", {
     className: "btn-sm",
-    onClick: () => setProblemsOpen(false)
+    onClick: () => {
+      setProblemsOpen(false);
+      setProblemEdit(null);
+    }
   }, "閉じる"))));
   const problemDialog = problemDialogNode ? ReactDOM.createPortal(problemDialogNode, document.body) : null;
   // 信号列: 回診・カルテ | 次の時刻・未完了 | プロブレム・注意 を毎回同じ位置に並べる
@@ -12928,6 +13073,19 @@ function PatientTriage() {
       } : problem)
     } : patient));
   };
+  const updatePatientProblem = (patientId, problemId, updates) => {
+    const label = String(updates?.label ?? '').trim();
+    if (!label) return;
+    rememberUndo('プロブレム編集');
+    setActivePatients(prev => prev.map(patient => patient.id === patientId ? {
+      ...patient,
+      problems: (patient.problems || []).map(problem => problem.id === problemId ? {
+        ...problem,
+        label,
+        ...(Number.isFinite(updates?.createdAt) ? { createdAt: updates.createdAt } : {})
+      } : problem)
+    } : patient));
+  };
   const removePatientProblem = (patientId, problemId) => {
     rememberUndo('プロブレム削除');
     setActivePatients(prev => prev.map(patient => patient.id === patientId ? {
@@ -14997,6 +15155,7 @@ function PatientTriage() {
     onAddProblem: label => addPatientProblem(p.id, label),
     onToggleProblem: problemId => togglePatientProblem(p.id, problemId),
     onRemoveProblem: problemId => removePatientProblem(p.id, problemId),
+    onUpdateProblem: (problemId, updates) => updatePatientProblem(p.id, problemId, updates),
     onMedHoldNoteChange: value => setPatientMedHoldNote(p.id, value),
     showAlerts: !isDailyMode,
     showPatientMeta: !isDailyMode,
