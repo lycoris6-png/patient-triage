@@ -240,6 +240,7 @@ const QUICK_GENERAL_TASKS = [{
 const QUICK_PATIENT_TASKS = QUICK_GENERAL_TASKS;
 const PATIENT_EXAM_QUICK_ITEMS = Object.freeze([
   { id: 'ld', label: 'L/D', title: 'L/D' },
+  { id: 'xp', label: 'X-p', title: 'X-p' },
   { id: 'us', label: 'US', title: 'US' },
   { id: 'ct', label: 'CT', title: 'CT' },
   { id: 'mri', label: 'MRI', title: 'MRI' },
