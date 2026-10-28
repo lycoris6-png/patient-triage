@@ -591,6 +591,14 @@ const PATIENT_KINDS = [{
   label: '心カテ',
   color: '#EC4899'
 }, {
+  id: 'revisit',
+  label: '再診',
+  color: '#0D9488'
+}, {
+  id: 'someday',
+  label: 'いつか再来',
+  color: '#94A3B8'
+}, {
   id: 'other',
   label: 'その他',
   color: '#64748B'
@@ -4579,7 +4587,7 @@ function PatientCard({
     type: "button",
     className: "btn-sm",
     onClick: () => onMoveRole && onMoveRole(),
-    title: patient.role === 'sub' ? '受け持ちへ戻す' : 'サブへ退避',
+    title: patient.role === 'sub' ? '受け持ち・予兆患者・症例メモへ移す' : 'サブへ退避',
     style: {
       height: 24,
       padding: '0 5px',
@@ -4590,7 +4598,7 @@ function PatientCard({
       fontWeight: 800,
       whiteSpace: 'nowrap'
     }
-  }, patient.role === 'sub' ? '→受け持ち' : '→サブ')), unresolvedProblems.length > 0 && React.createElement("button", {
+  }, patient.role === 'sub' ? '移す…' : '→サブ')), unresolvedProblems.length > 0 && React.createElement("button", {
     type: "button",
     onClick: () => setProblemsOpen(true),
     title: 'プロブレムを追加・確認',
@@ -10148,6 +10156,8 @@ function FloatingTimerBar({
   }, "しまう"))));
 }
 function SubPatientSection({ patients, open, onToggleOpen, onAdd, renderPatientCard, now }) {
+  // 2週間以上サブに置いたままの人。予兆患者・症例メモへの仕分けを促す
+  const staleSubs = patients.filter(patient => now - (patient.subSince || patient.createdAt || now) > SUB_PATIENT_REVIEW_DAYS * DAY_MS);
   const incompleteCount = patients.reduce((sum, patient) => sum + (patient.tasks || []).filter(task => task.status !== 'done' && !isFutureReserved(task)).length, 0);
   const timedCount = patients.reduce((sum, patient) => sum + (patient.tasks || []).filter(task => isActionableTask(task) && task.scheduledTime && timeStatus(task.scheduledTime, now)).length, 0);
   return React.createElement("div", {
@@ -10181,11 +10191,16 @@ function SubPatientSection({ patients, open, onToggleOpen, onAdd, renderPatientC
   }, "未 ", incompleteCount, "件"), timedCount > 0 && React.createElement("span", {
     className: "tag",
     style: { background: 'rgba(239,68,68,.12)', color: '#B91C1C', fontSize: 9, whiteSpace: 'nowrap' }
-  }, "時刻要確認 ", timedCount, "件")), React.createElement("span", {
+  }, "時刻要確認 ", timedCount, "件"), staleSubs.length > 0 && React.createElement("span", {
+    className: "tag",
+    style: { background: 'rgba(100,116,139,.16)', color: '#475569', fontSize: 9, whiteSpace: 'nowrap' }
+  }, "見直し ", staleSubs.length, "人")), React.createElement("span", {
     style: { flexShrink: 0, color: 'var(--text-3)', lineHeight: 1 }
   }, open ? React.createElement(ChevronDown, { size: 15 }) : React.createElement(ChevronRight, { size: 15 }))), open && React.createElement("div", {
     style: { display: 'grid', gap: 10, padding: '10px 10px 12px', borderTop: '1px solid var(--border)', minWidth: 0 }
-  }, patients.map(renderPatientCard), React.createElement("button", {
+  }, staleSubs.length > 0 && React.createElement("p", {
+    style: { margin: 0, padding: '7px 9px', borderRadius: 10, background: 'rgba(100,116,139,.10)', color: '#475569', fontSize: 11, lineHeight: 1.55, overflowWrap: 'anywhere' }
+  }, "2週間以上サブに置いたまま: ", staleSubs.map(patient => patient.name).join('、'), "。カードの「移す…」から、予兆患者（再診・いつか再来）や症例メモへ移せます。"), patients.map(renderPatientCard), React.createElement("button", {
     type: "button",
     className: "btn-ghost",
     onClick: onAdd,
@@ -10193,8 +10208,580 @@ function SubPatientSection({ patients, open, onToggleOpen, onAdd, renderPatientC
   }, "+ サブ担当を追加")));
 }
 function kindMeta(id) {
-  return PATIENT_KINDS.find(k => k.id === id) || PATIENT_KINDS[3];
+  return PATIENT_KINDS.find(k => k.id === id) || PATIENT_KINDS.find(k => k.id === 'other');
 }
+// ---------------------------------------------------------------- 症例メモ / 予兆患者の補助
+// 症例メモ: 覚えておきたい症例を置く棚。タスクも通知も持たず、Obsidianへ書き出したらアプリから外す
+//   { id, title, caseDate: 'YYYY-MM-DD', tags: '心不全, 教育', body, createdAt, updatedAt }
+const SUB_PATIENT_REVIEW_DAYS = 14;
+const PENDING_SOMEDAY_REVIEW_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const normalizeCaseMemos = value => (Array.isArray(value) ? value : []).filter(item => item && typeof item === 'object' && item.id).map(item => ({
+  id: String(item.id),
+  title: String(item.title || '').trim() || '症例メモ',
+  caseDate: /^\d{4}-\d{2}-\d{2}$/.test(String(item.caseDate || '')) ? item.caseDate : dateStrFromDate(new Date(Number(item.createdAt) || Date.now())),
+  tags: String(item.tags || ''),
+  body: String(item.body || ''),
+  createdAt: Number(item.createdAt) || Date.now(),
+  updatedAt: Number(item.updatedAt) || Number(item.createdAt) || Date.now()
+}));
+const caseMemoTagList = tags => [...new Set(String(tags || '').split(/[,、，\s#]+/).map(tag => tag.trim()).filter(Boolean))];
+const caseMemoFileName = memo => `${memo.caseDate} ${memo.title} (${String(memo.id).slice(0, 4)})`;
+// Obsidian用。先頭の frontmatter に日付・タグ・作成日時を入れ、検索や絞り込みに使えるようにする
+const caseMemoMarkdown = memo => {
+  const quote = value => JSON.stringify(String(value));
+  const tags = ['症例メモ', ...caseMemoTagList(memo.tags)];
+  return ['---', `title: ${quote(memo.title)}`, `date: ${memo.caseDate}`, `tags: [${[...new Set(tags)].map(quote).join(', ')}]`, 'source: ぺいとり', `created: ${new Date(memo.createdAt).toISOString()}`, `id: ${memo.id}`, '---', '', `# ${memo.title}`, '', String(memo.body || '').trim(), ''].join('\n');
+};
+const caseMemosCopyText = memos => memos.map(memo => {
+  const tags = caseMemoTagList(memo.tags);
+  return [`## ${memo.title}（${memo.caseDate}）`, tags.length ? tags.map(tag => `#${tag}`).join(' ') : '', '', String(memo.body || '').trim()].filter((line, index) => index !== 1 || line).join('\n');
+}).join('\n\n');
+// 症例メモをGAS(ドライブ保存版)経由で書き出す。{ ok, written:[id], failed:[{id,error}], folderUrl, error }
+async function gasExportCaseMemos(cfg, memos) {
+  const res = await fetch(cfg.url, {
+    method: 'POST',
+    body: JSON.stringify({
+      secret: cfg.secret,
+      action: 'exportCaseMemos',
+      memos: memos.map(memo => ({
+        id: memo.id,
+        fileName: caseMemoFileName(memo),
+        markdown: caseMemoMarkdown(memo)
+      }))
+    }),
+    headers: {
+      'Content-Type': 'text/plain'
+    }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = JSON.parse(await res.text());
+  if (!data || !Array.isArray(data.written)) throw new Error(data?.error || 'GASが症例メモの書き出しに対応していません');
+  return data;
+}
+// 患者カード → 予兆患者 / 症例メモ に移すときの本文
+const patientCarryOverText = patient => {
+  const problems = (patient.problems || []).filter(problem => !problem.resolved).map(problem => {
+    const since = formatProblemDate(problem.createdAt, false);
+    return `${problem.label}${since ? `（${since}〜）` : ''}`;
+  });
+  return [problems.length ? `プロブレム: ${problems.join(' / ')}` : '', String(patient.memo || '').trim()].filter(Boolean).join('\n');
+};
+const addMonthsStr = (months, base = new Date()) => {
+  const d = new Date(base.getFullYear(), base.getMonth() + months, base.getDate());
+  return dateStrFromDate(d);
+};
+const PENDING_DATE_QUICK = Object.freeze([
+  { id: '2w', label: '2週後', date: () => dateStrFromDate(new Date(Date.now() + 14 * DAY_MS)) },
+  { id: '1m', label: '1か月後', date: () => addMonthsStr(1) },
+  { id: '3m', label: '3か月後', date: () => addMonthsStr(3) },
+  { id: 'none', label: '未定', date: () => '' }
+]);
+function PendingDateQuick({
+  onPick
+}) {
+  return React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4,
+      flexWrap: 'wrap'
+    }
+  }, PENDING_DATE_QUICK.map(item => React.createElement("button", {
+    key: item.id,
+    type: "button",
+    className: "btn-sm",
+    onClick: () => onPick(item.date()),
+    style: {
+      fontSize: 10,
+      padding: '3px 8px'
+    }
+  }, item.label)));
+}
+function CaseMemoSection({
+  memos,
+  open,
+  onToggleOpen,
+  onSave,
+  onRemove,
+  onExport,
+  onCopy,
+  exportReady,
+  exporting
+}) {
+  const { useState } = React;
+  const emptyDraft = () => ({
+    id: '',
+    title: '',
+    caseDate: dateStrFromDate(new Date()),
+    tags: '',
+    body: ''
+  });
+  const [draft, setDraft] = useState(null);
+  const sorted = [...memos].sort((a, b) => b.caseDate.localeCompare(a.caseDate) || b.createdAt - a.createdAt);
+  const save = () => {
+    if (!draft || !draft.title.trim()) return;
+    onSave(draft);
+    setDraft(null);
+  };
+  const field = (label, control) => React.createElement("label", {
+    style: {
+      display: 'grid',
+      gap: 3,
+      fontSize: 11,
+      fontWeight: 800,
+      color: 'var(--text-3)'
+    }
+  }, label, control);
+  const editor = draft && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 8,
+      marginTop: 12,
+      padding: 10,
+      border: '1.5px solid #0D9488',
+      borderRadius: 12,
+      background: 'var(--surface)'
+    }
+  }, field('タイトル（ファイル名になります）', React.createElement("input", {
+    id: "case-memo-title",
+    value: draft.title,
+    onChange: e => setDraft(prev => ({
+      ...prev,
+      title: e.target.value
+    })),
+    autoFocus: true,
+    placeholder: "例: 高齢心不全の利尿薬調整",
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 13
+    }
+  })), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 9em) minmax(0, 1fr)',
+      gap: 8
+    }
+  }, field('日付', React.createElement("input", {
+    id: "case-memo-date",
+    type: "date",
+    value: draft.caseDate,
+    onChange: e => setDraft(prev => ({
+      ...prev,
+      caseDate: e.target.value || prev.caseDate
+    })),
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 12
+    }
+  })), field('タグ（カンマ区切り）', React.createElement("input", {
+    id: "case-memo-tags",
+    value: draft.tags,
+    onChange: e => setDraft(prev => ({
+      ...prev,
+      tags: e.target.value
+    })),
+    placeholder: "例: 心不全, 教育",
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 12
+    }
+  }))), field('メモ', React.createElement("textarea", {
+    id: "case-memo-body",
+    value: draft.body,
+    onChange: e => setDraft(prev => ({
+      ...prev,
+      body: e.target.value
+    })),
+    rows: 6,
+    placeholder: "経過・判断のポイント・学んだこと",
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 12,
+      lineHeight: 1.6,
+      resize: 'vertical',
+      fontFamily: 'var(--font-sans)'
+    }
+  })), React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 10.5,
+      color: 'var(--text-3)',
+      lineHeight: 1.5
+    }
+  }, "氏名・患者ID・生年月日など、個人を特定できる情報は書かないでください。"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 6
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setDraft(null)
+  }, "やめる"), React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: save,
+    disabled: !draft.title.trim(),
+    style: {
+      padding: '6px 14px',
+      fontSize: 12,
+      opacity: draft.title.trim() ? 1 : .45
+    }
+  }, "保存")));
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #0D9488'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(13,148,136,.08)'
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 15
+  }) : React.createElement(ChevronRight, {
+    size: 15
+  }), React.createElement("strong", {
+    style: {
+      fontSize: 14,
+      color: 'var(--text)'
+    }
+  }, "症例メモ"), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(13,148,136,.16)',
+      color: '#0F766E'
+    }
+  }, memos.length, "件"), React.createElement("span", {
+    style: {
+      marginLeft: 'auto',
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 600
+    }
+  }, "Obsidianへ書き出して荷下ろし")), open && React.createElement("div", {
+    style: {
+      padding: '0 16px 16px',
+      borderTop: '1px solid var(--border)'
+    }
+  }, sorted.length === 0 && !draft && React.createElement("p", {
+    style: {
+      margin: '12px 0',
+      color: 'var(--text-3)',
+      fontSize: 12,
+      lineHeight: 1.7
+    }
+  }, "覚えておきたい症例を置く棚です。タスクも通知も持ちません。溜まったらObsidianへ書き出して、アプリからは外します。"), sorted.length > 0 && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 7,
+      marginTop: 12
+    }
+  }, sorted.map(memo => draft && draft.id === memo.id ? null : React.createElement("div", {
+    key: memo.id,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      gap: 8,
+      padding: 8,
+      background: 'var(--surface-2)',
+      borderRadius: 10,
+      border: '1px solid var(--border)'
+    }
+  }, React.createElement("div", {
+    style: {
+      minWidth: 0,
+      display: 'grid',
+      gap: 3
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      alignItems: 'baseline',
+      flexWrap: 'wrap',
+      minWidth: 0
+    }
+  }, React.createElement("strong", {
+    style: {
+      fontSize: 13,
+      color: 'var(--text)',
+      overflowWrap: 'anywhere'
+    }
+  }, memo.title), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      fontWeight: 700,
+      fontVariantNumeric: 'tabular-nums'
+    }
+  }, formatDateShort(memo.caseDate))), caseMemoTagList(memo.tags).length > 0 && React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4,
+      flexWrap: 'wrap'
+    }
+  }, caseMemoTagList(memo.tags).map(tag => React.createElement("span", {
+    key: tag,
+    className: "tag",
+    style: {
+      background: 'rgba(13,148,136,.10)',
+      color: '#0F766E',
+      fontSize: 10
+    }
+  }, "#", tag))), memo.body && React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      lineHeight: 1.5,
+      whiteSpace: 'pre-wrap',
+      overflowWrap: 'anywhere',
+      display: '-webkit-box',
+      WebkitLineClamp: 3,
+      WebkitBoxOrient: 'vertical',
+      overflow: 'hidden'
+    }
+  }, memo.body)), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setDraft({
+      ...memo
+    }),
+    style: {
+      fontSize: 10,
+      padding: '3px 7px'
+    },
+    "aria-label": `${memo.title}を編集`
+  }, "編集"), React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => onRemove(memo),
+    style: {
+      fontSize: 10,
+      padding: '3px 7px',
+      color: 'var(--stuck-fg)'
+    },
+    "aria-label": `${memo.title}を削除`
+  }, "削除"))))), editor, !draft && React.createElement("button", {
+    type: "button",
+    onClick: () => setDraft(emptyDraft()),
+    style: {
+      marginTop: 10,
+      width: '100%',
+      padding: '8px',
+      fontSize: 12,
+      background: 'transparent',
+      border: '1.5px dashed var(--border-2)',
+      borderRadius: 10,
+      cursor: 'pointer',
+      color: 'var(--text-3)',
+      fontFamily: 'var(--font-sans)',
+      fontWeight: 700
+    }
+  }, "+ 症例メモ"), memos.length > 0 && !draft && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 6,
+      marginTop: 12,
+      paddingTop: 10,
+      borderTop: '1px dashed var(--border)'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: onExport,
+    disabled: !exportReady || exporting,
+    style: {
+      fontSize: 12,
+      padding: '7px 14px',
+      background: '#0F766E',
+      borderColor: '#0F766E',
+      opacity: exportReady && !exporting ? 1 : .45
+    }
+  }, exporting ? '書き出し中…' : `Obsidianへ書き出す（${memos.length}件）`), React.createElement("button", {
+    type: "button",
+    className: "btn-ghost",
+    onClick: onCopy,
+    style: {
+      fontSize: 12,
+      padding: '7px 14px'
+    }
+  }, "Markdownをコピー")), React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: 'var(--text-3)',
+      lineHeight: 1.5
+    }
+  }, exportReady ? '1件1ファイルのMarkdownで、ドライブの症例メモフォルダへ書き出します。書き出せたメモはアプリから外します。' : '書き出しには、GASのドライブ保存版が必要です（docs/gas-sync-drive-migration.md）。それまでは「Markdownをコピー」を使えます。'))));
+}
+// サブ担当の患者を、受け持ち・予兆患者・症例メモのどれかへ移す
+function MovePatientDialog({
+  patient,
+  onClose,
+  onToPrimary,
+  onToPending,
+  onToCaseMemo
+}) {
+  const { useState } = React;
+  const [kind, setKind] = useState('revisit');
+  const [scheduledDate, setScheduledDate] = useState(addMonthsStr(1));
+  const block = (title, note, body) => React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 6,
+      padding: 10,
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      background: 'var(--surface-2)'
+    }
+  }, React.createElement("strong", {
+    style: {
+      fontSize: 13
+    }
+  }, title), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      lineHeight: 1.5
+    }
+  }, note), body);
+  return ReactDOM.createPortal(React.createElement("div", {
+    className: "dialog-bg",
+    onClick: onClose
+  }, React.createElement("div", {
+    className: "dialog",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": `${patient.name}を移す`,
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 460,
+      display: 'grid',
+      gap: 10
+    }
+  }, React.createElement("h3", {
+    style: {
+      margin: 0,
+      overflowWrap: 'anywhere'
+    }
+  }, patient.name, " を移す"), block('受け持ちへ戻す', '毎日見る患者に戻します。', React.createElement("button", {
+    type: "button",
+    className: "btn-ghost",
+    onClick: onToPrimary,
+    style: {
+      justifySelf: 'start',
+      fontSize: 12
+    }
+  }, "→ 受け持ちへ")), block('予兆患者へ', '退院・紹介後に戻ってくる人。日付が近づくと知らせます。いつか分からなければ「未定」に。', React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      alignItems: 'center'
+    }
+  }, [{
+    id: 'revisit',
+    label: '再診'
+  }, {
+    id: 'someday',
+    label: 'いつか再来'
+  }].map(option => React.createElement("button", {
+    key: option.id,
+    type: "button",
+    className: "btn-sm",
+    "aria-pressed": kind === option.id,
+    onClick: () => {
+      setKind(option.id);
+      if (option.id === 'someday') setScheduledDate('');else if (!scheduledDate) setScheduledDate(addMonthsStr(1));
+    },
+    style: {
+      fontSize: 11,
+      border: kind === option.id ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+      background: kind === option.id ? 'rgba(108,62,248,.10)' : 'var(--surface)',
+      color: kind === option.id ? 'var(--accent)' : 'var(--text-2)'
+    }
+  }, option.label)), React.createElement("input", {
+    id: `move-patient-date-${patient.id}`,
+    type: "date",
+    value: scheduledDate,
+    onChange: e => setScheduledDate(e.target.value),
+    "aria-label": "予定日",
+    className: "inp",
+    style: {
+      width: 'auto',
+      flex: '1 1 130px',
+      minWidth: 0,
+      fontSize: 12,
+      padding: '4px 6px'
+    }
+  })), React.createElement(PendingDateQuick, {
+    onPick: date => {
+      setScheduledDate(date);
+      if (!date) setKind('someday');
+    }
+  }), React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: () => onToPending({
+      kind,
+      scheduledDate
+    }),
+    style: {
+      justifySelf: 'start',
+      fontSize: 12,
+      padding: '6px 14px'
+    }
+  }, "→ 予兆患者へ"))), block('症例メモへ', '治療で関わる予定はないが、覚えておきたい症例。プロブレムとメモを引き継ぎます。', React.createElement("button", {
+    type: "button",
+    className: "btn-ghost",
+    onClick: onToCaseMemo,
+    style: {
+      justifySelf: 'start',
+      fontSize: 12
+    }
+  }, "→ 症例メモへ")), React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 11,
+      color: 'var(--text-3)'
+    }
+  }, "予兆患者・症例メモへ移すとタスクは移りません。「元に戻す」で取り消せます。"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end'
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: onClose
+  }, "閉じる")))), document.body);
+}
+
 function PendingPatientSection({
   pending,
   open,
@@ -10204,13 +10791,20 @@ function PendingPatientSection({
   onAdd,
   onUpdate,
   onRemove,
-  onPromote
+  onPromote,
+  onToCaseMemo,
+  onMarkReviewed
 }) {
   const { useState, useEffect } = React;
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({ name: '', kind: 'other', scheduledDate: '', ward: '', memo: '' });
+  const [undatedOpen, setUndatedOpen] = useState(false);
   const sorted = [...pending].sort((a, b) => (a.scheduledDate || '9999').localeCompare(b.scheduledDate || '9999'));
+  // 日付のある予定と「いつか戻る（日付未定）」を分けて並べる
+  const datedItems = sorted.filter(item => item.scheduledDate);
+  const undatedItems = sorted.filter(item => !item.scheduledDate);
+  const staleCount = undatedItems.filter(item => Date.now() - (item.reviewedAt || item.createdAt || Date.now()) > PENDING_SOMEDAY_REVIEW_DAYS * DAY_MS).length;
   useEffect(() => {
     if (open && pending.length === 0) setAdding(true);
   }, [open, pending.length]);
@@ -10232,42 +10826,13 @@ function PendingPatientSection({
     onAdd();
     if ((form.name || '').trim()) setAdding(false);
   };
-  return React.createElement("div", {
-    className: "card",
-    style: {
-      marginTop: 10,
-      overflow: 'hidden',
-      borderLeft: '5px solid #8B5CF6'
-    }
-  }, React.createElement("div", {
-    onClick: onToggleOpen,
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      padding: '12px 16px',
-      cursor: 'pointer',
-      background: 'rgba(139,92,246,.08)'
-    }
-  }, open ? React.createElement(ChevronDown, { size: 15 }) : React.createElement(ChevronRight, { size: 15 }), React.createElement("strong", {
-    style: { fontSize: 14, color: 'var(--text)' }
-  }, "予兆患者"), React.createElement("span", {
-    className: "tag",
-    style: { background: 'rgba(139,92,246,.18)', color: '#5B21B6' }
-  }, pending.length, "件"), React.createElement("span", {
-    style: { marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }
-  }, "予定日が近づくと通知")), open && React.createElement("div", {
-    style: { padding: '0 16px 16px', borderTop: '1px solid var(--border)' }
-  }, sorted.length === 0 && !adding ? React.createElement("p", {
-    style: { margin: '12px 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.7 }
-  }, "10日後の心カテ、5日後の紹介外来など、まだ受け持ちにしないけど忘れたくない患者を置いておけます。") : sorted.length > 0 && React.createElement("div", {
-    style: { display: 'grid', gap: 7, marginTop: 12 }
-  }, sorted.map(item => {
+  const renderPendingItem = item => {
     const km = kindMeta(item.kind);
     const days = daysUntilDateStr(item.scheduledDate);
     const dayLabel = days == null ? '日付なし' : days < 0 ? `${-days}日経過` : days === 0 ? '今日' : `あと${days}日`;
     const dayColor = days == null ? 'var(--text-3)' : days < 0 ? '#DC2626' : days <= PENDING_PATIENT_ALERT_DAYS ? '#B45309' : 'var(--text-2)';
     const editing = editingId === item.id;
+    const stale = !item.scheduledDate && Date.now() - (item.reviewedAt || item.createdAt || Date.now()) > PENDING_SOMEDAY_REVIEW_DAYS * DAY_MS;
     return React.createElement("div", {
       key: item.id,
       style: {
@@ -10300,7 +10865,9 @@ function PendingPatientSection({
       onChange: e => setDraft(prev => ({ ...prev, scheduledDate: e.target.value })),
       className: "inp",
       style: { padding: '5px 6px', fontSize: 11 }
-    })), React.createElement("div", {
+    })), React.createElement(PendingDateQuick, {
+      onPick: date => setDraft(prev => ({ ...prev, scheduledDate: date }))
+    }), React.createElement("div", {
       style: { display: 'flex', gap: 4, alignItems: 'center' }
     }, React.createElement("span", {
       style: { fontSize: 10, color: 'var(--text-3)', fontWeight: 700, minWidth: 30 }
@@ -10325,7 +10892,11 @@ function PendingPatientSection({
     }, "保存"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => setEditingId(null)
-    }, "戻す"), React.createElement("button", {
+    }, "戻す"), onToCaseMemo && React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => onToCaseMemo(item),
+      style: { color: '#0F766E' }
+    }, "症例メモへ"), React.createElement("button", {
       className: "btn-sm",
       onClick: () => onRemove(item.id),
       style: { color: 'var(--stuck-fg)' }
@@ -10344,7 +10915,24 @@ function PendingPatientSection({
       style: { fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }
     }, wardLabel(item.ward))), item.memo && React.createElement("div", {
       style: { marginTop: 4, fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }
-    }, item.memo)), React.createElement("div", {
+    }, item.memo), stale && React.createElement("div", {
+      style: { display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6, padding: '5px 7px', borderRadius: 8, background: 'rgba(245,158,11,.10)', fontSize: 11, color: '#92400E', fontWeight: 700 }
+    }, "3か月動きがありません", onMarkReviewed && React.createElement("button", {
+      type: "button",
+      className: "btn-sm",
+      onClick: () => onMarkReviewed(item.id),
+      style: { fontSize: 10, padding: '2px 7px' }
+    }, "置いておく"), onToCaseMemo && React.createElement("button", {
+      type: "button",
+      className: "btn-sm",
+      onClick: () => onToCaseMemo(item),
+      style: { fontSize: 10, padding: '2px 7px', color: '#0F766E' }
+    }, "症例メモへ"), React.createElement("button", {
+      type: "button",
+      className: "btn-sm",
+      onClick: () => onRemove(item.id),
+      style: { fontSize: 10, padding: '2px 7px', color: 'var(--stuck-fg)' }
+    }, "削除"))), React.createElement("div", {
       style: { display: 'flex', flexDirection: 'column', gap: 4 }
     }, React.createElement("button", {
       className: "btn-dark",
@@ -10356,7 +10944,51 @@ function PendingPatientSection({
       onClick: () => startEdit(item),
       style: { fontSize: 10, padding: '3px 7px', color: 'var(--text-3)' }
     }, "編集"))));
-  })), adding ? React.createElement("div", {
+  };
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #8B5CF6'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(139,92,246,.08)'
+    }
+  }, open ? React.createElement(ChevronDown, { size: 15 }) : React.createElement(ChevronRight, { size: 15 }), React.createElement("strong", {
+    style: { fontSize: 14, color: 'var(--text)' }
+  }, "予兆患者"), React.createElement("span", {
+    className: "tag",
+    style: { background: 'rgba(139,92,246,.18)', color: '#5B21B6' }
+  }, pending.length, "件"), React.createElement("span", {
+    style: { marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }
+  }, "予定日が近づくと通知")), open && React.createElement("div", {
+    style: { padding: '0 16px 16px', borderTop: '1px solid var(--border)' }
+  }, sorted.length === 0 && !adding ? React.createElement("p", {
+    style: { margin: '12px 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.7 }
+  }, "10日後の心カテ、1か月後の再診、いつか戻ってくる人など、まだ受け持ちにしないけど忘れたくない患者を置いておけます。日付が未定でも置けます。") : sorted.length > 0 && React.createElement("div", {
+    style: { display: 'grid', gap: 7, marginTop: 12 }
+  }, datedItems.map(renderPendingItem), undatedItems.length > 0 && React.createElement("div", {
+    style: { display: 'grid', gap: 7 }
+  }, React.createElement("button", {
+    type: "button",
+    onClick: () => setUndatedOpen(v => !v),
+    "aria-expanded": undatedOpen,
+    style: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 4px', background: 'transparent', border: 'none', borderTop: datedItems.length ? '1px dashed var(--border)' : 'none', cursor: 'pointer', color: 'var(--text-2)', fontSize: 12, fontWeight: 800, fontFamily: 'var(--font-sans)', textAlign: 'left' }
+  }, undatedOpen ? React.createElement(ChevronDown, { size: 13 }) : React.createElement(ChevronRight, { size: 13 }), "いつか戻る（日付未定）", React.createElement("span", {
+    className: "tag",
+    style: { background: 'rgba(148,163,184,.18)', color: '#475569' }
+  }, undatedItems.length, "人"), staleCount > 0 && React.createElement("span", {
+    className: "tag",
+    style: { background: 'rgba(245,158,11,.14)', color: '#B45309', fontSize: 9 }
+  }, "見直し ", staleCount, "人")), undatedOpen && undatedItems.map(renderPendingItem))), adding ? React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'minmax(0,1fr) auto auto auto',
@@ -10388,7 +11020,11 @@ function PendingPatientSection({
     onClick: addAndClose,
     disabled: !form.name.trim(),
     style: { opacity: !form.name.trim() ? .45 : 1 }
-  }, "追加"), React.createElement("button", {
+  }, "追加"), React.createElement("div", {
+    style: { gridColumn: '1 / -1' }
+  }, React.createElement(PendingDateQuick, {
+    onPick: date => setForm(prev => ({ ...prev, scheduledDate: date }))
+  })), React.createElement("button", {
     className: "btn-sm",
     onClick: () => setAdding(false),
     style: { gridColumn: '1 / -1', justifySelf: 'end' }
@@ -12612,6 +13248,11 @@ function PatientTriage() {
     scheduledDate: ''
   });
   const [promoteTarget, setPromoteTarget] = useState(null);
+  const [caseMemos, setCaseMemos] = useState([]);
+  const [caseMemosOpen, setCaseMemosOpen] = useState(false);
+  const [caseMemoExporting, setCaseMemoExporting] = useState(false);
+  const [moveTarget, setMoveTarget] = useState(null);
+  const [addFromPendingOpen, setAddFromPendingOpen] = useState(false);
   const [rewardForm, setRewardForm] = useState({
     text: '',
     when: ''
@@ -13130,13 +13771,14 @@ function PatientTriage() {
       ntfySettings,
       coachCast,
       examCheckPrompt,
-      runningPresets
+      runningPresets,
+      caseMemos
     });
     if (!ok && Date.now() - saveFailWarnedRef.current > 60000) {
       saveFailWarnedRef.current = Date.now();
       showToast('⚠ 端末への保存に失敗しました。空き容量を確認してください');
     }
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, caseMemos, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -13415,6 +14057,7 @@ function PatientTriage() {
     endDayLogs: cloneForUndo(endDayLogs),
     rewards: cloneForUndo(rewards),
     pendingPatients: cloneForUndo(pendingPatients),
+    caseMemos: cloneForUndo(caseMemos),
     generalTasks: cloneForUndo(options.patientMode || !isDailyMode ? generalTasks : dailyGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
     workItems: cloneForUndo(workItems),
@@ -13442,6 +14085,7 @@ function PatientTriage() {
     setEndDayLogs(Array.isArray(undoEntry.endDayLogs) ? undoEntry.endDayLogs : []);
     setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
     setPendingPatients(Array.isArray(undoEntry.pendingPatients) ? undoEntry.pendingPatients : []);
+    if (Array.isArray(undoEntry.caseMemos)) setCaseMemos(undoEntry.caseMemos);
     if (undoEntry.patientMode) setGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);else setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
     setWorkItems(Array.isArray(undoEntry.workItems) ? undoEntry.workItems.map(normalizeWorkItem) : workItems);
@@ -13462,7 +14106,7 @@ function PatientTriage() {
     const p = {
       id: uid(),
       name,
-      ...(!isDailyMode && newPatientRole === 'sub' ? { role: 'sub' } : {}),
+      ...(!isDailyMode && newPatientRole === 'sub' ? { role: 'sub', subSince: Date.now() } : {}),
       priority: newPatientPri,
       ward: newPatientWard,
       admissionDate: isDailyMode ? '' : newPatientAdmissionDate,
@@ -13492,10 +14136,128 @@ function PatientTriage() {
     rememberUndo(toSub ? 'サブ担当へ移動' : '受け持ちへ移動', { patientMode: true });
     setPatients(prev => prev.map(item => item.id === patient.id ? {
       ...item,
-      ...(toSub ? { role: 'sub' } : { role: undefined })
+      ...(toSub ? { role: 'sub', subSince: Date.now() } : { role: undefined, subSince: undefined })
     } : item));
     showToast(`${patient.name} を${toSub ? 'サブ担当' : '受け持ち'}へ移しました`);
   };
+  // サブ担当 → 予兆患者（再診・いつか再来）。タスクは移さず、プロブレムとメモを引き継ぐ
+  const movePatientToPending = (patient, {
+    kind,
+    scheduledDate
+  } = {}) => {
+    const pendingKind = kind || (scheduledDate ? 'revisit' : 'someday');
+    rememberUndo('予兆患者へ移動', { patientMode: true });
+    setPendingPatients(prev => [...prev, {
+      id: uid(),
+      name: patient.name,
+      kind: pendingKind,
+      scheduledDate: scheduledDate || '',
+      ward: patient.ward || '',
+      priority: patient.priority || 'normal',
+      memo: patientCarryOverText(patient),
+      createdAt: Date.now()
+    }]);
+    setPatients(prev => prev.filter(item => item.id !== patient.id));
+    setMoveTarget(null);
+    setPendingPatientsOpen(true);
+    showToast(`${patient.name} を予兆患者（${kindMeta(pendingKind).label}${scheduledDate ? ` ${formatDateShort(scheduledDate)}` : '・日付未定'}）へ移しました`);
+  };
+  const newCaseMemoFrom = (title, body) => ({
+    id: uid(),
+    title,
+    caseDate: dateStrFromDate(new Date()),
+    tags: '',
+    body,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+  // サブ担当 → 症例メモ。題名は符丁のままなので、書き出す前に整えてもらう
+  const movePatientToCaseMemo = patient => {
+    rememberUndo('症例メモへ移動', { patientMode: true });
+    setCaseMemos(prev => [...prev, newCaseMemoFrom(`${patient.name} の症例`, patientCarryOverText(patient))]);
+    setPatients(prev => prev.filter(item => item.id !== patient.id));
+    setMoveTarget(null);
+    setCaseMemosOpen(true);
+    showToast(`${patient.name} を症例メモへ移しました。タイトルと内容を整えてから書き出してください`);
+  };
+  const movePendingToCaseMemo = item => {
+    rememberUndo('症例メモへ移動');
+    setCaseMemos(prev => [...prev, newCaseMemoFrom(`${item.name} の症例`, String(item.memo || ''))]);
+    setPendingPatients(prev => prev.filter(entry => entry.id !== item.id));
+    setCaseMemosOpen(true);
+    showToast(`${item.name} を症例メモへ移しました`);
+  };
+  const markPendingReviewed = id => setPendingPatients(prev => prev.map(item => item.id === id ? {
+    ...item,
+    reviewedAt: Date.now()
+  } : item));
+  const saveCaseMemo = draft => {
+    const title = String(draft.title || '').trim();
+    if (!title) return;
+    rememberUndo(draft.id ? '症例メモ編集' : '症例メモ追加');
+    setCaseMemos(prev => normalizeCaseMemos(draft.id ? prev.map(memo => memo.id === draft.id ? {
+      ...memo,
+      ...draft,
+      title,
+      updatedAt: Date.now()
+    } : memo) : [...prev, {
+      ...draft,
+      title,
+      id: uid(),
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }]));
+  };
+  const removeCaseMemo = async memo => {
+    if (!(await appConfirm({
+      title: '症例メモを削除',
+      message: `「${memo.title}」を削除しますか？`,
+      confirmText: '削除',
+      danger: true
+    }))) return;
+    rememberUndo('症例メモ削除');
+    setCaseMemos(prev => prev.filter(item => item.id !== memo.id));
+  };
+  // ドライブの症例メモフォルダへ1件1ファイルで書き出し、書き出せたものはアプリから外す
+  const exportCaseMemosToObsidian = async () => {
+    if (!caseMemos.length || caseMemoExporting) return;
+    if (!gasConfig.url || gasSync.storage !== 'drive') {
+      showToast('書き出しにはGASのドライブ保存版が必要です');
+      return;
+    }
+    const batch = caseMemos.slice(0, 50);
+    if (!(await appConfirm({
+      title: 'Obsidianへ書き出す',
+      message: `${batch.length}件の症例メモをGoogleドライブの症例メモフォルダへ書き出します。\n書き出せたメモはアプリから外します（元に戻すで取り消せます）。`,
+      confirmText: '書き出す'
+    }))) return;
+    setCaseMemoExporting(true);
+    try {
+      const r = await gasExportCaseMemos(gasConfig, batch);
+      const written = new Set(r.written || []);
+      if (written.size) {
+        rememberUndo('症例メモ書き出し');
+        setCaseMemos(prev => prev.filter(memo => !written.has(memo.id)));
+      }
+      const failed = Array.isArray(r.failed) ? r.failed.length : 0;
+      showToast(failed ? `${written.size}件を書き出しました。${failed}件は書き出せなかったので残しています` : `${written.size}件をObsidian用に書き出しました`);
+    } catch (e) {
+      showToast('書き出し失敗: ' + e.message);
+    } finally {
+      setCaseMemoExporting(false);
+    }
+  };
+  const copyCaseMemos = async () => {
+    const text = caseMemosCopyText(caseMemos);
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`${caseMemos.length}件をMarkdownでコピーしました`);
+    } catch {
+      setImportText(text);
+      setImportDialog(true);
+    }
+  };
+
   const removePatient = id => {
     const patient = activePatients.find(p => p.id === id);
     if (patient) rememberUndo(`${patient.name}の終了`);
@@ -15386,6 +16148,7 @@ function PatientTriage() {
     coachCast,
     examCheckPrompt,
     runningPresets,
+    caseMemos,
     version: 12
     };
     return opts.forGas ? compactPayloadForGas(payload) : payload;
@@ -15434,6 +16197,7 @@ function PatientTriage() {
     if (parsed.coachCast && typeof parsed.coachCast === 'object') setCoachCast(normalizeCoachCast(parsed.coachCast));else if (withDefaults) setCoachCast(normalizeCoachCast(loadLocal(COACH_CAST_STORAGE_KEY)));
     if (parsed.examCheckPrompt && typeof parsed.examCheckPrompt === 'object') setExamCheckPrompt(normalizeExamCheckPrompt(parsed.examCheckPrompt));else if (withDefaults) setExamCheckPrompt(normalizeExamCheckPrompt());
     if (parsed.runningPresets && typeof parsed.runningPresets === 'object') setRunningPresets(normalizeRunningPresets(parsed.runningPresets));else if (withDefaults) setRunningPresets(DEFAULT_RUNNING_PRESETS);
+    apply(setCaseMemos, Array.isArray(parsed.caseMemos) ? normalizeCaseMemos(parsed.caseMemos) : undefined, []);
     const workSource = Array.isArray(parsed.workItems) ? parsed.workItems : Array.isArray(parsed.bosses) ? parsed.bosses : null;
     if (workSource) setWorkItems(workSource.map(normalizeWorkItem));else if (withDefaults) setWorkItems([]);
     return true;
@@ -15722,7 +16486,7 @@ function PatientTriage() {
     });
     const t = setTimeout(() => gasPushRef.current('auto'), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, caseMemos, loaded]);
   // 起動時・画面に戻ったとき(1分おき)に版を確かめる。画面を離れるとき・通信が戻ったときは未送信分をすぐ送る
   useEffect(() => {
     if (!loaded || !gasConfig.url || !gasConfig.secret) return;
@@ -15775,6 +16539,7 @@ function PatientTriage() {
     coachCast,
     examCheckPrompt,
     runningPresets,
+    caseMemos,
     version: 12,
     exportedAt: new Date().toISOString()
   }, null, 2);
@@ -15949,7 +16714,7 @@ function PatientTriage() {
     onSetWard: ward => setPatientWard(p.id, ward),
     onAdmissionDateChange: admissionDate => setPatientAdmissionDate(p.id, admissionDate),
     onTogglePreDischargeDone: () => togglePatientPreDischargeDone(p.id),
-    onMoveRole: !isDailyMode ? () => movePatientRole(p) : null,
+    onMoveRole: !isDailyMode ? () => p.role === 'sub' ? setMoveTarget(p) : movePatientRole(p) : null,
     onToggleAlert: alertId => togglePatientAlert(p.id, alertId),
     onAddProblem: label => addPatientProblem(p.id, label),
     onToggleProblem: problemId => togglePatientProblem(p.id, problemId),
@@ -16842,7 +17607,19 @@ function PatientTriage() {
     onAdd: addPendingPatient,
     onUpdate: updatePendingPatient,
     onRemove: removePendingPatient,
-    onPromote: item => setPromoteTarget(item)
+    onPromote: item => setPromoteTarget(item),
+    onToCaseMemo: movePendingToCaseMemo,
+    onMarkReviewed: markPendingReviewed
+  }), !isDailyMode && React.createElement(CaseMemoSection, {
+    memos: caseMemos,
+    open: caseMemosOpen,
+    onToggleOpen: () => setCaseMemosOpen(v => !v),
+    onSave: saveCaseMemo,
+    onRemove: removeCaseMemo,
+    onExport: exportCaseMemosToObsidian,
+    onCopy: copyCaseMemos,
+    exportReady: !!gasConfig.url && gasSync.storage === 'drive',
+    exporting: caseMemoExporting
   }))), !isWorkMode && !focusMode && stuckTasks.length > 0 && React.createElement("div", {
     className: "stuck-bar",
     style: {
@@ -17484,7 +18261,46 @@ function PatientTriage() {
       color: 'var(--text)',
       margin: '0 0 14px'
     }
-  }, !isDailyMode && newPatientRole === 'sub' ? 'サブ担当追加' : addEntityLabel), React.createElement("input", {
+  }, !isDailyMode && newPatientRole === 'sub' ? 'サブ担当追加' : addEntityLabel), !isDailyMode && pendingPatients.length > 0 && React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setAddFromPendingOpen(v => !v),
+    "aria-expanded": addFromPendingOpen,
+    style: {
+      fontSize: 11
+    }
+  }, addFromPendingOpen ? '▾ ' : '▸ ', "予兆患者から選ぶ（", pendingPatients.length, "）"), addFromPendingOpen && React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 8
+    }
+  }, [...pendingPatients].sort((a, b) => (a.scheduledDate || '9999').localeCompare(b.scheduledDate || '9999')).map(item => React.createElement("button", {
+    key: item.id,
+    type: "button",
+    className: "set-chip",
+    onClick: () => {
+      setAddPatientDialog(false);
+      setAddFromPendingOpen(false);
+      setPromoteTarget(item);
+    },
+    title: "この予兆患者を受け持ちに登録",
+    style: {
+      maxWidth: '100%',
+      overflowWrap: 'anywhere',
+      textAlign: 'left'
+    }
+  }, item.name, React.createElement("span", {
+    style: {
+      marginLeft: 4,
+      opacity: .65
+    }
+  }, kindMeta(item.kind).label, item.scheduledDate ? ` ${formatDateShort(item.scheduledDate)}` : '・日付未定'))))), React.createElement("input", {
     value: newPatientName,
     onChange: e => setNewPatientName(e.target.value),
     onKeyDown: e => e.key === 'Enter' && addPatient(),
@@ -17627,6 +18443,15 @@ function PatientTriage() {
     setForm: setStuckForm,
     onSave: saveStuck,
     onCancel: () => setStuckDialog(null)
+  }), moveTarget && React.createElement(MovePatientDialog, {
+    patient: moveTarget,
+    onClose: () => setMoveTarget(null),
+    onToPrimary: () => {
+      movePatientRole(moveTarget);
+      setMoveTarget(null);
+    },
+    onToPending: opts => movePatientToPending(moveTarget, opts),
+    onToCaseMemo: () => movePatientToCaseMemo(moveTarget)
   }), promoteTarget && React.createElement(PromotePendingDialog, {
     pending: promoteTarget,
     templates: templates,
