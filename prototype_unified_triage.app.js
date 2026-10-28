@@ -2039,6 +2039,42 @@ const normalizeGasConfig = cfg => ({
 });
 const loadGasConfig = () => normalizeGasConfig(loadLocal(GAS_CONFIG_KEY));
 const saveGasConfig = cfg => saveLocal(GAS_CONFIG_KEY, normalizeGasConfig(cfg));
+// GAS同期の状態（端末ごと。同期データには含めない）
+//   revision: この端末が最後に見たGASの版番号。ドライブ保存版のGASだけが返す
+//   storage:  'drive' = ドライブ保存版GAS / 'legacy' = 旧GAS / null = 未確認
+//   dirty:    GASへまだ送れていない変更がある
+//   conflict: 別の端末の更新とぶつかり、どちらを残すか決めるまで自動同期を止めている
+const GAS_SYNC_STATE_KEY = 'patient-triage-gas-sync-state';
+const GAS_RETRY_DELAYS_MS = [10000, 30000, 120000, 300000, 600000];
+const normalizeGasSyncState = value => {
+  const s = value && typeof value === 'object' ? value : {};
+  const c = s.conflict && typeof s.conflict === 'object' ? s.conflict : null;
+  return {
+    revision: Number.isFinite(s.revision) ? s.revision : null,
+    storage: s.storage === 'drive' || s.storage === 'legacy' ? s.storage : null,
+    dirty: s.dirty === true,
+    dirtySince: Number(s.dirtySince) || 0,
+    lastSyncedAt: Number(s.lastSyncedAt) || 0,
+    conflict: c ? {
+      revision: Number(c.revision) || 0,
+      updatedAt: Number(c.updatedAt) || 0,
+      updatedBy: String(c.updatedBy || ''),
+      firstContact: c.firstContact === true
+    } : null,
+    deviceId: typeof s.deviceId === 'string' && s.deviceId ? s.deviceId : `d-${uid()}${uid()}`
+  };
+};
+const loadGasSyncState = () => normalizeGasSyncState(loadLocal(GAS_SYNC_STATE_KEY));
+const gasDeviceLabel = () => {
+  const ua = navigator.userAgent || '';
+  if (window.Capacitor?.isNativePlatform?.()) return 'Androidアプリ';
+  if (/Android/i.test(ua)) return 'Android';
+  if (/iPhone|iPad/i.test(ua)) return 'iPhone';
+  if (/Windows/i.test(ua)) return 'Windows';
+  if (/Macintosh|Mac OS/i.test(ua)) return 'Mac';
+  return 'ブラウザ';
+};
+
 function timeStatus(scheduledTime, nowMs) {
   if (!scheduledTime) return null;
   const [h, m] = scheduledTime.split(':').map(Number);
@@ -2078,10 +2114,11 @@ function dateLabel(dateStr) {
   const [, month, day] = dateStr.split('-');
   return month && day ? `${Number(month)}/${Number(day)}` : dateStr;
 }
-async function gasFetch(cfg, payload) {
+async function gasFetch(cfg, payload, extra = {}) {
   const body = JSON.stringify({
     secret: cfg.secret,
-    data: payload
+    data: payload,
+    ...extra
   });
   // text/plainのPOSTはシンプルリクエストなのでGASのCORS応答を読める。
   // 応答を確認して、URL間違い・シークレット不一致を「保存成功」と誤表示しないようにする。
@@ -2098,15 +2135,29 @@ async function gasFetch(cfg, payload) {
       error: `HTTP ${res.status}`
     };
     const text = await res.text();
+    let data = null;
     try {
-      const data = JSON.parse(text);
-      if (data && data.ok === false) return {
-        ok: false,
-        error: String(data.error || '保存エラー')
-      };
+      data = JSON.parse(text);
     } catch {}
+    // ドライブ保存版のGASは版番号(revision)を返す。旧GASは { ok } だけ
+    if (data && data.conflict === true) return {
+      ok: false,
+      conflict: true,
+      revision: Number(data.revision) || 0,
+      updatedAt: Number(data.updatedAt) || 0,
+      updatedBy: String(data.updatedBy || ''),
+      error: String(data.error || '別の端末で先に更新されています')
+    };
+    if (data && data.ok === false) return {
+      ok: false,
+      error: String(data.error || '保存エラー')
+    };
     return {
-      ok: true
+      ok: true,
+      revision: typeof data?.revision === 'number' ? data.revision : null,
+      storage: data?.storage === 'drive' ? 'drive' : 'legacy',
+      updatedAt: Number(data?.updatedAt) || 0,
+      updatedBy: String(data?.updatedBy || '')
     };
   } catch {
     // CORSで応答を読めない環境では、従来どおり送信だけ行う(確認不可)
@@ -2159,6 +2210,75 @@ function gasJsonp(cfg, params = {}) {
 }
 function gasGet(cfg) {
   return gasJsonp(cfg);
+}
+// 版番号だけを軽く確認する。旧GASは action を無視して全データを返すので、revision が無ければ旧GASとみなす
+function gasMeta(cfg) {
+  return gasJsonp(cfg, {
+    action: 'meta'
+  });
+}
+// GAS同期の競合。別の端末の更新とこの端末の未送信の変更がぶつかったとき、どちらを残すか選ぶ
+function GasConflictDialog({
+  conflict,
+  busy,
+  onUseRemote,
+  onUseLocal,
+  onLater
+}) {
+  const who = conflict.updatedBy || '別の端末';
+  const when = conflict.updatedAt ? formatLogTime(conflict.updatedAt) : '';
+  const lead = conflict.firstContact ? `GASの保存先がGoogleドライブ版になりました。この端末で初めて接続するので、GASにある内容（${who}${when ? `・${when}` : ''}）とこの端末の内容のどちらを使うか選んでください。` : `別の端末（${who}${when ? `・${when}` : ''}）でGASの内容が更新されています。この端末にも、まだGASへ送っていない変更があります。どちらを残すか選んでください。`;
+  const option = (label, note, onClick, primary) => React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 4
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: primary ? 'btn-dark' : 'btn-ghost',
+    onClick,
+    disabled: busy,
+    style: {
+      width: '100%',
+      justifyContent: 'center',
+      fontSize: 13,
+      padding: '9px 14px',
+      opacity: busy ? .5 : 1
+    }
+  }, label), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: 'var(--text-3)',
+      lineHeight: 1.45
+    }
+  }, note));
+  return ReactDOM.createPortal(React.createElement("div", {
+    className: "dialog-bg",
+    onClick: onLater
+  }, React.createElement("div", {
+    className: "dialog",
+    role: "alertdialog",
+    "aria-modal": "true",
+    "aria-labelledby": "gas-conflict-title",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 460,
+      display: 'grid',
+      gap: 12
+    }
+  }, React.createElement("h3", {
+    id: "gas-conflict-title",
+    style: {
+      margin: 0
+    }
+  }, "⚠ 同期の確認"), React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 13,
+      lineHeight: 1.6,
+      overflowWrap: 'anywhere'
+    }
+  }, lead), option('GASの内容を読み込む', 'この端末の今の内容は、データ > バックアップに「競合前」として残します。', onUseRemote, true), option('この端末の内容でGASを上書き', 'GASにあった内容は、Googleドライブの「ぺいとり同期/控え」に残ります。', onUseLocal, false), option('あとで決める', '決めるまで自動同期は止まります。画面上部の「GAS ⚠競合」から再び開けます。', onLater, false))), document.body);
 }
 function TimeBadge({
   scheduledTime,
@@ -8884,6 +9004,9 @@ function DataToolsPanel({
   gasPayloadBytes,
   localPayloadBytes,
   gasNeedsChunkedStore,
+  gasDriveStorage,
+  gasSyncInfo,
+  onResolveGasConflict,
   onExportFile,
   onExportClipboard,
   onImport,
@@ -8898,7 +9021,7 @@ function DataToolsPanel({
   backupOpen,
   onToggleBackup
 }) {
-  const gasSummary = !gasConfig.url ? '未設定' : gasStatus === 'error' ? 'エラー' : gasStatus === 'syncing' ? '同期中…' : '接続済 ' + formatBytes(gasPayloadBytes) + (gasNeedsChunkedStore ? ' ⚠' : '');
+  const gasSummary = !gasConfig.url ? '未設定' : gasStatus === 'conflict' ? '⚠ 競合（要確認）' : gasStatus === 'error' ? 'エラー（自動で再送）' : gasStatus === 'syncing' ? '同期中…' : gasStatus === 'pending' ? '未送信あり' : '接続済 ' + formatBytes(gasPayloadBytes) + (gasNeedsChunkedStore ? ' ⚠' : '');
   const charSummary = '登場キャラ・端末通知';
   return React.createElement("div", {
     className: "data-tools-panel",
@@ -8971,7 +9094,25 @@ function DataToolsPanel({
       color: 'var(--text-3)',
       fontWeight: 500
     }
-  }, "変更時3秒後に自動保存")), React.createElement("div", {
+  }, "変更時3秒後に自動保存")), gasConfig.url && gasStatus === 'conflict' && onResolveGasConflict && React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: onResolveGasConflict,
+    style: {
+      fontSize: 12,
+      padding: '7px 16px',
+      marginBottom: 10,
+      background: '#B45309',
+      borderColor: '#B45309'
+    }
+  }, "⚠ 同期の競合を確認する"), gasConfig.url && gasSyncInfo && React.createElement("div", {
+    style: {
+      marginBottom: 8,
+      fontSize: 11,
+      color: 'var(--text-3)',
+      lineHeight: 1.5
+    }
+  }, gasSyncInfo), React.createElement("div", {
     className: "data-size-meter",
     style: {
       display: 'grid',
@@ -8989,7 +9130,7 @@ function DataToolsPanel({
       color: gasNeedsChunkedStore ? '#92400E' : 'var(--text-2)',
       fontSize: 11
     }
-  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasNeedsChunkedStore ? "GASの保存上限(約450KB)に近づいています。不要なログを整理すると安全です。" : "GASの保存上限(約450KB)に対して余裕があります。"))), React.createElement(SettingsSubSection, {
+  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasDriveStorage ? "Googleドライブに保存しています（容量の上限なし・1時間ごとの控えを30日分）。" : gasNeedsChunkedStore ? "GASの保存上限(約450KB)に近づいています。不要なログを整理すると安全です。" : "GASの保存上限(約450KB)に対して余裕があります。"))), React.createElement(SettingsSubSection, {
     icon: "🎭",
     title: "キャラ・通知",
     summary: charSummary,
@@ -12515,6 +12656,29 @@ function PatientTriage() {
   const [endDayCelebrate, setEndDayCelebrate] = useState(null);
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
   const [gasStatus, setGasStatus] = useState('idle');
+  const [gasSync, setGasSyncState] = useState(() => loadGasSyncState());
+  const [gasConflictOpen, setGasConflictOpen] = useState(false);
+  const gasSyncRef = React.useRef(gasSync);
+  const gasPushInFlightRef = React.useRef(false);
+  const gasPushQueuedRef = React.useRef(false);
+  const gasRetryTimerRef = React.useRef(null);
+  const gasRetryCountRef = React.useRef(0);
+  const gasChangeSeqRef = React.useRef(0);
+  const gasSuppressDirtyRef = React.useRef(false);
+  const gasLastRemoteCheckRef = React.useRef(0);
+  const gasPushRef = React.useRef(() => {});
+  const gasCheckRemoteRef = React.useRef(() => {});
+  const updateGasSync = patch => {
+    const base = gasSyncRef.current;
+    const next = normalizeGasSyncState({
+      ...base,
+      ...(typeof patch === 'function' ? patch(base) : patch)
+    });
+    gasSyncRef.current = next;
+    saveLocal(GAS_SYNC_STATE_KEY, next);
+    setGasSyncState(next);
+    return next;
+  };
   const [gasDialog, setGasDialog] = useState(false);
   const [ntfySettings, setNtfySettings] = useState(() => normalizeNtfySettings());
   const [coachCast, setCoachCast] = useState(() => normalizeCoachCast(loadLocal(COACH_CAST_STORAGE_KEY)));
@@ -15183,8 +15347,16 @@ function PatientTriage() {
     showToast(`固定項目を${matched.length}件入れました`);
   };
   const setGasConfig = cfg => {
+    const prev = normalizeGasConfig(gasConfig);
+    const next = normalizeGasConfig(cfg);
     setGasConfigState(cfg);
     saveGasConfig(cfg);
+    // 接続先が変わったら、前の接続先の版番号や競合を持ち越さない
+    if (prev.url !== next.url || prev.secret !== next.secret) updateGasSync({
+      revision: null,
+      storage: null,
+      conflict: null
+    });
   };
   const buildPayload = (opts = {}) => {
     const payload = {
@@ -15218,12 +15390,13 @@ function PatientTriage() {
     };
     return opts.forGas ? compactPayloadForGas(payload) : payload;
   };
+  const gasDriveStorage = gasSync.storage === 'drive';
   const gasPayloadBytes = jsonByteLength({
     secret: gasConfig.secret || '',
-    data: buildPayload({ forGas: true })
+    data: buildPayload({ forGas: !gasDriveStorage })
   });
   const localPayloadBytes = jsonByteLength(buildPayload());
-  const gasNeedsChunkedStore = gasPayloadBytes > GAS_NEAR_LIMIT_BYTES;
+  const gasNeedsChunkedStore = !gasDriveStorage && gasPayloadBytes > GAS_NEAR_LIMIT_BYTES;
   // データ復元の唯一の入口。初期ロード(withDefaults:true)・インポート・GAS pull・バックアップ復元が共用する。
   // withDefaults: 欠けている項目を初期値に戻す(初期ロード用)。falseなら欠けている項目は現状維持。
   const applyPayload = (parsed, opts = {}) => {
@@ -15282,26 +15455,117 @@ function PatientTriage() {
     applyPayload(parsed);
     showToast(`${label} のバックアップを復元しました ✓`);
   };
-  const gasPush = async () => {
-    if (!gasConfig.url || !gasConfig.secret) {
-      showToast('GAS URLとシークレットを設定してください');
+  // ---------------------------------------------------------------- GAS同期
+  // 送信: 版番号つきで送る。競合なら止めて確認、失敗なら間隔を空けて自動で再送する
+  const pushGasNow = async (reason = 'auto', {
+    force = false
+  } = {}) => {
+    const cfg = gasConfig;
+    const manual = reason === 'manual';
+    if (!cfg.url || !cfg.secret) {
+      if (manual) showToast('GAS URLとシークレットを設定してください');
       return;
     }
+    const sync = gasSyncRef.current;
+    if (sync.conflict && !force) {
+      setGasStatus('conflict');
+      if (manual) setGasConflictOpen(true);
+      return;
+    }
+    if (!manual && !force && !sync.dirty) return;
+    if (gasPushInFlightRef.current) {
+      gasPushQueuedRef.current = true;
+      return;
+    }
+    clearTimeout(gasRetryTimerRef.current);
+    gasPushInFlightRef.current = true;
+    const sentSeq = gasChangeSeqRef.current;
     setGasStatus('syncing');
     try {
-      const payload = buildPayload({ forGas: true });
-      const bodyBytes = jsonByteLength({ secret: gasConfig.secret, data: payload });
-      if (bodyBytes > GAS_TOTAL_SAFE_BYTES) showToast(`GAS同期データが大きめです (${formatBytes(bodyBytes)})。ログ整理かGAS分割保存を確認してください`);
-      const r = await gasFetch(gasConfig, payload);
-      if (r.ok) {
-        setGasStatus('ok');
-        showToast(r.unverified ? 'GASに送信しました（応答は確認できませんでした）' : 'GASに保存しました ✓');
-      } else throw new Error(r.error || 'unknown');
+      const drive = sync.storage === 'drive';
+      const payload = drive ? buildPayload() : buildPayload({ forGas: true });
+      if (!drive && manual) {
+        const bodyBytes = jsonByteLength({ secret: cfg.secret, data: payload });
+        if (bodyBytes > GAS_TOTAL_SAFE_BYTES) showToast(`GAS同期データが大きめです (${formatBytes(bodyBytes)})。GASをドライブ保存版に切り替えると上限がなくなります`);
+      }
+      const extra = {
+        deviceId: sync.deviceId,
+        deviceLabel: gasDeviceLabel()
+      };
+      // 上書き時は必ず古い版として送り、GAS側で上書き前の内容を控えに残させる
+      if (force) {
+        extra.force = true;
+        extra.baseRevision = sync.revision ?? -1;
+      } else if (drive && sync.revision != null) {
+        extra.baseRevision = sync.revision;
+      }
+      const r = await gasFetch(cfg, payload, extra);
+      if (r.conflict) {
+        updateGasSync({
+          storage: 'drive',
+          conflict: {
+            revision: r.revision,
+            updatedAt: r.updatedAt,
+            updatedBy: r.updatedBy
+          }
+        });
+        setGasStatus('conflict');
+        setGasConflictOpen(true);
+        return;
+      }
+      if (!r.ok) throw new Error(r.error || 'unknown');
+      gasRetryCountRef.current = 0;
+      const stillDirty = gasChangeSeqRef.current !== sentSeq;
+      updateGasSync(prev => ({
+        revision: r.revision != null ? r.revision : r.unverified ? prev.revision : null,
+        storage: r.unverified ? prev.storage : r.storage,
+        conflict: null,
+        dirty: stillDirty,
+        dirtySince: stillDirty ? prev.dirtySince : 0,
+        lastSyncedAt: Date.now()
+      }));
+      setGasStatus('ok');
+      if (force) showToast('この端末の内容でGASを上書きしました。前の内容はドライブの控えに残っています');
+      else if (manual) showToast(r.unverified ? 'GASに送信しました（応答は確認できませんでした）' : 'GASに保存しました ✓');
     } catch (e) {
       setGasStatus('error');
-      showToast('GAS保存失敗: ' + e.message);
+      if (manual || force) showToast('GAS保存失敗: ' + e.message + '（自動で再送します）');
+      const delay = GAS_RETRY_DELAYS_MS[Math.min(gasRetryCountRef.current, GAS_RETRY_DELAYS_MS.length - 1)];
+      gasRetryCountRef.current += 1;
+      gasRetryTimerRef.current = setTimeout(() => gasPushRef.current('retry'), delay);
+    } finally {
+      gasPushInFlightRef.current = false;
+      if (gasPushQueuedRef.current) {
+        gasPushQueuedRef.current = false;
+        setTimeout(() => gasPushRef.current('queued'), 0);
+      }
     }
   };
+  gasPushRef.current = pushGasNow;
+  // 受信したデータを反映する。反映で起きる状態変化は「未送信の変更」として数えない
+  const applyGasRemote = r => {
+    gasSuppressDirtyRef.current = true;
+    setTimeout(() => {
+      gasSuppressDirtyRef.current = false;
+    }, 2000);
+    const applied = applyPayload(r.data);
+    if (applied === false) {
+      gasSuppressDirtyRef.current = false;
+      return false;
+    }
+    gasChangeSeqRef.current += 1;
+    const drive = typeof r.revision === 'number';
+    updateGasSync({
+      revision: drive ? r.revision : null,
+      storage: drive ? 'drive' : 'legacy',
+      conflict: null,
+      dirty: false,
+      dirtySince: 0,
+      lastSyncedAt: Date.now()
+    });
+    return true;
+  };
+  const gasPush = () => pushGasNow('manual');
   const gasPull = async () => {
     if (!gasConfig.url || !gasConfig.secret) {
       showToast('GAS URLとシークレットを設定してください');
@@ -15310,7 +15574,7 @@ function PatientTriage() {
     setGasStatus('syncing');
     try {
       const r = await gasGet(gasConfig);
-      if (!r.ok) throw new Error(r.error || 'unknown');
+      if (!r || r.ok === false) throw new Error(r?.error || 'unknown');
       if (!r.data) {
         setGasStatus('ok');
         showToast('GASにデータがまだありません');
@@ -15328,7 +15592,7 @@ function PatientTriage() {
         return;
       }
       rememberUndo('GAS読込');
-      applyPayload(r.data);
+      if (!applyGasRemote(r)) throw new Error('読み込めるデータがありません');
       setGasStatus('ok');
       showToast('GASから読み込みました ✓');
     } catch (e) {
@@ -15336,15 +15600,155 @@ function PatientTriage() {
       showToast('GAS読み込み失敗: ' + e.message);
     }
   };
+  // 版番号を確かめる。他の端末の変更だけがあれば自動で取り込み、両方に変更があれば確認を出す
+  const checkGasRemote = async () => {
+    const cfg = gasConfig;
+    if (!cfg.url || !cfg.secret || gasPushInFlightRef.current) return;
+    let meta;
+    try {
+      meta = await gasMeta(cfg);
+    } catch {
+      return;
+    }
+    if (!meta || meta.ok === false) return;
+    if (typeof meta.revision !== 'number') {
+      // 旧GAS: 版の確認はできない。未送信があれば今までどおり送るだけ
+      updateGasSync({
+        storage: 'legacy'
+      });
+      if (gasSyncRef.current.dirty) gasPushRef.current('resume');
+      return;
+    }
+    const sync = gasSyncRef.current;
+    if (sync.conflict) {
+      setGasStatus('conflict');
+      return;
+    }
+    const conflictFrom = firstContact => ({
+      storage: 'drive',
+      conflict: {
+        revision: meta.revision,
+        updatedAt: meta.updatedAt,
+        updatedBy: meta.updatedBy,
+        firstContact
+      }
+    });
+    if (sync.revision == null) {
+      if (meta.revision === 0) {
+        updateGasSync({
+          storage: 'drive',
+          revision: 0,
+          dirty: true,
+          dirtySince: Date.now()
+        });
+        gasPushRef.current('first');
+        return;
+      }
+      updateGasSync(conflictFrom(true));
+      setGasStatus('conflict');
+      setGasConflictOpen(true);
+      return;
+    }
+    if (meta.revision === sync.revision) {
+      updateGasSync({
+        storage: 'drive'
+      });
+      if (sync.dirty) gasPushRef.current('resume');
+      return;
+    }
+    if (meta.revision > sync.revision && !sync.dirty) {
+      try {
+        const r = await gasGet(cfg);
+        if (!r || r.ok === false || !r.data) return;
+        rememberUndo('他の端末の変更を取り込み');
+        if (applyGasRemote(r)) {
+          setGasStatus('ok');
+          showToast(`${meta.updatedBy || '別の端末'}の変更を取り込みました`);
+        }
+      } catch {}
+      return;
+    }
+    updateGasSync(conflictFrom(false));
+    setGasStatus('conflict');
+    setGasConflictOpen(true);
+  };
+  gasCheckRemoteRef.current = checkGasRemote;
+  const resolveGasConflictUseRemote = async () => {
+    try {
+      // この端末の今の内容を、端末内バックアップ（データ > バックアップ）に残してから読み込む
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) localStorage.setItem(`${BACKUP_KEY_PREFIX}${todayStr()} 競合前`, raw);
+    } catch {}
+    setGasStatus('syncing');
+    try {
+      const r = await gasGet(gasConfig);
+      if (!r || r.ok === false || !r.data) throw new Error(r?.error || 'GASにデータがありません');
+      rememberUndo('競合: GASの内容を読み込み');
+      if (!applyGasRemote(r)) throw new Error('読み込めるデータがありません');
+      setGasConflictOpen(false);
+      setGasStatus('ok');
+      showToast('GASの内容を読み込みました。この端末の前の内容はバックアップに残しています');
+    } catch (e) {
+      setGasStatus('conflict');
+      showToast('GAS読み込み失敗: ' + e.message);
+    }
+  };
+  const resolveGasConflictUseLocal = async () => {
+    setGasConflictOpen(false);
+    updateGasSync({
+      dirty: true,
+      dirtySince: gasSyncRef.current.dirtySince || Date.now()
+    });
+    await pushGasNow('manual', {
+      force: true
+    });
+  };
+  const gasSyncInfo = !gasConfig.url ? '' : [gasSync.lastSyncedAt ? `最終同期 ${formatLogTime(gasSync.lastSyncedAt)}` : '未同期', gasSync.storage === 'drive' ? `版 ${gasSync.revision ?? '-'}・Googleドライブ保存` : gasSync.storage === 'legacy' ? '旧GAS保存（ドライブ版に切り替えると版の確認と控えが有効になります）' : '', gasSync.dirty ? '未送信の変更あり（自動で再送します）' : ''].filter(Boolean).join('・');
+  // 変更を「未送信」として記録し、3秒後に送る
   useEffect(() => {
     if (!loaded || !gasConfig.url || !gasConfig.secret) return;
     if (isInitialLoad.current) {
       isInitialLoad.current = false;
       return;
     }
-    const t = setTimeout(() => gasFetch(gasConfig, buildPayload({ forGas: true })).then(r => setGasStatus(r.ok ? 'ok' : 'error')).catch(() => setGasStatus('error')), 3000);
+    if (gasSuppressDirtyRef.current) {
+      gasSuppressDirtyRef.current = false;
+      return;
+    }
+    gasChangeSeqRef.current += 1;
+    if (!gasSyncRef.current.dirty) updateGasSync({
+      dirty: true,
+      dirtySince: Date.now()
+    });
+    const t = setTimeout(() => gasPushRef.current('auto'), 3000);
     return () => clearTimeout(t);
   }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, loaded]);
+  // 起動時・画面に戻ったとき(1分おき)に版を確かめる。画面を離れるとき・通信が戻ったときは未送信分をすぐ送る
+  useEffect(() => {
+    if (!loaded || !gasConfig.url || !gasConfig.secret) return;
+    if (!loadLocal(GAS_SYNC_STATE_KEY)) updateGasSync({});
+    gasLastRemoteCheckRef.current = Date.now();
+    gasCheckRemoteRef.current();
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (gasSyncRef.current.dirty) gasPushRef.current('hidden');
+        return;
+      }
+      if (Date.now() - gasLastRemoteCheckRef.current < 60000) return;
+      gasLastRemoteCheckRef.current = Date.now();
+      gasCheckRemoteRef.current();
+    };
+    const onOnline = () => {
+      if (gasSyncRef.current.dirty) gasPushRef.current('online');
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', onOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', onOnline);
+      clearTimeout(gasRetryTimerRef.current);
+    };
+  }, [loaded, gasConfig.url, gasConfig.secret]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -15459,10 +15863,14 @@ function PatientTriage() {
   const typeMeta = id => TASK_TYPES.find(t => t.id === id) || TASK_TYPES.find(t => t.id === 'docs') || TASK_TYPES[0];
   const generalTypeMeta = id => (isDailyMode ? DAILY_TASK_TYPES.find(t => t.id === id) || DAILY_TASK_TYPES[0] : GENERAL_TASK_TYPES.find(t => t.id === id) || GENERAL_TASK_TYPES[2]);
   const estMeta = id => ESTIMATES.find(e => e.id === id) || ESTIMATES[1];
+  // 表示用の同期状態。競合 > 送信中 > エラー > 未送信 > 済 の順で優先して見せる
+  const gasDisplayStatus = gasSync.conflict ? 'conflict' : gasStatus === 'syncing' ? 'syncing' : gasStatus === 'error' ? 'error' : gasSync.dirty ? 'pending' : gasStatus;
   const gasStatusLabel = {
     ok: '✓',
     error: '✗',
-    syncing: '…'
+    syncing: '…',
+    pending: '未送信',
+    conflict: '⚠競合'
   };
   const gasStatusColor = {
     ok: {
@@ -15480,9 +15888,17 @@ function PatientTriage() {
     idle: {
       bg: 'rgba(255,255,255,.12)',
       fg: 'rgba(255,255,255,.6)'
+    },
+    pending: {
+      bg: 'rgba(245,158,11,.16)',
+      fg: '#B45309'
+    },
+    conflict: {
+      bg: 'rgba(245,158,11,.24)',
+      fg: '#92400E'
     }
   };
-  const gasC = gasStatusColor[gasStatus] || gasStatusColor.idle;
+  const gasC = gasStatusColor[gasDisplayStatus] || gasStatusColor.idle;
   const filterButtonStyle = active => active ? {
     background: 'var(--accent)',
     borderColor: 'var(--accent)',
@@ -15745,9 +16161,13 @@ function PatientTriage() {
     className: "gas-badge",
     style: {
       background: gasC.bg,
-      color: gasC.fg
-    }
-  }, "GAS ", gasStatusLabel[gasStatus] || '設定済'))), React.createElement("div", {
+      color: gasC.fg,
+      cursor: gasSync.conflict ? 'pointer' : undefined
+    },
+    onClick: gasSync.conflict ? () => setGasConflictOpen(true) : undefined,
+    role: gasSync.conflict ? 'button' : undefined,
+    title: gasSync.conflict ? '同期の競合を確認する' : gasSync.lastSyncedAt ? `最終同期 ${formatLogTime(gasSync.lastSyncedAt)}` : undefined
+  }, "GAS ", gasStatusLabel[gasDisplayStatus] || '設定済'))), React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -16533,7 +16953,7 @@ function PatientTriage() {
     size: 12
   }), "\u30C7\u30FC\u30BF (\u30D0\u30C3\u30AF\u30A2\u30C3\u30D7 / GAS\u540C\u671F)"), dataToolsOpen && React.createElement(DataToolsPanel, {
     gasConfig: gasConfig,
-    gasStatus: gasStatus,
+    gasStatus: gasDisplayStatus,
     coachCast: coachCast,
     onToggleCast: (id, checked) => setCoachCast(prev => normalizeCoachCast({
       ...prev,
@@ -16560,6 +16980,9 @@ function PatientTriage() {
     gasPayloadBytes: gasPayloadBytes,
     localPayloadBytes: localPayloadBytes,
     gasNeedsChunkedStore: gasNeedsChunkedStore,
+    gasDriveStorage: gasDriveStorage,
+    gasSyncInfo: gasSyncInfo,
+    onResolveGasConflict: () => setGasConflictOpen(true),
     onExportFile: exportToFile,
     onExportClipboard: exportToClipboard,
     onImport: () => setImportDialog(true),
@@ -16708,7 +17131,7 @@ function PatientTriage() {
       color: gasNeedsChunkedStore ? '#92400E' : 'var(--text-2)',
       fontSize: 11
     }
-  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasNeedsChunkedStore ? "GASを1プロパティ保存にしている場合は容量超過します。分割保存GASを使ってください。" : "現在の同期データ量は小さめです。"))), React.createElement("p", {
+  }, "同期サイズ ", formatBytes(gasPayloadBytes), " / ローカル ", formatBytes(localPayloadBytes)), React.createElement("span", null, gasDriveStorage ? "Googleドライブに保存しています（容量の上限なし・1時間ごとの控えを30日分）。" : gasNeedsChunkedStore ? "GASを1プロパティ保存にしている場合は容量超過します。分割保存GASを使ってください。" : "現在の同期データ量は小さめです。"))), React.createElement("p", {
     style: {
       fontWeight: 700,
       color: 'var(--text-2)',
@@ -17365,7 +17788,13 @@ function PatientTriage() {
     }
   }, endDayCelebrate.mode === 'daily' ? "\u4ECA\u65E5\u306E\u751F\u6D3B\u30BF\u30B9\u30AF\u306F\u3053\u3053\u307E\u3067\u3002\u4F11\u3080\u65B9\u5411\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u3087\u3046\u3002" : "\u4ECA\u65E5\u306E\u696D\u52D9\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
-  }, toast), runningStartMode && React.createElement(RunningStartDialog, {
+  }, toast), gasConflictOpen && gasSync.conflict && React.createElement(GasConflictDialog, {
+    conflict: gasSync.conflict,
+    busy: gasStatus === 'syncing',
+    onUseRemote: resolveGasConflictUseRemote,
+    onUseLocal: resolveGasConflictUseLocal,
+    onLater: () => setGasConflictOpen(false)
+  }), runningStartMode && React.createElement(RunningStartDialog, {
     key: runningStartMode,
     mode: runningStartMode,
     presets: runningPresets[runningStartMode],
