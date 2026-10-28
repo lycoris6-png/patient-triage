@@ -260,6 +260,23 @@ const DEFAULT_EXAM_CHECK_PROMPT = Object.freeze({
   times: ['09:00', '11:00'],
   weekdaysOnly: true
 });
+// タイマー・件数クリッカーのプリセット。{ timer: [{ id, title, mins }], tally: [{ id, title, count }] }
+const RUNNING_PRESET_LIMIT = 12;
+const DEFAULT_RUNNING_PRESETS = Object.freeze({ timer: [], tally: [] });
+const normalizeRunningPresets = value => {
+  const source = value && typeof value === 'object' ? value : {};
+  const clean = (list, key, min, max, integer) => (Array.isArray(list) ? list : []).map(item => {
+    const title = String(item?.title || '').trim().slice(0, 40);
+    const raw = Number(item?.[key]);
+    const amount = integer ? Math.round(raw) : Math.round(raw * 10) / 10;
+    if (!title || !Number.isFinite(amount) || amount < min || amount > max) return null;
+    return { id: String(item.id || uid()), title, [key]: amount };
+  }).filter(Boolean).slice(0, RUNNING_PRESET_LIMIT);
+  return {
+    timer: clean(source.timer, 'mins', 0.5, 600, false),
+    tally: clean(source.tally, 'count', 1, 9999, true)
+  };
+};
 const normalizeExamCheckPrompt = value => ({
   enabled: value?.enabled !== false,
   times: [0, 1].map(index => value?.times?.[index] === '' ? '' : /^\d{2}:\d{2}$/.test(value?.times?.[index] || '') ? value.times[index] : DEFAULT_EXAM_CHECK_PROMPT.times[index]),
@@ -9428,10 +9445,341 @@ const TIMER_CHIBI = {
     done: 'red_antler_girl_08_sleeping.png'
   }
 };
+// タイマー・件数クリッカーの開始画面。プリセットはワンタップで開始し、分数・件数は計測中にも変えられる。
+function RunningStartDialog({
+  mode,
+  presets,
+  defaultTitle,
+  defaultAmount,
+  onStart,
+  onSavePresets,
+  onClose
+}) {
+  const isTally = mode === 'tally';
+  const amountKey = isTally ? 'count' : 'mins';
+  const unit = isTally ? '件' : '分';
+  const list = presets || [];
+  const [title, setTitle] = React.useState(defaultTitle || (isTally ? '件数クリッカー' : '自由タイマー'));
+  const [amount, setAmount] = React.useState(defaultAmount == null ? '' : String(defaultAmount));
+  const [saveAsPreset, setSaveAsPreset] = React.useState(false);
+  const [editDraft, setEditDraft] = React.useState(null);
+  const [error, setError] = React.useState('');
+  const parseAmount = value => {
+    const n = isTally ? Number.parseInt(value, 10) : Number.parseFloat(value);
+    if (!Number.isFinite(n)) return null;
+    if (isTally) return n >= 1 && n <= 9999 ? n : null;
+    return n >= 0.5 && n <= 600 ? Math.round(n * 10) / 10 : null;
+  };
+  const amountRule = isTally ? '件数は1〜9999の整数で入れてください' : '分数は0.5〜600で入れてください';
+  const startFromForm = () => {
+    const cleanTitle = title.trim() || (isTally ? '件数クリッカー' : '自由タイマー');
+    const value = parseAmount(amount);
+    if (value == null) {
+      setError(amountRule);
+      return;
+    }
+    if (saveAsPreset) {
+      const others = list.filter(item => !(item.title === cleanTitle && item[amountKey] === value));
+      onSavePresets([...others, {
+        id: uid(),
+        title: cleanTitle,
+        [amountKey]: value
+      }].slice(-RUNNING_PRESET_LIMIT));
+    }
+    onStart(cleanTitle, value);
+  };
+  const saveEdits = () => {
+    const cleaned = [];
+    for (const item of editDraft) {
+      const cleanTitle = String(item.title || '').trim();
+      if (!cleanTitle) {
+        setError('プリセット名が空の行があります');
+        return;
+      }
+      const value = parseAmount(item[amountKey]);
+      if (value == null) {
+        setError(`「${cleanTitle}」: ${amountRule}`);
+        return;
+      }
+      cleaned.push({
+        id: item.id,
+        title: cleanTitle,
+        [amountKey]: value
+      });
+    }
+    onSavePresets(cleaned);
+    setEditDraft(null);
+    setError('');
+  };
+  const sectionLabel = text => React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 800,
+      color: 'var(--text-3)'
+    }
+  }, text);
+  const presetChips = list.length > 0 ? React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6
+    }
+  }, list.map(item => React.createElement("button", {
+    key: item.id,
+    type: "button",
+    className: "set-chip",
+    onClick: () => onStart(item.title, item[amountKey]),
+    title: `${item.title}を${item[amountKey]}${unit}ですぐ開始`,
+    style: {
+      maxWidth: '100%',
+      overflowWrap: 'anywhere',
+      textAlign: 'left'
+    }
+  }, "▶ ", item.title, React.createElement("span", {
+    style: {
+      marginLeft: 4,
+      opacity: .65,
+      fontVariantNumeric: 'tabular-nums'
+    }
+  }, item[amountKey], unit)))) : React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 12,
+      color: 'var(--text-3)',
+      lineHeight: 1.5
+    }
+  }, "まだありません。下で「プリセットに追加」にチェックして始めると、次から1タップで開始できます。");
+  const presetEditor = editDraft && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 6
+    }
+  }, editDraft.length === 0 && React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 12,
+      color: 'var(--text-3)'
+    }
+  }, "プリセットはすべて削除されます。"), editDraft.map((item, index) => React.createElement("div", {
+    key: item.id,
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) 5.5em auto',
+      gap: 6,
+      alignItems: 'center'
+    }
+  }, React.createElement("input", {
+    id: `running-preset-title-${item.id}`,
+    value: item.title,
+    onChange: e => setEditDraft(prev => prev.map((row, i) => i === index ? {
+      ...row,
+      title: e.target.value
+    } : row)),
+    "aria-label": "プリセット名",
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 12
+    }
+  }), React.createElement("label", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 3,
+      fontSize: 11,
+      color: 'var(--text-3)'
+    }
+  }, React.createElement("input", {
+    id: `running-preset-amount-${item.id}`,
+    type: "number",
+    inputMode: isTally ? 'numeric' : 'decimal',
+    value: item[amountKey],
+    onChange: e => setEditDraft(prev => prev.map((row, i) => i === index ? {
+      ...row,
+      [amountKey]: e.target.value
+    } : row)),
+    "aria-label": isTally ? '件数' : '分数',
+    className: "inp",
+    style: {
+      minWidth: 0,
+      width: '100%',
+      fontSize: 12
+    }
+  }), unit), React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => setEditDraft(prev => prev.filter((_, i) => i !== index)),
+    style: {
+      color: '#DC2626'
+    },
+    "aria-label": `${item.title || 'プリセット'}を削除`
+  }, "削除"))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 6
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => {
+      setEditDraft(null);
+      setError('');
+    }
+  }, "やめる"), React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: saveEdits,
+    style: {
+      padding: '6px 14px',
+      fontSize: 12
+    }
+  }, "保存")));
+  return ReactDOM.createPortal(React.createElement("div", {
+    className: "dialog-bg",
+    onClick: onClose
+  }, React.createElement("div", {
+    className: "dialog",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": isTally ? '件数クリッカーを始める' : 'タイマーを始める',
+    onClick: e => e.stopPropagation(),
+    onKeyDown: e => {
+      if (e.key === 'Escape') onClose();
+    },
+    style: {
+      maxWidth: 460,
+      display: 'grid',
+      gap: 12
+    }
+  }, React.createElement("h3", {
+    style: {
+      margin: 0
+    }
+  }, isTally ? '🔢 件数クリッカー' : '⏱ タイマー'), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 7
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8
+    }
+  }, sectionLabel('プリセット（タップですぐ開始）'), list.length > 0 && !editDraft && React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: () => {
+      setEditDraft(list.map(item => ({
+        ...item,
+        [amountKey]: String(item[amountKey])
+      })));
+      setError('');
+    },
+    style: {
+      fontSize: 11
+    }
+  }, "編集")), editDraft ? presetEditor : presetChips), !editDraft && React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 7,
+      paddingTop: 12,
+      borderTop: '1px solid var(--border)'
+    }
+  }, sectionLabel('新しく始める'), React.createElement("input", {
+    id: `running-start-title-${mode}`,
+    value: title,
+    onChange: e => setTitle(e.target.value),
+    "aria-label": isTally ? '何を数えますか' : '何のタイマーにしますか',
+    placeholder: isTally ? '何を数えますか？' : '何のタイマーにしますか？',
+    className: "inp",
+    style: {
+      minWidth: 0,
+      fontSize: 13
+    }
+  }), React.createElement("label", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--text-2)'
+    }
+  }, isTally ? '何件で区切りますか？' : '何分で測りますか？', React.createElement("input", {
+    id: `running-start-amount-${mode}`,
+    type: "number",
+    inputMode: isTally ? 'numeric' : 'decimal',
+    value: amount,
+    onChange: e => {
+      setAmount(e.target.value);
+      setError('');
+    },
+    onKeyDown: e => {
+      if (e.key === 'Enter') startFromForm();
+    },
+    placeholder: isTally ? '例: 10' : '例: 5',
+    className: "inp",
+    style: {
+      width: '6em',
+      minWidth: 0,
+      fontSize: 13
+    }
+  }), unit), React.createElement("label", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      fontSize: 12,
+      color: 'var(--text-2)'
+    }
+  }, React.createElement("input", {
+    id: `running-start-save-${mode}`,
+    type: "checkbox",
+    checked: saveAsPreset,
+    onChange: e => setSaveAsPreset(e.target.checked)
+  }), "プリセットに追加して始める")), error && React.createElement("p", {
+    role: "alert",
+    style: {
+      margin: 0,
+      fontSize: 12,
+      fontWeight: 700,
+      color: '#DC2626'
+    }
+  }, error), React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 11,
+      color: 'var(--text-3)',
+      lineHeight: 1.5
+    }
+  }, isTally ? '始めたあとも、計測バーの ✎ で今の件数と目標件数を変えられます。' : '始めたあとも、計測バーの ✎ で全体の分数を変えられます。'), React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: 8
+    }
+  }, React.createElement("button", {
+    type: "button",
+    className: "btn-sm",
+    onClick: onClose
+  }, "閉じる"), !editDraft && React.createElement("button", {
+    type: "button",
+    className: "btn-dark",
+    onClick: startFromForm,
+    style: {
+      padding: '8px 16px',
+      fontSize: 13
+    }
+  }, "スタート")))), document.body);
+}
 function FloatingTimerBar({
   running,
   onIncrement,
   onAddMinute,
+  onEditTarget,
   onPauseToggle,
   onReset,
   onStop,
@@ -9610,7 +9958,16 @@ function FloatingTimerBar({
       padding: '5px 8px'
     },
     title: "1分延長"
-  }, "+1分"), React.createElement("button", {
+  }, "+1分"), onEditTarget && React.createElement("button", {
+    onClick: onEditTarget,
+    className: "btn-sm",
+    style: {
+      fontSize: 11,
+      padding: '5px 8px'
+    },
+    title: isTally ? '今の件数・目標件数を変更' : '全体の分数を変更',
+    "aria-label": isTally ? '件数を変更' : '分数を変更'
+  }, "✎"), React.createElement("button", {
     onClick: onPauseToggle,
     className: paused ? "btn-dark" : "btn-sm",
     style: {
@@ -12151,6 +12508,8 @@ function PatientTriage() {
   const [remainingTaskDialogOpen, setRemainingTaskDialogOpen] = useState(false);
   const [examCheckDialogOpen, setExamCheckDialogOpen] = useState(false);
   const [examCheckPrompt, setExamCheckPrompt] = useState(() => normalizeExamCheckPrompt());
+  const [runningPresets, setRunningPresets] = useState(DEFAULT_RUNNING_PRESETS);
+  const [runningStartMode, setRunningStartMode] = useState(null);
   const [endDayConfirm, setEndDayConfirm] = useState(false);
   const [endDayCelebrate, setEndDayCelebrate] = useState(null);
   const [gasConfig, setGasConfigState] = useState(() => loadGasConfig());
@@ -12245,31 +12604,29 @@ function PatientTriage() {
       currentCount: 0
     });
   };
-  const startManualTimer = async () => {
-    const lastTitle = String(loadLocal(MANUAL_TIMER_TITLE_STORAGE_KEY) || '').trim();
-    const res = await appForm({
-      title: '自由タイマー',
-      confirmText: 'スタート',
-      fields: [{
-        key: 'title',
-        label: '何のタイマーにしますか？',
-        defaultValue: lastTitle || '自由タイマー'
-      }, {
-        key: 'mins',
-        label: '何分で測りますか？',
-        type: 'number',
-        defaultValue: generalForm.estimate || '5'
-      }]
-    });
-    if (res === null) return;
-    const title = res.title.trim() || '自由タイマー';
-    const mins = Number.parseFloat(res.mins);
-    if (!Number.isFinite(mins) || mins <= 0) {
-      showToast('1分以上の数字で指定してください');
+  // ドックの ⏱ / 🔢 はプリセット付きの開始画面を開く
+  const startManualTimer = () => setRunningStartMode('timer');
+  const startManualTally = () => setRunningStartMode('tally');
+  const beginManualRunning = (mode, title, amount) => {
+    setRunningStartMode(null);
+    setSuspendedRunningTask(null);
+    if (mode === 'tally') {
+      saveLocal(MANUAL_TALLY_TITLE_STORAGE_KEY, title);
+      setRunningTask({
+        mode: 'tally',
+        taskId: null,
+        patientId: null,
+        isGeneral: false,
+        title,
+        startedAt: Date.now(),
+        pausedAt: null,
+        accumulatedPaused: 0,
+        targetCount: amount,
+        currentCount: 0
+      });
       return;
     }
     saveLocal(MANUAL_TIMER_TITLE_STORAGE_KEY, title);
-    setSuspendedRunningTask(null);
     setRunningTask({
       mode: 'timer',
       taskId: null,
@@ -12279,46 +12636,67 @@ function PatientTriage() {
       startedAt: Date.now(),
       pausedAt: null,
       accumulatedPaused: 0,
-      durationMs: mins * 60 * 1000
+      durationMs: amount * 60 * 1000
     });
   };
-  const startManualTally = async () => {
-    const lastTitle = String(loadLocal(MANUAL_TALLY_TITLE_STORAGE_KEY) || '').trim();
-    const res = await appForm({
-      title: '件数クリッカー',
-      confirmText: 'スタート',
-      fields: [{
-        key: 'title',
-        label: '何を数えますか？',
-        defaultValue: lastTitle || '件数クリッカー'
-      }, {
-        key: 'count',
-        label: '何件で区切りますか？',
-        type: 'number',
-        placeholder: '例: 10'
-      }]
-    });
-    if (res === null) return;
-    const title = res.title.trim() || '件数クリッカー';
-    const target = Number.parseInt(res.count, 10);
-    if (!Number.isFinite(target) || target <= 0) {
-      showToast('1以上の整数で指定してください');
+  // 計測中に、タイマーは全体の分数、件数クリッカーは今の件数と目標件数を変える
+  const editRunningTarget = async () => {
+    const current = runningTask;
+    if (!current) return;
+    if (current.mode === 'tally') {
+      const res = await appForm({
+        title: '件数を変更',
+        confirmText: '変更',
+        fields: [{
+          key: 'count',
+          label: '今の件数',
+          type: 'number',
+          defaultValue: String(current.currentCount || 0)
+        }, {
+          key: 'target',
+          label: '目標の件数',
+          type: 'number',
+          defaultValue: String(current.targetCount || '')
+        }]
+      });
+      if (res === null) return;
+      const count = Number.parseInt(res.count, 10);
+      const target = Number.parseInt(res.target, 10);
+      if (!Number.isFinite(count) || count < 0 || !Number.isFinite(target) || target <= 0) {
+        showToast('今の件数は0以上、目標は1以上の整数で指定してください');
+        return;
+      }
+      setRunningTask(prev => prev && prev.mode === 'tally' ? {
+        ...prev,
+        currentCount: count,
+        targetCount: target
+      } : prev);
+      if (current.taskId && current.isGeneral) updateGeneralTask(current.taskId, {
+        targetCount: target
+      });else if (current.taskId && current.patientId) updateTask(current.patientId, current.taskId, {
+        targetCount: target
+      });
+      showToast(`${count}/${target}件に変更しました`);
       return;
     }
-    saveLocal(MANUAL_TALLY_TITLE_STORAGE_KEY, title);
-    setSuspendedRunningTask(null);
-    setRunningTask({
-      mode: 'tally',
-      taskId: null,
-      patientId: null,
-      isGeneral: false,
-      title,
-      startedAt: Date.now(),
-      pausedAt: null,
-      accumulatedPaused: 0,
-      targetCount: target,
-      currentCount: 0
+    const res = await appPrompt({
+      title: '時間を変更',
+      label: '全体で何分にしますか？（経過時間はそのまま）',
+      type: 'number',
+      defaultValue: String(Math.round((current.durationMs || 0) / 6000) / 10),
+      confirmText: '変更'
     });
+    if (res === null) return;
+    const mins = Number.parseFloat(res);
+    if (!Number.isFinite(mins) || mins <= 0 || mins > 600) {
+      showToast('0より大きく600以下の分数で指定してください');
+      return;
+    }
+    setRunningTask(prev => prev && prev.mode === 'timer' ? {
+      ...prev,
+      durationMs: Math.round(mins * 60 * 1000)
+    } : prev);
+    showToast(`${Math.round(mins * 10) / 10}分に変更しました`);
   };
   const stopRunning = () => {
     const suspended = suspendedRunningSnapshot(runningTask);
@@ -12586,13 +12964,14 @@ function PatientTriage() {
       workItems,
       ntfySettings,
       coachCast,
-      examCheckPrompt
+      examCheckPrompt,
+      runningPresets
     });
     if (!ok && Date.now() - saveFailWarnedRef.current > 60000) {
       saveFailWarnedRef.current = Date.now();
       showToast('⚠ 端末への保存に失敗しました。空き容量を確認してください');
     }
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -14833,6 +15212,7 @@ function PatientTriage() {
     ntfySettings,
     coachCast,
     examCheckPrompt,
+    runningPresets,
     version: 12
     };
     return opts.forGas ? compactPayloadForGas(payload) : payload;
@@ -14879,6 +15259,7 @@ function PatientTriage() {
     setWorkModeEnabled(parsed.workModeEnabled === true || parsed.bossModeEnabled === true);
     if (parsed.coachCast && typeof parsed.coachCast === 'object') setCoachCast(normalizeCoachCast(parsed.coachCast));else if (withDefaults) setCoachCast(normalizeCoachCast(loadLocal(COACH_CAST_STORAGE_KEY)));
     if (parsed.examCheckPrompt && typeof parsed.examCheckPrompt === 'object') setExamCheckPrompt(normalizeExamCheckPrompt(parsed.examCheckPrompt));else if (withDefaults) setExamCheckPrompt(normalizeExamCheckPrompt());
+    if (parsed.runningPresets && typeof parsed.runningPresets === 'object') setRunningPresets(normalizeRunningPresets(parsed.runningPresets));else if (withDefaults) setRunningPresets(DEFAULT_RUNNING_PRESETS);
     const workSource = Array.isArray(parsed.workItems) ? parsed.workItems : Array.isArray(parsed.bosses) ? parsed.bosses : null;
     if (workSource) setWorkItems(workSource.map(normalizeWorkItem));else if (withDefaults) setWorkItems([]);
     return true;
@@ -14962,7 +15343,7 @@ function PatientTriage() {
     }
     const t = setTimeout(() => gasFetch(gasConfig, buildPayload({ forGas: true })).then(r => setGasStatus(r.ok ? 'ok' : 'error')).catch(() => setGasStatus('error')), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, loaded]);
   const buildExportJSON = () => JSON.stringify({
     patients,
     stats,
@@ -14988,6 +15369,7 @@ function PatientTriage() {
     ntfySettings,
     coachCast,
     examCheckPrompt,
+    runningPresets,
     version: 12,
     exportedAt: new Date().toISOString()
   }, null, 2);
@@ -16982,10 +17364,23 @@ function PatientTriage() {
     }
   }, endDayCelebrate.mode === 'daily' ? "\u4ECA\u65E5\u306E\u751F\u6D3B\u30BF\u30B9\u30AF\u306F\u3053\u3053\u307E\u3067\u3002\u4F11\u3080\u65B9\u5411\u306B\u5207\u308A\u66FF\u3048\u307E\u3057\u3087\u3046\u3002" : "\u4ECA\u65E5\u306E\u696D\u52D9\u306F\u3053\u3053\u307E\u3067\u3002\u3088\u304F\u3084\u308A\u307E\u3057\u305F\u3002"))), toast && React.createElement("div", {
     className: "toast"
-  }, toast), React.createElement(FloatingTimerBar, {
+  }, toast), runningStartMode && React.createElement(RunningStartDialog, {
+    key: runningStartMode,
+    mode: runningStartMode,
+    presets: runningPresets[runningStartMode],
+    defaultTitle: String(loadLocal(runningStartMode === 'tally' ? MANUAL_TALLY_TITLE_STORAGE_KEY : MANUAL_TIMER_TITLE_STORAGE_KEY) || '').trim(),
+    defaultAmount: runningStartMode === 'tally' ? '' : generalForm.estimate || '5',
+    onStart: (title, amount) => beginManualRunning(runningStartMode, title, amount),
+    onSavePresets: list => setRunningPresets(prev => normalizeRunningPresets({
+      ...prev,
+      [runningStartMode]: list
+    })),
+    onClose: () => setRunningStartMode(null)
+  }), React.createElement(FloatingTimerBar, {
     running: runningTask,
     onIncrement: incrementRunning,
     onAddMinute: addMinuteRunning,
+    onEditTarget: editRunningTarget,
     onPauseToggle: pauseToggleRunning,
     onReset: resetRunning,
     onStop: stopRunning,
