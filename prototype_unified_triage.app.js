@@ -2067,10 +2067,24 @@ const normalizeGasSyncState = value => {
       revision: Number(c.revision) || 0,
       updatedAt: Number(c.updatedAt) || 0,
       updatedBy: String(c.updatedBy || ''),
+      deviceId: String(c.deviceId || ''),
       firstContact: c.firstContact === true
+    } : null,
+    // 応答を受け取る前に途切れた送信の記録。自分の書き込みを競合と取り違えないために使う
+    pendingPush: s.pendingPush && typeof s.pendingPush === 'object' ? {
+      baseRevision: Number.isFinite(s.pendingPush.baseRevision) ? s.pendingPush.baseRevision : null,
+      sentAt: Number(s.pendingPush.sentAt) || 0
     } : null,
     deviceId: typeof s.deviceId === 'string' && s.deviceId ? s.deviceId : `d-${uid()}${uid()}`
   };
+};
+// GAS側の最新の書き込みが、応答を受け取り損ねたこの端末自身のものか。
+// GASが端末IDを返せばそれで判定し、旧いGASでは「途切れた送信の直後の1版で、端末名も同じ」で判定する
+const isOwnLostGasWrite = (sync, remote) => {
+  if (!remote || typeof remote.revision !== 'number' || sync.revision == null || remote.revision <= sync.revision) return false;
+  if (remote.deviceId) return remote.deviceId === sync.deviceId;
+  const pending = sync.pendingPush;
+  return !!pending && pending.baseRevision === sync.revision && remote.revision === sync.revision + 1 && remote.updatedBy === gasDeviceLabel() && (!remote.updatedAt || remote.updatedAt >= pending.sentAt - 60000);
 };
 const loadGasSyncState = () => normalizeGasSyncState(loadLocal(GAS_SYNC_STATE_KEY));
 const gasDeviceLabel = () => {
@@ -2122,12 +2136,14 @@ function dateLabel(dateStr) {
   const [, month, day] = dateStr.split('-');
   return month && day ? `${Number(month)}/${Number(day)}` : dateStr;
 }
-async function gasFetch(cfg, payload, extra = {}) {
+async function gasFetch(cfg, payload, extra = {}, options = {}) {
   const body = JSON.stringify({
     secret: cfg.secret,
     data: payload,
     ...extra
   });
+  // ドライブ保存版GASでは応答の確認が必須。確認なしの送り直しは、競合で断られても成功に見えてしまうため使わない
+  const allowBlind = options.allowBlind !== false;
   // text/plainのPOSTはシンプルリクエストなのでGASのCORS応答を読める。
   // 応答を確認して、URL間違い・シークレット不一致を「保存成功」と誤表示しないようにする。
   try {
@@ -2154,6 +2170,7 @@ async function gasFetch(cfg, payload, extra = {}) {
       revision: Number(data.revision) || 0,
       updatedAt: Number(data.updatedAt) || 0,
       updatedBy: String(data.updatedBy || ''),
+      deviceId: String(data.deviceId || ''),
       error: String(data.error || '別の端末で先に更新されています')
     };
     if (data && data.ok === false) return {
@@ -2167,7 +2184,8 @@ async function gasFetch(cfg, payload, extra = {}) {
       updatedAt: Number(data?.updatedAt) || 0,
       updatedBy: String(data?.updatedBy || '')
     };
-  } catch {
+  } catch (error) {
+    if (!allowBlind) throw error;
     // CORSで応答を読めない環境では、従来どおり送信だけ行う(確認不可)
     await fetch(cfg.url, {
       method: 'POST',
@@ -13302,6 +13320,7 @@ function PatientTriage() {
   const gasSyncRef = React.useRef(gasSync);
   const gasPushInFlightRef = React.useRef(false);
   const gasPushQueuedRef = React.useRef(false);
+  const gasOwnRetryRef = React.useRef(false);
   const gasRetryTimerRef = React.useRef(null);
   const gasRetryCountRef = React.useRef(0);
   const gasChangeSeqRef = React.useRef(0);
@@ -16263,14 +16282,37 @@ function PatientTriage() {
       } else if (drive && sync.revision != null) {
         extra.baseRevision = sync.revision;
       }
-      const r = await gasFetch(cfg, payload, extra);
+      updateGasSync({
+        pendingPush: {
+          baseRevision: typeof extra.baseRevision === 'number' ? extra.baseRevision : null,
+          sentAt: Date.now()
+        }
+      });
+      const r = await gasFetch(cfg, payload, extra, {
+        allowBlind: !drive
+      });
       if (r.conflict) {
+        if (reason !== 'own-retry' && isOwnLostGasWrite(gasSyncRef.current, r)) {
+          // 前回の送信はGASに届いていたが、応答を受け取れなかっただけ。版を合わせて送り直す
+          updateGasSync({
+            storage: 'drive',
+            revision: r.revision,
+            conflict: null,
+            pendingPush: null
+          });
+          gasOwnRetryRef.current = true;
+          gasPushQueuedRef.current = true;
+          gasRetryCountRef.current = 0;
+          return;
+        }
         updateGasSync({
           storage: 'drive',
+          pendingPush: null,
           conflict: {
             revision: r.revision,
             updatedAt: r.updatedAt,
-            updatedBy: r.updatedBy
+            updatedBy: r.updatedBy,
+            deviceId: r.deviceId
           }
         });
         setGasStatus('conflict');
@@ -16284,6 +16326,7 @@ function PatientTriage() {
         revision: r.revision != null ? r.revision : r.unverified ? prev.revision : null,
         storage: r.unverified ? prev.storage : r.storage,
         conflict: null,
+        pendingPush: null,
         dirty: stillDirty,
         dirtySince: stillDirty ? prev.dirtySince : 0,
         lastSyncedAt: Date.now()
@@ -16301,7 +16344,9 @@ function PatientTriage() {
       gasPushInFlightRef.current = false;
       if (gasPushQueuedRef.current) {
         gasPushQueuedRef.current = false;
-        setTimeout(() => gasPushRef.current('queued'), 0);
+        const nextReason = gasOwnRetryRef.current ? 'own-retry' : 'queued';
+        gasOwnRetryRef.current = false;
+        setTimeout(() => gasPushRef.current(nextReason), 0);
       }
     }
   };
@@ -16384,7 +16429,21 @@ function PatientTriage() {
       return;
     }
     const sync = gasSyncRef.current;
+    const adoptOwnWrite = () => {
+      updateGasSync({
+        storage: 'drive',
+        revision: meta.revision,
+        conflict: null,
+        pendingPush: null
+      });
+      setGasConflictOpen(false);
+      if (gasSyncRef.current.dirty) gasPushRef.current('own-retry');else setGasStatus('ok');
+    };
     if (sync.conflict) {
+      if (!sync.conflict.firstContact && isOwnLostGasWrite(sync, meta)) {
+        adoptOwnWrite();
+        return;
+      }
       setGasStatus('conflict');
       return;
     }
@@ -16394,6 +16453,7 @@ function PatientTriage() {
         revision: meta.revision,
         updatedAt: meta.updatedAt,
         updatedBy: meta.updatedBy,
+        deviceId: meta.deviceId,
         firstContact
       }
     });
@@ -16430,6 +16490,10 @@ function PatientTriage() {
           showToast(`${meta.updatedBy || '別の端末'}の変更を取り込みました`);
         }
       } catch {}
+      return;
+    }
+    if (isOwnLostGasWrite(sync, meta)) {
+      adoptOwnWrite();
       return;
     }
     updateGasSync(conflictFrom(false));

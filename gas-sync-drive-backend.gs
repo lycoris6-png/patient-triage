@@ -42,7 +42,8 @@ function doGet(e) {
     if (p.action === 'ntfyTest' && typeof ntfyTest_ === 'function') return ntfyTest_(callback);
     if (p.action === 'coachLine' && typeof openAiCoachLine_ === 'function') return openAiCoachLine_(callback, p.payload || '{}');
     const meta = syncEnsureMigrated_();
-    const head = { ok: true, storage: 'drive', revision: meta.revision, updatedAt: meta.updatedAt, updatedBy: meta.updatedBy };
+    // deviceId: 最後に書き込んだ端末。応答を受け取り損ねた自分の書き込みを、アプリが競合と取り違えないために返す
+    const head = { ok: true, storage: 'drive', revision: meta.revision, updatedAt: meta.updatedAt, updatedBy: meta.updatedBy, deviceId: meta.deviceId || '' };
     if (p.action === 'meta') return syncOutput_(callback, head);
     head.data = syncReadData_(meta);
     return syncOutput_(callback, head);
@@ -93,6 +94,7 @@ function syncSave_(body) {
         revision: meta.revision,
         updatedAt: meta.updatedAt,
         updatedBy: meta.updatedBy,
+        deviceId: meta.deviceId || '',
         error: '別の端末で先に更新されています'
       };
     }
