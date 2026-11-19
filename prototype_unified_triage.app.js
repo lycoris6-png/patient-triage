@@ -2070,6 +2070,8 @@ const normalizeGasSyncState = value => {
       deviceId: String(c.deviceId || ''),
       firstContact: c.firstContact === true
     } : null,
+    // GASが「最後に書き込んだ端末のID」を返すか。返さないGASは古く、自分の書き込みの見分けが弱い
+    remoteDeviceId: s.remoteDeviceId === true ? true : s.remoteDeviceId === false ? false : null,
     // 応答を受け取る前に途切れた送信の記録。自分の書き込みを競合と取り違えないために使う
     pendingPush: s.pendingPush && typeof s.pendingPush === 'object' ? {
       baseRevision: Number.isFinite(s.pendingPush.baseRevision) ? s.pendingPush.baseRevision : null,
@@ -2086,6 +2088,13 @@ const isOwnLostGasWrite = (sync, remote) => {
   const pending = sync.pendingPush;
   return !!pending && pending.baseRevision === sync.revision && remote.revision === sync.revision + 1 && remote.updatedBy === gasDeviceLabel() && (!remote.updatedAt || remote.updatedAt >= pending.sentAt - 60000);
 };
+// 送信の記録を付ける。応答を受け取れないまま同じ版から送り直すときは、最初に送った時刻を残す。
+// 送り直すたびに時刻を今に書き換えると、GASに届いていた最初の書き込みが「送信より前のもの」に見えて、
+// 自分の書き込みなのに競合と判定されてしまう（アプリを裏に回した直後の保存で起きやすい）
+const nextGasPendingPush = (previous, baseRevision, nowMs) => ({
+  baseRevision,
+  sentAt: previous && previous.baseRevision === baseRevision && previous.sentAt ? Math.min(previous.sentAt, nowMs) : nowMs
+});
 const loadGasSyncState = () => normalizeGasSyncState(loadLocal(GAS_SYNC_STATE_KEY));
 const gasDeviceLabel = () => {
   const ua = navigator.userAgent || '';
@@ -8540,6 +8549,831 @@ function LastDoneSection({
     }
   }, "追加"), cyclePicker(form.cycle, id => setForm(prev => ({ ...prev, cycle: id })), form.dueDays, v => setForm(prev => ({ ...prev, dueDays: v }))))));
 }
+// ── たき火(最低ライン) ──
+// しんどい時期用。風呂・勉強などを3段階の薪にして、いちばん小さい薪でも「火がついた日」として数える。
+// 連続記録は数えない(途切れた時に責めない)。見せるのは直近の点描と「7日のうち何日」だけ。
+const HEARTH_LEVELS = [{
+  id: 1,
+  icon: '🌱',
+  label: 'ちょっと',
+  fallback: 'ちょっとだけ'
+}, {
+  id: 2,
+  icon: '🔥',
+  label: 'ふつう',
+  fallback: 'ふつうに'
+}, {
+  id: 3,
+  icon: '⭐',
+  label: 'しっかり',
+  fallback: 'しっかり'
+}];
+const HEARTH_LOG_KEEP_DAYS = 60;
+const HEARTH_ITEM_LIMIT = 6;
+const HEARTH_DOT_DAYS = 14;
+const HEARTH_OPEN_STORAGE_KEY = 'patient-triage-hearth-open';
+const HEARTH_DOT_COLORS = ['transparent', 'rgba(245,158,11,.38)', '#F59E0B', '#EA580C'];
+const DEFAULT_HEARTH_ITEMS = [{
+  id: 'hearth-bath',
+  emoji: '🛁',
+  label: '風呂',
+  levels: ['顔と歯だけ', 'シャワー5分', '湯船につかる']
+}, {
+  id: 'hearth-study',
+  emoji: '📖',
+  label: '勉強',
+  levels: ['教材を開くだけ', '1問だけ', '25分やる']
+}, {
+  id: 'hearth-light',
+  emoji: '☀️',
+  label: '朝の光',
+  levels: ['カーテンを開ける', '窓ぎわで5分', '外を10分歩く']
+}];
+// 仕事の薪は時間帯(slot)つき。ぺいとりでは今の時間帯の薪だけを大きく出す。slotなし=でいとりの薪。
+const HEARTH_SLOTS = [{
+  id: 'am',
+  icon: '🌅',
+  label: '午前',
+  prompt: 'Dutyのない午前こそ、🌱1本から。'
+}, {
+  id: 'noon',
+  icon: '🍙',
+  label: '昼',
+  prompt: '外来おつかれさま。席に戻れたら、それだけで🌱です。'
+}, {
+  id: 'eve',
+  icon: '🌆',
+  label: '17時〜',
+  prompt: '締切は自分で置く。まず残りを3つに絞る。'
+}];
+const hearthSlotMeta = id => HEARTH_SLOTS.find(slot => slot.id === id) || null;
+const currentHearthSlot = ms => {
+  const hour = new Date(ms).getHours();
+  return hour < WORKDAY_START_HOUR ? 'eve' : hour < 12 ? 'am' : hour < 17 ? 'noon' : 'eve';
+};
+const DEFAULT_HEARTH_WORK_ITEMS = [{
+  id: 'hearth-work-am',
+  emoji: '🌅',
+  label: '午前の火入れ',
+  slot: 'am',
+  levels: ['カルテを1人ぶん開く', '1件だけ終わらせる', '15分だけ走る']
+}, {
+  id: 'hearth-work-noon',
+  emoji: '🍙',
+  label: '昼の再点火',
+  slot: 'noon',
+  levels: ['席に戻って画面を開く', '1件だけ終わらせる', '15分だけ走る']
+}, {
+  id: 'hearth-work-eve',
+  emoji: '🌆',
+  label: '17時の締め',
+  slot: 'eve',
+  levels: ['残りを3つに絞る', '絞った1つを終わらせる', '絞った分を終えて出る']
+}];
+const HEARTH_LINES = {
+  w1: ['開けたなら半分終わりです。火種は入りました。', 'そこまで来れば、次の1件は軽いですよ。', '動き出せた。それがいちばん重い一歩でした。'],
+  w2: ['1件、落としましたね。流れができてます。', 'ちゃんと進んでます。その調子。'],
+  w3: ['走りきりましたね。いい火です。', 'やりきった。今日のここは誇っていい。'],
+  1: ['それで十分。火種は残りました。', 'いちばん小さい薪でも、火は火です。', 'ゼロじゃない。今日はそれが大事です。', '小さく点けられる人は、また点けられます。'],
+  2: ['ちゃんと燃えてます。いい調子。', 'ふつうにやれた日は、えらい日です。', 'いい火加減です。'],
+  3: ['大きい薪、いきましたね。あったまります。', 'しっかり燃えました。今日はもう誇っていい。'],
+  all: ['今日のたき火、ぜんぶ点きました。あとはあったかくして寝るだけ。', 'ぜんぶ燃えてます。冬の夜はこれで勝ちです。']
+};
+const hearthLine = key => {
+  const lines = HEARTH_LINES[key] || HEARTH_LINES[1];
+  return lines[Math.floor(Math.random() * lines.length)];
+};
+const normalizeHearth = value => {
+  // v1(仕事の薪が無かった頃)の保存データには、仕事の薪の初期値を足す
+  const sourceItems = !Array.isArray(value?.items) ? [...DEFAULT_HEARTH_ITEMS, ...DEFAULT_HEARTH_WORK_ITEMS] : (Number(value.v) || 1) < 2 ? [...value.items, ...DEFAULT_HEARTH_WORK_ITEMS] : value.items;
+  const items = sourceItems.map(item => {
+    const label = String(item?.label || '').trim().slice(0, 20);
+    if (!label) return null;
+    return {
+      id: String(item.id || uid()),
+      emoji: String(item?.emoji || '').trim().slice(0, 4),
+      label,
+      slot: hearthSlotMeta(item?.slot) ? item.slot : '',
+      levels: HEARTH_LEVELS.map((level, index) => String(item?.levels?.[index] || '').trim().slice(0, 30) || level.fallback)
+    };
+  }).filter(Boolean).slice(0, HEARTH_ITEM_LIMIT * 2);
+  const cutoff = addDaysStr(todayStr(), -HEARTH_LOG_KEEP_DAYS);
+  const log = {};
+  Object.entries(value?.log && typeof value.log === 'object' ? value.log : {}).forEach(([date, entry]) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < cutoff || !entry || typeof entry !== 'object') return;
+    const clean = {};
+    Object.entries(entry).forEach(([id, level]) => {
+      const n = Number(level);
+      if (n === 1 || n === 2 || n === 3) clean[id] = n;
+    });
+    if (Object.keys(clean).length) log[date] = clean;
+  });
+  // 当直の日: 帰れない・風呂に入れないのが前提の日。おやすみ日数にも「7日のうち」の分母にも数えない
+  const duty = {};
+  Object.keys(value?.duty && typeof value.duty === 'object' ? value.duty : {}).forEach(date => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && date >= cutoff && value.duty[date]) duty[date] = true;
+  });
+  return {
+    v: 2,
+    items,
+    log,
+    duty
+  };
+};
+// その項目を最後にやってから何日あいたか(今日やっていれば0、記録なしはnull)。当直の日は数えない
+const hearthRestDays = (hearth, itemId, today) => {
+  let rest = 0;
+  for (let i = 0; i <= HEARTH_LOG_KEEP_DAYS; i++) {
+    const date = addDaysStr(today, -i);
+    if (hearth.log[date]?.[itemId]) return rest;
+    if (!hearth.duty?.[date]) rest += 1;
+  }
+  return null;
+};
+function HearthSection({
+  hearth,
+  open,
+  onToggleOpen,
+  onSetLevel,
+  onSaveItem,
+  onRemoveItem,
+  onToggleDuty,
+  scope = 'daily',
+  now
+}) {
+  const workScope = scope === 'work';
+  const nowSlot = currentHearthSlot(now || Date.now());
+  const emptyDraft = {
+    emoji: '',
+    label: '',
+    slot: workScope ? nowSlot : '',
+    levels: ['', '', '']
+  };
+  const [editing, setEditing] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [draft, setDraft] = React.useState(emptyDraft);
+  const today = todayStr();
+  const items = hearth.items.filter(item => workScope ? item.slot : !item.slot);
+  const todayEntry = hearth.log[today] || {};
+  const litCount = items.filter(item => todayEntry[item.id]).length;
+  const days = Array.from({
+    length: HEARTH_DOT_DAYS
+  }, (_, i) => addDaysStr(today, i - (HEARTH_DOT_DAYS - 1)));
+  const isLitDay = date => items.some(item => hearth.log[date]?.[item.id]);
+  const weekLit = days.slice(-7).filter(isLitDay).length;
+  // 当直で火がつかなかった日は、分母から外す
+  const weekDutyOff = days.slice(-7).filter(date => hearth.duty?.[date] && !isLitDay(date)).length;
+  const dutyToday = !!hearth.duty?.[today];
+  const flame = !items.length ? '🪵' : litCount === 0 ? '🪵' : litCount >= items.length ? '🔥🔥' : '🔥';
+  const slotItems = items.filter(item => item.slot === nowSlot);
+  const slotLit = slotItems.some(item => todayEntry[item.id]);
+  const status = !items.length ? '薪がまだありません。「薪を編集」から足せます。' : dutyToday && litCount === 0 ? '当直の日。火は預かっておきます。できたら🌱だけ、できなくても減点なし。' : workScope ? slotLit ? '火は入った。この勢いで、もう1件だけ。' : slotItems.length ? hearthSlotMeta(nowSlot).prompt : 'この時間帯の薪はありません。' : litCount === 0 ? 'まだ火種のまま。いちばん小さい薪1本でいい。' : litCount >= items.length ? 'ぜんぶ燃えてる。今日はもう合格です。' : '火がついてる。ここでやめても今日は合格。';
+  const startEdit = item => {
+    setEditingId(item ? item.id : 'new');
+    setDraft(item ? {
+      emoji: item.emoji || '',
+      label: item.label || '',
+      slot: item.slot || '',
+      levels: [...item.levels]
+    } : emptyDraft);
+  };
+  const saveEdit = () => {
+    if (!draft.label.trim()) return;
+    onSaveItem(editingId === 'new' ? null : editingId, {
+      ...draft,
+      slot: workScope ? draft.slot || nowSlot : ''
+    });
+    setEditingId(null);
+  };
+  const inputStyle = {
+    minWidth: 0,
+    padding: '6px 10px',
+    fontSize: 12
+  };
+  const levelButtonStyle = selected => ({
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    padding: '7px 4px',
+    borderRadius: 10,
+    border: selected ? '2px solid #F59E0B' : '1px solid var(--border)',
+    background: selected ? 'rgba(245,158,11,.2)' : 'var(--surface)',
+    color: 'var(--text)',
+    fontSize: 12,
+    fontWeight: selected ? 900 : 700,
+    lineHeight: 1.35,
+    cursor: 'pointer',
+    overflowWrap: 'anywhere',
+    textAlign: 'center'
+  });
+  const renderDots = item => React.createElement("div", {
+    "aria-label": `${item.label} 直近${HEARTH_DOT_DAYS}日の記録`,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 3,
+      flex: '0 0 auto'
+    }
+  }, days.map(date => {
+    const level = hearth.log[date]?.[item.id] || 0;
+    const dutyOff = !level && hearth.duty?.[date];
+    return React.createElement("span", {
+      key: date,
+      title: `${date}(${weekdayLabel(date)}) ${level ? HEARTH_LEVELS[level - 1].label : dutyOff ? '当直' : '—'}`,
+      style: {
+        width: 8,
+        height: 8,
+        borderRadius: dutyOff ? 2 : 99,
+        boxSizing: 'border-box',
+        background: dutyOff ? 'rgba(99,102,241,.35)' : HEARTH_DOT_COLORS[level],
+        border: level || dutyOff ? 'none' : '1px solid var(--border)',
+        outline: date === today ? '1.5px solid var(--text-3)' : 'none',
+        outlineOffset: 1
+      }
+    });
+  }));
+  const renderEditor = () => React.createElement("div", {
+    style: {
+      display: 'grid',
+      gap: 6,
+      padding: 10,
+      border: '1px dashed var(--border)',
+      borderRadius: 10
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6
+    }
+  }, React.createElement("input", {
+    className: "inp",
+    value: draft.emoji,
+    onChange: e => setDraft(prev => ({
+      ...prev,
+      emoji: e.target.value
+    })),
+    placeholder: "🪵",
+    "aria-label": "絵文字",
+    style: {
+      ...inputStyle,
+      flex: '0 0 52px',
+      textAlign: 'center'
+    }
+  }), React.createElement("input", {
+    className: "inp",
+    value: draft.label,
+    onChange: e => setDraft(prev => ({
+      ...prev,
+      label: e.target.value
+    })),
+    placeholder: "薪の名前 (例: ストレッチ)",
+    "aria-label": "薪の名前",
+    style: {
+      ...inputStyle,
+      flex: '1 1 0'
+    }
+  })), workScope ? React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, React.createElement("span", {
+    style: {
+      flex: '0 0 76px',
+      fontSize: 11,
+      fontWeight: 800,
+      color: 'var(--text-2)'
+    }
+  }, "出す時間帯"), HEARTH_SLOTS.map(slot => {
+    const selected = (draft.slot || nowSlot) === slot.id;
+    return React.createElement("button", {
+      key: slot.id,
+      type: "button",
+      onClick: () => setDraft(prev => ({
+        ...prev,
+        slot: slot.id
+      })),
+      "aria-pressed": selected,
+      style: {
+        flex: '1 1 0',
+        minWidth: 0,
+        padding: '6px 4px',
+        borderRadius: 99,
+        border: selected ? '2px solid #F59E0B' : '1px solid var(--border)',
+        background: selected ? 'rgba(245,158,11,.2)' : 'var(--surface)',
+        color: 'var(--text)',
+        fontSize: 11,
+        fontWeight: selected ? 900 : 700,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap'
+      }
+    }, selected ? '✓ ' : '', slot.label);
+  })) : null, HEARTH_LEVELS.map((level, index) => React.createElement("div", {
+    key: level.id,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, React.createElement("span", {
+    style: {
+      flex: '0 0 76px',
+      fontSize: 11,
+      fontWeight: 800,
+      color: 'var(--text-2)',
+      whiteSpace: 'nowrap'
+    }
+  }, level.icon, " ", level.label), React.createElement("input", {
+    className: "inp",
+    value: draft.levels[index] || '',
+    onChange: e => setDraft(prev => ({
+      ...prev,
+      levels: prev.levels.map((text, i) => i === index ? e.target.value : text)
+    })),
+    placeholder: index === 0 ? '30秒で終わるくらい小さく' : level.fallback,
+    "aria-label": `${level.label}の内容`,
+    style: {
+      ...inputStyle,
+      flex: '1 1 0'
+    }
+  }))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 8,
+      justifyContent: 'flex-end'
+    }
+  }, editingId !== 'new' ? React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => {
+      onRemoveItem(editingId);
+      setEditingId(null);
+    },
+    style: {
+      marginRight: 'auto',
+      color: '#DC2626',
+      fontSize: 12
+    }
+  }, "この薪を外す") : null, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setEditingId(null),
+    style: {
+      fontSize: 12
+    }
+  }, "やめる"), React.createElement("button", {
+    className: "btn-dark",
+    onClick: saveEdit,
+    disabled: !draft.label.trim(),
+    style: {
+      opacity: !draft.label.trim() ? .45 : 1,
+      padding: '6px 14px',
+      fontSize: 12
+    }
+  }, "保存")));
+  const renderItem = item => {
+    if (editing && editingId === item.id) return React.createElement("div", {
+      key: item.id
+    }, renderEditor());
+    const current = todayEntry[item.id] || 0;
+    // 仕事の薪: 今の時間帯でないものは1行にたたむ(編集中はすべて開く)
+    if (workScope && !editing && item.slot !== nowSlot) return React.createElement("div", {
+      key: item.id,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 10px',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        opacity: current ? 1 : .7
+      }
+    }, React.createElement("span", {
+      style: {
+        flex: '1 1 0',
+        minWidth: 0,
+        fontSize: 12,
+        fontWeight: 700,
+        color: 'var(--text-2)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }
+    }, current ? '✓ ' : '', item.emoji ? item.emoji + ' ' : '', item.label, current ? `「${item.levels[current - 1]}」` : ''), renderDots(item));
+    const rest = hearthRestDays(hearth, item.id, today);
+    const hint = current ? '' : rest === null ? '' : rest >= 2 ? `${rest}日おやすみ中。🌱だけで再点火できます` : '';
+    return React.createElement("div", {
+      key: item.id,
+      style: {
+        display: 'grid',
+        gap: 6,
+        padding: '10px',
+        background: current ? 'rgba(245,158,11,.07)' : 'transparent',
+        border: '1px solid var(--border)',
+        borderRadius: 10
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8
+      }
+    }, React.createElement("strong", {
+      style: {
+        flex: '1 1 0',
+        minWidth: 0,
+        fontSize: 14,
+        color: 'var(--text)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }
+    }, item.emoji ? item.emoji + ' ' : '', item.label), editing ? React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => startEdit(item),
+      style: {
+        flex: '0 0 auto',
+        padding: '4px 10px',
+        fontSize: 11,
+        border: '1px solid var(--border)',
+        borderRadius: 99
+      }
+    }, "編集") : renderDots(item)), hint ? React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--text-3)',
+        fontWeight: 700
+      }
+    }, hint) : null, React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        gap: 6
+      }
+    }, HEARTH_LEVELS.map((level, index) => {
+      const selected = current === level.id;
+      return React.createElement("button", {
+        key: level.id,
+        type: "button",
+        onClick: () => onSetLevel(item.id, level.id),
+        "aria-pressed": selected,
+        "aria-label": `${item.label} ${level.label}: ${item.levels[index]}${selected ? ' (記録済み・もう一度押すと取り消し)' : ''}`,
+        style: levelButtonStyle(selected)
+      }, React.createElement("span", {
+        "aria-hidden": "true"
+      }, selected ? '✓' : level.icon), React.createElement("span", {
+        style: {
+          minWidth: 0
+        }
+      }, item.levels[index]));
+    })));
+  };
+  return React.createElement("div", {
+    className: "card",
+    style: {
+      marginBottom: workScope ? 0 : 10,
+      overflow: 'hidden',
+      borderLeft: '5px solid #F59E0B'
+    }
+  }, React.createElement("div", {
+    onClick: onToggleOpen,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '12px 16px',
+      cursor: 'pointer',
+      background: 'rgba(245,158,11,.08)'
+    }
+  }, open ? React.createElement(ChevronDown, {
+    size: 15
+  }) : React.createElement(ChevronRight, {
+    size: 15
+  }), React.createElement("strong", {
+    style: {
+      fontSize: 14,
+      color: 'var(--text)'
+    }
+  }, flame, workScope ? ' 仕事の火入れ' : ' たき火'), React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(245,158,11,.18)',
+      color: 'var(--text)'
+    }
+  }, "今日 ", litCount, "/", items.length), React.createElement("span", {
+    style: {
+      marginLeft: 'auto',
+      fontSize: 11,
+      fontWeight: 700,
+      color: 'var(--text-3)',
+      whiteSpace: 'nowrap'
+    }
+  }, weekDutyOff ? `当直のぞく${7 - weekDutyOff}日で` : 'この7日で', weekLit, "日")), open && React.createElement("div", {
+    style: {
+      padding: '10px 16px 14px',
+      borderTop: '1px solid var(--border)',
+      display: 'grid',
+      gap: 8
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--text-2)'
+    }
+  }, status), items.map(renderItem), editing && editingId === 'new' ? renderEditor() : null, React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8
+    }
+  }, React.createElement("span", {
+    style: {
+      flex: '1 1 150px',
+      minWidth: 0,
+      fontSize: 10,
+      color: 'var(--text-3)'
+    }
+  }, "どの段でも1日ぶん。連続日数は数えません。"), !editing ? React.createElement("button", {
+    type: "button",
+    onClick: onToggleDuty,
+    "aria-pressed": dutyToday,
+    title: "当直の日は、おやすみ日数にも「7日のうち」にも数えません",
+    style: {
+      padding: '4px 10px',
+      borderRadius: 99,
+      border: dutyToday ? '2px solid #6366F1' : '1px solid var(--border)',
+      background: dutyToday ? 'rgba(99,102,241,.16)' : 'transparent',
+      color: 'var(--text-2)',
+      fontSize: 12,
+      fontWeight: dutyToday ? 900 : 700,
+      cursor: 'pointer',
+      whiteSpace: 'nowrap'
+    }
+  }, dutyToday ? '✓ 🏥 今日は当直' : '🏥 今日は当直') : null, editing && editingId === null && items.length < HEARTH_ITEM_LIMIT ? React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => startEdit(null),
+    style: {
+      fontSize: 12
+    }
+  }, "＋ 薪を足す") : null, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => {
+      setEditing(v => !v);
+      setEditingId(null);
+    },
+    style: {
+      fontSize: 12
+    }
+  }, editing ? '編集を終える' : '薪を編集'))));
+}
+// ── 出る時刻(自分で置く締切) ──
+// 17時を過ぎると締切が消えてだらだら残りがちなので、退勤時刻を自分で宣言して締切にする。
+// 状態は stats.leave = { date, time:'HH:MM', extends, nudged } (statsと一緒に日替わりで消える)。
+const LEAVE_PROMPT_FROM_MINUTES = 16 * 60 + 30;
+const LEAVE_EXTEND_MINUTES = 30;
+const LEAVE_SOON_MINUTES = 15;
+const leaveTargetMs = (time, nowMs) => {
+  const match = /^(\d{2}):(\d{2})$/.exec(time || '');
+  if (!match) return null;
+  const now = new Date(nowMs);
+  const target = new Date(nowMs);
+  target.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  const afterMidnight = now.getHours() < WORKDAY_START_HOUR;
+  const targetIsEarly = Number(match[1]) < WORKDAY_START_HOUR;
+  // 作業日は06:00区切り。日付をまたいだ側にそろえる
+  if (afterMidnight && !targetIsEarly) target.setDate(target.getDate() - 1);
+  if (!afterMidnight && targetIsEarly) target.setDate(target.getDate() + 1);
+  return target.getTime();
+};
+const leaveTimeOptions = nowMs => {
+  const base = new Date(nowMs + 20 * 60000);
+  base.setMinutes(base.getMinutes() <= 30 ? 30 : 60, 0, 0);
+  return [0, 30, 60, 90].map(add => formatHHMM(base.getTime() + add * 60000));
+};
+const leaveNativeEvents = (leave, nowMs) => {
+  const target = leave ? leaveTargetMs(leave.time, nowMs) : null;
+  if (!target) return [];
+  const base = {
+    scheduledDate: dateStrFromDate(new Date(target)),
+    scheduledTime: leave.time,
+    status: 'todo'
+  };
+  return [{
+    ...base,
+    id: 'leave-target-soon',
+    title: '🚪 あと15分で出る時刻。着地に入りましょう',
+    reminderMinutes: LEAVE_SOON_MINUTES
+  }, {
+    ...base,
+    id: 'leave-target',
+    title: '🚪 出る時刻です。残りは明日の自分へ',
+    reminderMinutes: 0
+  }];
+};
+function LeaveTargetBar({
+  now,
+  leave,
+  lastEnd,
+  openCount,
+  onSet,
+  onSkip,
+  onDuty,
+  onExtend,
+  onClear,
+  onEndDay
+}) {
+  const [customTime, setCustomTime] = React.useState('');
+  const [changing, setChanging] = React.useState(false);
+  const target = leave ? leaveTargetMs(leave.time, now) : null;
+  const left = target ? Math.ceil((target - now) / 60000) : null;
+  const chipStyle = {
+    flex: '1 1 0',
+    minWidth: 0,
+    padding: '9px 4px',
+    borderRadius: 10,
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--text)',
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer'
+  };
+  const wrap = (tone, children) => React.createElement("div", {
+    className: "card",
+    style: {
+      overflow: 'hidden',
+      borderLeft: `5px solid ${tone}`,
+      padding: '12px 16px',
+      display: 'grid',
+      gap: 8
+    }
+  }, children);
+  const choose = time => {
+    onSet(time);
+    setChanging(false);
+    setCustomTime('');
+  };
+  if (!leave || changing) {
+    return wrap('#6366F1', [React.createElement("div", {
+      key: "head",
+      style: {
+        display: 'flex',
+        alignItems: 'baseline',
+        flexWrap: 'wrap',
+        gap: 8
+      }
+    }, React.createElement("strong", {
+      style: {
+        fontSize: 14,
+        color: 'var(--text)'
+      }
+    }, "🚪 今日は何時に出る？"), lastEnd ? React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--text-3)'
+      }
+    }, "前回のおしまい ", lastEnd) : null), React.createElement("div", {
+      key: "sub",
+      style: {
+        fontSize: 12,
+        fontWeight: 700,
+        color: 'var(--text-2)'
+      }
+    }, "17時を過ぎると締切が消えます。出る時刻を、今日の締切にしましょう。"), React.createElement("div", {
+      key: "chips",
+      style: {
+        display: 'flex',
+        gap: 6
+      }
+    }, leaveTimeOptions(now).map(time => React.createElement("button", {
+      key: time,
+      type: "button",
+      onClick: () => choose(time),
+      style: chipStyle
+    }, time))), React.createElement("div", {
+      key: "custom",
+      style: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 8
+      }
+    }, React.createElement("input", {
+      type: "time",
+      className: "inp",
+      value: customTime,
+      onChange: e => setCustomTime(e.target.value),
+      "aria-label": "出る時刻を自分で指定",
+      style: {
+        flex: '0 0 auto',
+        width: 112,
+        padding: '6px 9px',
+        fontSize: 12
+      }
+    }), React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => choose(customTime),
+      disabled: !customTime,
+      style: {
+        fontSize: 12,
+        opacity: customTime ? 1 : .45
+      }
+    }, "この時刻にする"), changing ? React.createElement("button", {
+      className: "btn-sm",
+      onClick: () => setChanging(false),
+      style: {
+        marginLeft: 'auto',
+        fontSize: 12
+      }
+    }, "やめる") : React.createElement(React.Fragment, null, React.createElement("button", {
+      className: "btn-sm",
+      onClick: onDuty,
+      style: {
+        marginLeft: 'auto',
+        fontSize: 12
+      }
+    }, "🏥 今日は当直"), React.createElement("button", {
+      className: "btn-sm",
+      onClick: onSkip,
+      style: {
+        fontSize: 12
+      }
+    }, "今日は決めない")))]);
+  }
+  const over = left <= 0;
+  const soon = !over && left <= LEAVE_SOON_MINUTES;
+  const tone = over ? '#EF4444' : soon ? '#F59E0B' : '#6366F1';
+  const headline = over ? `🚪 ${leave.time} を${-left}分すぎました` : `🚪 ${leave.time} に出る ・ あと${left >= 60 ? `${Math.floor(left / 60)}時間${left % 60 ? `${left % 60}分` : ''}` : `${left}分`}`;
+  const message = over ? '残りは明日の自分に渡して大丈夫。終わらせてから帰る、ではなく、帰る時刻が締切です。' : soon ? '着地の時間。新しいことは始めず、いまの1件を閉じるだけ。' : openCount > 3 ? `残り${openCount}件。全部はやらない。出るまでにやるのは3つまで。` : openCount ? `残り${openCount}件。出る時刻が締切です。` : '残りなし。出る時刻を待たずに帰ってもいい。';
+  return wrap(tone, [React.createElement("div", {
+    key: "head",
+    style: {
+      display: 'flex',
+      alignItems: 'baseline',
+      flexWrap: 'wrap',
+      gap: 8
+    }
+  }, React.createElement("strong", {
+    style: {
+      fontSize: 15,
+      color: 'var(--text)'
+    }
+  }, headline), leave.extends ? React.createElement("span", {
+    className: "tag",
+    style: {
+      background: 'rgba(245,158,11,.18)',
+      color: 'var(--text)'
+    }
+  }, "延長", leave.extends, "回") : null), React.createElement("div", {
+    key: "msg",
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: 'var(--text-2)'
+    }
+  }, message), React.createElement("div", {
+    key: "actions",
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8
+    }
+  }, over || soon ? React.createElement("button", {
+    className: "btn-green",
+    onClick: onEndDay,
+    style: {
+      padding: '7px 16px',
+      fontSize: 12,
+      fontWeight: 900
+    }
+  }, "今日はおしまい") : null, over ? React.createElement("button", {
+    className: "btn-sm",
+    onClick: onExtend,
+    style: {
+      fontSize: 12
+    }
+  }, "＋", LEAVE_EXTEND_MINUTES, "分だけ") : null, React.createElement("button", {
+    className: "btn-sm",
+    onClick: () => setChanging(true),
+    style: {
+      marginLeft: 'auto',
+      fontSize: 12
+    }
+  }, "時刻を変える"), React.createElement("button", {
+    className: "btn-sm",
+    onClick: onClear,
+    style: {
+      fontSize: 12
+    }
+  }, "取り消す"))]);
+}
 function EndDayLogSection({
   logs,
   open,
@@ -13251,6 +14085,9 @@ function PatientTriage() {
   const [lastDoneItems, setLastDoneItems] = useState(DEFAULT_LAST_DONE_ITEMS);
   const [lastDoneOpen, setLastDoneOpen] = useState(false);
   const [lastDoneForm, setLastDoneForm] = useState({ label: '', lastDone: todayStr(), cycle: DEFAULT_LAST_DONE_CYCLE, dueDays: '' });
+  const [hearth, setHearth] = useState(() => normalizeHearth());
+  const [hearthOpen, setHearthOpen] = useState(() => loadLocal(HEARTH_OPEN_STORAGE_KEY) !== false);
+  const [hearthWorkOpen, setHearthWorkOpen] = useState(() => loadLocal(HEARTH_OPEN_STORAGE_KEY + '-work') !== false);
   const [endDayLogs, setEndDayLogs] = useState([]);
   const [missedEndDayPrompt, setMissedEndDayPrompt] = useState(null);
   const [rolloverLogsPromptOpen, setRolloverLogsPromptOpen] = useState(false);
@@ -13753,14 +14590,15 @@ function PatientTriage() {
     if (!loaded || !nativeNotificationsAvailable) return;
     const dispatchSync = () => window.dispatchEvent(new CustomEvent('patient-triage-scheduled-events-sync', {
       detail: {
-        events: nativeScheduledEventPayload(scheduledEvents),
+        // 「出る時刻」も予定通知の仕組みに相乗りさせて、アプリを閉じていても端末で鳴るようにする
+        events: [...nativeScheduledEventPayload(scheduledEvents), ...leaveNativeEvents(stats.leave && stats.leave.date === todayStr() && stats.leave.time ? stats.leave : null, Date.now())],
         requestPermission: false
       }
     }));
     window.addEventListener('patient-triage-native-ready', dispatchSync);
     dispatchSync();
     return () => window.removeEventListener('patient-triage-native-ready', dispatchSync);
-  }, [loaded, scheduledEvents, nativeNotificationsAvailable]);
+  }, [loaded, scheduledEvents, nativeNotificationsAvailable, stats.leave?.date, stats.leave?.time]);
   const saveFailWarnedRef = React.useRef(0);
   useEffect(() => {
     if (!loaded) return;
@@ -13791,13 +14629,14 @@ function PatientTriage() {
       coachCast,
       examCheckPrompt,
       runningPresets,
-      caseMemos
+      caseMemos,
+      hearth
     });
     if (!ok && Date.now() - saveFailWarnedRef.current > 60000) {
       saveFailWarnedRef.current = Date.now();
       showToast('⚠ 端末への保存に失敗しました。空き容量を確認してください');
     }
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, caseMemos, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, caseMemos, hearth, loaded]);
   useEffect(() => {
     if (!loaded) return;
     const stamp = todayStr();
@@ -14077,6 +14916,7 @@ function PatientTriage() {
     rewards: cloneForUndo(rewards),
     pendingPatients: cloneForUndo(pendingPatients),
     caseMemos: cloneForUndo(caseMemos),
+    hearth: cloneForUndo(hearth),
     generalTasks: cloneForUndo(options.patientMode || !isDailyMode ? generalTasks : dailyGeneralTasks),
     scheduledEvents: cloneForUndo(scheduledEvents),
     workItems: cloneForUndo(workItems),
@@ -14105,6 +14945,7 @@ function PatientTriage() {
     setRewards(Array.isArray(undoEntry.rewards) ? undoEntry.rewards : []);
     setPendingPatients(Array.isArray(undoEntry.pendingPatients) ? undoEntry.pendingPatients : []);
     if (Array.isArray(undoEntry.caseMemos)) setCaseMemos(undoEntry.caseMemos);
+    if (undoEntry.hearth) setHearth(normalizeHearth(undoEntry.hearth));
     if (undoEntry.patientMode) setGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);else setActiveGeneralTasks(Array.isArray(undoEntry.generalTasks) ? undoEntry.generalTasks : []);
     setScheduledEvents(Array.isArray(undoEntry.scheduledEvents) ? undoEntry.scheduledEvents : []);
     setWorkItems(Array.isArray(undoEntry.workItems) ? undoEntry.workItems.map(normalizeWorkItem) : workItems);
@@ -14615,6 +15456,94 @@ function PatientTriage() {
     } : item));
     showToast(`🧺 「${hits.map(hit => hit.label).join('」「')}」の前回実施日を今日にしました`);
   };
+  // たき火: 今日の記録を付ける/同じ段をもう一度押したら取り消す
+  const setHearthLevel = (itemId, level, opts = {}) => {
+    const item = hearth.items.find(it => it.id === itemId);
+    if (!item) return;
+    const date = todayStr();
+    const current = hearth.log[date]?.[itemId] || 0;
+    const nextLevel = current === level && !opts.keep ? 0 : level;
+    if (nextLevel === current) return;
+    setHearth(prev => {
+      const entry = {
+        ...(prev.log[date] || {})
+      };
+      if (nextLevel) entry[itemId] = nextLevel;else delete entry[itemId];
+      const log = {
+        ...prev.log
+      };
+      if (Object.keys(entry).length) log[date] = entry;else delete log[date];
+      return {
+        ...prev,
+        log
+      };
+    });
+    if (!nextLevel) return;
+    showToast(`🔥 ${item.label}「${item.levels[nextLevel - 1]}」をくべました`);
+    if (current) return;
+    const dailyItems = hearth.items.filter(it => !it.slot);
+    const allLit = !item.slot && dailyItems.length > 1 && dailyItems.every(it => it.id === itemId || hearth.log[date]?.[it.id]);
+    window.dispatchEvent(new CustomEvent('chibi-coach', {
+      detail: {
+        kind: 'done',
+        text: hearthLine(item.slot ? `w${nextLevel}` : allLit ? 'all' : nextLevel)
+      }
+    }));
+  };
+  // 当直の日の印。帰れない日なので「出る時刻」も聞かない・鳴らさない
+  const toggleHearthDuty = () => {
+    const date = todayStr();
+    const on = !hearth.duty?.[date];
+    setHearth(prev => {
+      const duty = {
+        ...(prev.duty || {})
+      };
+      if (on) duty[date] = true;else delete duty[date];
+      return {
+        ...prev,
+        duty
+      };
+    });
+    if (!on) return;
+    setStats(prev => {
+      if (!prev.leave) return prev;
+      const {
+        leave,
+        ...rest
+      } = prev;
+      return rest;
+    });
+    showToast('🏥 当直おつかれさまです。今日は減点なしの日です');
+  };
+  const saveHearthItem = (id, draft) => {
+    rememberUndo(id ? 'たき火の薪を編集' : 'たき火の薪を追加');
+    setHearth(prev => normalizeHearth({
+      ...prev,
+      items: id ? prev.items.map(item => item.id === id ? {
+        ...item,
+        ...draft
+      } : item) : [...prev.items, {
+        id: uid(),
+        ...draft
+      }]
+    }));
+  };
+  const removeHearthItem = id => {
+    rememberUndo('たき火の薪を外す');
+    setHearth(prev => ({
+      ...prev,
+      items: prev.items.filter(item => item.id !== id)
+    }));
+  };
+  // でいとりのタスク名が薪の名前と同じなら、完了時に「ふつう」で火をつける(すでに記録済みなら触らない)
+  const syncHearthWithTask = title => {
+    const t = String(title || '').trim();
+    if (!t) return;
+    const hit = hearth.items.find(item => !item.slot && item.label === t &&!hearth.log[todayStr()]?.[item.id]);
+    if (hit) setHearthLevel(hit.id, 2, {
+      keep: true
+    });
+  };
   const completeTask = (patientId, taskId) => {
     rememberUndo('タスク完了');
     lastWorkedPatientRef.current = {
@@ -14624,7 +15553,10 @@ function PatientTriage() {
     if (isDailyMode) {
       const patient = activePatients.find(p => p.id === patientId);
       const task = patient && (patient.tasks || []).find(t => t.id === taskId);
-      if (task) syncLastDoneWithTask(task.title);
+      if (task) {
+        syncLastDoneWithTask(task.title);
+        syncHearthWithTask(task.title);
+      }
     }
     updateTask(patientId, taskId, {
       status: 'done',
@@ -14789,6 +15721,68 @@ function PatientTriage() {
       }
     }));
   };
+  // 出る時刻: 今日ぶんだけ有効。time が空なら「今日は決めない」
+  const leaveState = stats.leave && stats.leave.date === todayStr() ? stats.leave : null;
+  const leaveActive = leaveState && leaveState.time ? leaveState : null;
+  const setLeaveTarget = time => {
+    setStats(prev => ({
+      ...prev,
+      leave: {
+        date: todayStr(),
+        time: time || '',
+        extends: 0,
+        nudged: 0
+      }
+    }));
+    if (time) showToast(`🚪 ${time} を今日の締切にしました`);
+  };
+  const extendLeaveTarget = () => {
+    if (!leaveActive) return;
+    const next = formatHHMM(Math.max(Date.now(), leaveTargetMs(leaveActive.time, Date.now()) || 0) + LEAVE_EXTEND_MINUTES * 60000);
+    setStats(prev => ({
+      ...prev,
+      leave: {
+        ...prev.leave,
+        time: next,
+        extends: (prev.leave?.extends || 0) + 1,
+        nudged: 0
+      }
+    }));
+    showToast(`🚪 ${next} まで延長しました`);
+  };
+  const clearLeaveTarget = () => setStats(prev => {
+    const {
+      leave,
+      ...rest
+    } = prev;
+    return rest;
+  });
+  // 今日の業務終了ログがあれば、もう出したあとなので出さない
+  const endedPatientToday = endDayLogs.some(log => log && log.date === todayStr() && endDayMode(log.mode) === 'patient');
+  const lastPatientEndTime = endDayLogs.filter(log => log && log.date < todayStr() && endDayMode(log.mode) === 'patient' && log.endedTime).sort((a, b) => a.date.localeCompare(b.date)).pop()?.endedTime || '';
+  const nowDate = new Date(now);
+  const leaveBarVisible = !endedPatientToday && !hearth.duty?.[todayStr()] && (leaveActive ? true : !leaveState && nowDate.getHours() * 60 + nowDate.getMinutes() >= LEAVE_PROMPT_FROM_MINUTES);
+  useEffect(() => {
+    if (!loaded || !leaveActive) return;
+    const target = leaveTargetMs(leaveActive.time, now);
+    if (!target) return;
+    const left = Math.ceil((target - now) / 60000);
+    const stage = left <= 0 ? 2 : left <= LEAVE_SOON_MINUTES ? 1 : 0;
+    if (stage <= (leaveActive.nudged || 0)) return;
+    setStats(prev => prev.leave ? {
+      ...prev,
+      leave: {
+        ...prev.leave,
+        nudged: stage
+      }
+    } : prev);
+    window.dispatchEvent(new CustomEvent('chibi-coach', {
+      detail: {
+        kind: 'suggest',
+        text: stage === 2 ? `${leaveActive.time}、出る時刻です。残りは明日の自分に渡して大丈夫。` : `あと${Math.max(left, 1)}分で出る時刻。新しいことは始めず、着地に入りましょう。`
+      }
+    }));
+  }, [now, loaded, leaveActive?.time, leaveActive?.nudged]);
   useEffect(() => {
     if (!loaded || isDailyMode || isWorkMode || !isLunchWindow(new Date())) return;
     const stamp = todayStr();
@@ -15110,7 +16104,10 @@ function PatientTriage() {
     if (Object.prototype.hasOwnProperty.call(updates || {}, 'status')) rememberUndo('すきまタスク状態変更');
     if (isDailyMode && updates && updates.status === 'done') {
       const target = activeGeneralTasks.find(t => t.id === taskId);
-      if (target) syncLastDoneWithTask(target.title);
+      if (target) {
+        syncLastDoneWithTask(target.title);
+        syncHearthWithTask(target.title);
+      }
     }
     const patch = withTaskStatusDefaults(updates);
     setActiveGeneralTasks(prev => prev.map(t => t.id === taskId ? {
@@ -16168,6 +17165,7 @@ function PatientTriage() {
     examCheckPrompt,
     runningPresets,
     caseMemos,
+    hearth,
     version: 12
     };
     return opts.forGas ? compactPayloadForGas(payload) : payload;
@@ -16217,6 +17215,7 @@ function PatientTriage() {
     if (parsed.examCheckPrompt && typeof parsed.examCheckPrompt === 'object') setExamCheckPrompt(normalizeExamCheckPrompt(parsed.examCheckPrompt));else if (withDefaults) setExamCheckPrompt(normalizeExamCheckPrompt());
     if (parsed.runningPresets && typeof parsed.runningPresets === 'object') setRunningPresets(normalizeRunningPresets(parsed.runningPresets));else if (withDefaults) setRunningPresets(DEFAULT_RUNNING_PRESETS);
     apply(setCaseMemos, Array.isArray(parsed.caseMemos) ? normalizeCaseMemos(parsed.caseMemos) : undefined, []);
+    if (parsed.hearth && typeof parsed.hearth === 'object') setHearth(normalizeHearth(parsed.hearth));else if (withDefaults) setHearth(normalizeHearth());
     const workSource = Array.isArray(parsed.workItems) ? parsed.workItems : Array.isArray(parsed.bosses) ? parsed.bosses : null;
     if (workSource) setWorkItems(workSource.map(normalizeWorkItem));else if (withDefaults) setWorkItems([]);
     return true;
@@ -16282,12 +17281,9 @@ function PatientTriage() {
       } else if (drive && sync.revision != null) {
         extra.baseRevision = sync.revision;
       }
-      updateGasSync({
-        pendingPush: {
-          baseRevision: typeof extra.baseRevision === 'number' ? extra.baseRevision : null,
-          sentAt: Date.now()
-        }
-      });
+      updateGasSync(prev => ({
+        pendingPush: nextGasPendingPush(prev.pendingPush, typeof extra.baseRevision === 'number' ? extra.baseRevision : null, Date.now())
+      }));
       const r = await gasFetch(cfg, payload, extra, {
         allowBlind: !drive
       });
@@ -16428,6 +17424,10 @@ function PatientTriage() {
       if (gasSyncRef.current.dirty) gasPushRef.current('resume');
       return;
     }
+    const remoteDeviceId = Object.prototype.hasOwnProperty.call(meta, 'deviceId');
+    if (gasSyncRef.current.remoteDeviceId !== remoteDeviceId) updateGasSync({
+      remoteDeviceId
+    });
     const sync = gasSyncRef.current;
     const adoptOwnWrite = () => {
       updateGasSync({
@@ -16531,7 +17531,7 @@ function PatientTriage() {
       force: true
     });
   };
-  const gasSyncInfo = !gasConfig.url ? '' : [gasSync.lastSyncedAt ? `最終同期 ${formatLogTime(gasSync.lastSyncedAt)}` : '未同期', gasSync.storage === 'drive' ? `版 ${gasSync.revision ?? '-'}・Googleドライブ保存` : gasSync.storage === 'legacy' ? '旧GAS保存（ドライブ版に切り替えると版の確認と控えが有効になります）' : '', gasSync.dirty ? '未送信の変更あり（自動で再送します）' : ''].filter(Boolean).join('・');
+  const gasSyncInfo = !gasConfig.url ? '' : [gasSync.lastSyncedAt ? `最終同期 ${formatLogTime(gasSync.lastSyncedAt)}` : '未同期', gasSync.storage === 'drive' ? `版 ${gasSync.revision ?? '-'}・Googleドライブ保存` : gasSync.storage === 'legacy' ? '旧GAS保存（ドライブ版に切り替えると版の確認と控えが有効になります）' : '', gasSync.dirty ? '未送信の変更あり（自動で再送します）' : '', gasSync.storage === 'drive' && gasSync.remoteDeviceId === false ? 'GAS本体が古い版です（最新の gas-sync-drive-backend.gs に更新すると、自分の保存を競合と取り違えにくくなります）' : ''].filter(Boolean).join('・');
   // 変更を「未送信」として記録し、3秒後に送る
   useEffect(() => {
     if (!loaded || !gasConfig.url || !gasConfig.secret) return;
@@ -16550,7 +17550,7 @@ function PatientTriage() {
     });
     const t = setTimeout(() => gasPushRef.current('auto'), 3000);
     return () => clearTimeout(t);
-  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, caseMemos, loaded]);
+  }, [patients, stats, templates, quickPatientPresets, quickGeneralPresets, quickDailyPresets, dailyTaskSets, routinePresets, dailyLinks, patientLinks, closedPatientTasks, lastDoneItems, endDayLogs, rewards, pendingPatients, generalTasks, dailyPatients, dailyGeneralTasks, scheduledEvents, workModeEnabled, workItems, ntfySettings, coachCast, examCheckPrompt, runningPresets, caseMemos, hearth, loaded]);
   // 起動時・画面に戻ったとき(1分おき)に版を確かめる。画面を離れるとき・通信が戻ったときは未送信分をすぐ送る
   useEffect(() => {
     if (!loaded || !gasConfig.url || !gasConfig.secret) return;
@@ -16604,6 +17604,7 @@ function PatientTriage() {
     examCheckPrompt,
     runningPresets,
     caseMemos,
+    hearth,
     version: 12,
     exportedAt: new Date().toISOString()
   }, null, 2);
@@ -17468,7 +18469,18 @@ function PatientTriage() {
     className: `desktop-main-grid${isDailyMode ? ' desktop-main-grid-daily' : ''}`
   }, React.createElement("section", {
     className: "desktop-patient-column"
-  }, isDailyMode ? React.createElement(React.Fragment, null, React.createElement(GeneralTaskSection, {
+  }, isDailyMode ? React.createElement(React.Fragment, null, React.createElement(HearthSection, {
+    hearth: hearth,
+    open: hearthOpen,
+    onToggleOpen: () => setHearthOpen(v => {
+      saveLocal(HEARTH_OPEN_STORAGE_KEY, !v);
+      return !v;
+    }),
+    onSetLevel: setHearthLevel,
+    onSaveItem: saveHearthItem,
+    onRemoveItem: removeHearthItem,
+    onToggleDuty: toggleHearthDuty
+  }), React.createElement(GeneralTaskSection, {
     tasks: activeGeneralTasks,
     open: generalOpen,
     onToggleOpen: () => setGeneralOpen(v => !v),
@@ -17610,7 +18622,38 @@ function PatientTriage() {
       flexDirection: 'column',
       gap: 10
     }
-  }, !isDailyMode && checkMode && React.createElement(CheckPanel, {
+  }, !isDailyMode && !checkMode && leaveBarVisible && React.createElement(LeaveTargetBar, {
+    now: now,
+    leave: leaveActive,
+    lastEnd: lastPatientEndTime,
+    openCount: openTaskCount,
+    onSet: setLeaveTarget,
+    onSkip: () => setLeaveTarget(''),
+    onDuty: toggleHearthDuty,
+    onExtend: extendLeaveTarget,
+    onClear: clearLeaveTarget,
+    onEndDay: () => {
+      if (doneTaskCount) {
+        requestEndDay();
+        return;
+      }
+      setLeaveTarget('');
+      showToast('おつかれさまでした。出ましょう。');
+    }
+  }), !isDailyMode && !checkMode && React.createElement(HearthSection, {
+    scope: "work",
+    now: now,
+    hearth: hearth,
+    open: hearthWorkOpen,
+    onToggleOpen: () => setHearthWorkOpen(v => {
+      saveLocal(HEARTH_OPEN_STORAGE_KEY + '-work', !v);
+      return !v;
+    }),
+    onSetLevel: setHearthLevel,
+    onSaveItem: saveHearthItem,
+    onRemoveItem: removeHearthItem,
+    onToggleDuty: toggleHearthDuty
+  }), !isDailyMode && checkMode && React.createElement(CheckPanel, {
     mode: checkMode,
     summary: checkWardSummary,
     total: checkTargets.length,
